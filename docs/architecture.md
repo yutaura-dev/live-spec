@@ -1,6 +1,6 @@
 > **Stability**: 🌊 living
 > **最終更新**: 2026-11-25
-> **直近の変更 ADR**: [ADR-0004](decisions/0004-spec-format-typescript-dsl.md)
+> **直近の変更 ADR**: [ADR-0005](decisions/0005-domain-object-centric-model.md)
 
 # Architecture: live-spec
 
@@ -32,6 +32,8 @@
 | 言語 / 基盤 | TypeScript + Effect（v4 系） | [ADR-0003](decisions/0003-adopt-effect-ts.md) |
 | 正本のモデル定義 | `effect/Schema` | 型、検証、JSON Schema を 1 つの定義から導く（[ADR-0003](decisions/0003-adopt-effect-ts.md)） |
 | ビューア | TBD | |
+| パッケージ管理 | pnpm 12（`packageManager` で固定） | 供給網対策の設定は `pnpm-workspace.yaml` に書く |
+| テスト | Vitest + `tsc --noEmit` | |
 | 開発環境 | nix flake + direnv | `flake.lock` で版を固定し、手元、CI、worktree で同じ環境にする |
 
 ## 開発環境
@@ -51,6 +53,7 @@
 - [ADR-0002: 仕様の正本を構造化データにし、人向けの表示はすべて生成する](decisions/0002-structured-source-of-truth.md)
 - [ADR-0003: 実装スタックに Effect（TypeScript）を採用する](decisions/0003-adopt-effect-ts.md)
 - [ADR-0004: 仕様の正本を TypeScript DSL で書く](decisions/0004-spec-format-typescript-dsl.md)
+- [ADR-0005: 仕様は素の TypeScript の型と関数で書き、状態遷移は実行して計算する](decisions/0005-domain-object-centric-model.md)
 
 ### 設計で押さえるポイント（調査から）
 
@@ -63,9 +66,31 @@ ADR にするほどではないが、実装時に守りたい原則。根拠は 
 - **サーフェスはわざとラフに見せる**: 低忠実度の見た目にして、見た目の議論を避ける
 - **段階的に見せる**: 概要図から始めて、クリックで guard、action、サーフェスへ降りていけるようにする
 
+## 現在の実装
+
+| モジュール | 役割 |
+|---|---|
+| `src/ensure.ts` | spec ファイルが使う唯一の API（`ensure`、`NotAllowed`） |
+| `src/load.ts` | spec モジュールの export から、`initial`、`actors`、操作を読み取る |
+| `src/static.ts` | spec のソースを構文解析し（`@babel/parser`）、export の順、JSDoc の説明文、`initial` の型が取りうる有限の値を得る |
+| `src/explore.ts` | 「状態 × 操作 × 登場人物」を実行して幅優先で探索し、遷移、できる・できない、検査結果を計算する |
+| `src/model.ts` | 正規化モデル（Effect Schema）。差分と JSON 出力の基準 |
+| `src/render/markdown.ts` | Mermaid の状態遷移図と表を含む仕様書を生成する |
+| `src/cli.ts` | `pnpm spec <file.spec.ts> [--json]` |
+
+例は `examples/article.spec.ts` にある。
+
 ## 外部依存
 
-現時点ではない。
+| 依存先 | 用途 | リスク |
+|---|---|---|
+| `effect` | 正規化モデルのスキーマ | v4 の `unstable/*` には破壊的変更が入りうる（今は使っていない） |
+| `@babel/parser` | spec のソースの構文解析 | 型の解決はできない。TS 7 の JS API が安定したら差し替えを検討する |
+
+### 静的解析の限界
+
+- 型は、同じファイルにある `type` / `interface` だけを辿る。import した型や、型の別名を重ねたものは解決しない
+- 有限の値として扱うのは、文字列リテラルの union と `boolean` だけ
 
 ## 非機能要件
 

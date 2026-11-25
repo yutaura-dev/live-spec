@@ -1,6 +1,6 @@
 > **Stability**: 🌀 evolving
 > **最終更新**: 2026-11-25
-> **直近の変更 ADR**: [ADR-0004](decisions/0004-spec-format-typescript-dsl.md)
+> **直近の変更 ADR**: [ADR-0005](decisions/0005-domain-object-centric-model.md)
 
 # Plan: live-spec
 
@@ -10,7 +10,16 @@
 
 **Phase 1: MVP（書かせて、見られる）**
 
-Phase 0 で正本のフォーマット（TS DSL、[ADR-0004](decisions/0004-spec-format-typescript-dsl.md)）と技術スタック（Effect、[ADR-0003](decisions/0003-adopt-effect-ts.md)）を決めた。
+Phase 0 で正本のフォーマット（TS DSL、[ADR-0004](decisions/0004-spec-format-typescript-dsl.md)）と技術スタック（Effect、[ADR-0003](decisions/0003-adopt-effect-ts.md)）を決めた。仕様は素の TS の型と関数で書き、状態遷移は実行して計算する（[ADR-0005](decisions/0005-domain-object-centric-model.md)）。
+
+進捗:
+- [x] spec ファイルの読み込み（`initial` / `actors` / 操作）と、実行による状態探索
+- [x] Mermaid と表を含む Markdown 仕様書の生成（`pnpm spec`）
+- [x] 検査: 一度も実行できない操作、`ensure` 以外の例外、オブジェクトを返さない操作、状態数の上限
+- [x] JSDoc と型の静的解析（操作の説明文、到達しない値の検出）
+- [ ] 不変条件（invariants）の宣言と違反の検出
+- [ ] ビューア（wireflow 表示、段階的な開示）
+- [ ] サーフェスと、計算された状態との紐付け
 
 ## MVP 定義
 

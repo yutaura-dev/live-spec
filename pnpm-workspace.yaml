@@ -1,0 +1,13 @@
+# --- 供給網対策 ---
+minimumReleaseAge: 1440        # 公開から 24 時間経っていない版は入れない（分単位）
+trustPolicy: no-downgrade      # 過去版より信頼性（trusted publisher / provenance）が下がった版を拒否
+blockExoticSubdeps: true       # 推移的依存の git / tarball URL を拒否
+strictDepBuilds: true          # 未承認のビルドスクリプトがあれば install を失敗させる
+allowBuilds: {}                # ビルドを許可するパッケージ。pnpm approve-builds で追記される
+
+# --- 依存の衛生 ---
+autoDedupe: true
+saveTypes: true
+# lockfile.includeResolutionSettings を書かない理由:
+# nixpkgs の pnpm (12.9) が packageManager の版 (12.23) へ切り替える前にこのファイルを読み、
+# 12.10 で追加されたこのキーを解釈できず落ちる。nixpkgs の pnpm が 12.10 以上になったら追加する。

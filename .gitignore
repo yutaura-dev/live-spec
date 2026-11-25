@@ -3,6 +3,12 @@
 /result
 /result-*
 
+# dependencies
+node_modules/
+
+# generated
+/out/
+
 # env files
 .env
 .env*.local

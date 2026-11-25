@@ -17,7 +17,10 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 |------|------|
 | 生きた仕様書 (living spec) | 実行でき、状態遷移を図で見られ、ワイヤーフレームがある仕様書 |
 | 正本 (source of truth) | AI が書く TypeScript DSL（`*.spec.ts`）。評価して得られる正規化モデルから、図・ワイヤーフレーム・テスト・markdown をすべて生成する |
-| 状態 (state) / 遷移 (transition) | 仕様の骨格。対象が UI、API、CLI、データ基盤のどれでも、状態機械として表す |
+| spec ファイル | `*.spec.ts`。素の TS で、`initial`（初期状態）、`actors`（登場人物）、操作の関数を export する |
+| 操作 (action) | `(状態, 登場人物) => 次の状態` の関数。できないときは `ensure(条件, "理由")` で止める |
+| 登場人物 (actor) | 探索に使う具体的な人物。ロールに加えて「本人かどうか」も表す（`著者alice` / `別の著者bob`） |
+| 状態 (state) / 遷移 (transition) | 手で書かない。初期状態から操作を実行して計算する |
 | サーフェス (surface) | 状態ごとの「外から見た姿」。UI ならワイヤーフレーム、API ならリクエストとレスポンスの例、CLI ならターミナルの出力、データ基盤ならテーブルのサンプルやスキーマ |
 | シナリオ (scenario) | 状態遷移図の上の経路。実行可能な例として扱う |
 | 未決事項 (open question) | 仕様の中でまだ決まっていない点。人の判断が必要な箇所として図の上に出す |
@@ -29,7 +32,9 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 - 生成物（図・HTML・派生 markdown）はコミットしない。正本だけを git で管理する
 - 差分レビューと lint は、TS のテキストではなく正規化モデルに対して行う。そのためにモデルのシリアライズは決定的にする（キーの順序と ID を安定させる）
 - `*.spec.ts` は平坦に書く。ループや関数で状態を動的に生成しない。AI が評価前のコードを読んでも構造が分かるようにするため
-- guard と effect には必ず説明文を付ける（`guard("説明", fn, examples)`）。図のラベルに使うため
+- `ensure` の理由は、そのまま「できない理由」として表に出る。読み手に伝わる文にする
+- spec の操作は純粋関数にする（引数を書き換えずに新しいオブジェクトを返す）
+- 「できない理由」として扱うのは `ensure` だけ。spec の中で普通の `throw` を使わない（仕様のバグとして検出される）
 - 意味のデータとレイアウト情報（座標など）を同じファイルに混ぜない
 - 人が読むドキュメントを増やすときは「本当に markdown でないとだめか」を先に考える。このプロジェクトの動機そのものなので
 
@@ -46,9 +51,15 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 
 構成の詳細は [docs/architecture.md](docs/architecture.md) にある。
 
+## よく使うコマンド
+
+- `pnpm test` / `pnpm typecheck`: 両方通ることを完了の条件にする
+- `pnpm spec examples/article.spec.ts > out/article.md`: 仕様書を生成する（`out/` は gitignore 対象）
+
 ## 主要な設計判断（要点のみ）
 
 - 正本は構造化データで持ち、人向けの表示はすべてそこから生成する（[ADR-0002](docs/decisions/0002-structured-source-of-truth.md)）
 - 「ワイヤーフレーム」を UI に限らない「サーフェス」として一般化する（[ADR-0002](docs/decisions/0002-structured-source-of-truth.md)）
 - 実装は TypeScript + Effect。正本のモデルは `effect/Schema` で定義し、型・検証・JSON Schema をそこから導く（[ADR-0003](docs/decisions/0003-adopt-effect-ts.md)）
 - 正本は TypeScript DSL で書き、評価した正規化モデルを正とする（[ADR-0004](docs/decisions/0004-spec-format-typescript-dsl.md)）
+- 仕様は素の TS の型と関数で書き、状態遷移は実行して計算する（[ADR-0005](docs/decisions/0005-domain-object-centric-model.md)）
