@@ -1,4 +1,4 @@
-import { cli } from "live-spec";
+import { cli } from "../src/index.ts";
 
 /**
  * --watch / --serve で spec を監視しているあいだの、書き出した仕様書の中身。

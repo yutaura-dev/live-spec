@@ -1,4 +1,4 @@
-import { api, ensure } from "live-spec";
+import { api, ensure } from "../src/index.ts";
 
 /**
  * --serve で起動するローカルの HTTP サーバ。

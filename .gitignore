@@ -8,6 +8,8 @@ node_modules/
 
 # generated
 /out/
+/dist/
+*.tgz
 
 # env files
 .env

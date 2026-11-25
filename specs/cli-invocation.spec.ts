@@ -1,4 +1,4 @@
-import { cli, ensure } from "live-spec";
+import { cli, ensure } from "../src/index.ts";
 
 /**
  * live-spec のコマンド（pnpm spec / live-spec）を 1 回起動したときの流れ。

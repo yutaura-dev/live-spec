@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffModels, renderDiff } from "../.claude/skills/live-spec-review/scripts/diff-model.mjs";
+import { diffModels, diffSpec, renderDiff } from "../src/diff.ts";
 
 const model = (overrides: Record<string, unknown> = {}) => ({
   name: "doc",
@@ -130,5 +130,33 @@ describe("renderDiff: 差分を Markdown にする", () => {
     });
 
     expect(renderDiff(diffModels(model(), after))).toContain("| draft | publish | viewer | ❌ 編集者だけ | ✅ → published |");
+  });
+});
+
+describe("live-spec diff: CLI のサブコマンド", () => {
+  it("spec を指定しなければ、使い方を出して終了コード 2 を返す", async () => {
+    const { runCli } = await import("../src/cli.ts");
+    const err: Array<string> = [];
+
+    expect(await runCli(["diff"], { stdout: () => {}, stderr: (s) => err.push(s) })).toBe(2);
+    expect(err.join("")).toContain("live-spec diff");
+  });
+});
+
+describe("diffSpec: spec の git のリビジョン時点と作業ツリーを比べる", { timeout: 60_000 }, () => {
+  it("base にない spec は、すべてが増えたものとして比べる", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { execFileSync } = await import("node:child_process");
+    const dir = mkdtempSync(join(tmpdir(), "live-spec-diff-"));
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "base"], { cwd: dir });
+    writeFileSync(join(dir, "doc.spec.ts"), 'export const initial = { s: "a" };\nexport const actors = { p: {} };\nexport function go() { return { s: "b" }; }\n');
+
+    const md = await diffSpec(join(dir, "doc.spec.ts"), "HEAD");
+
+    expect(md).toContain("＋ go");
+    expect(md).toContain("＋ a -go-> b");
   });
 });

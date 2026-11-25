@@ -9,22 +9,28 @@ live-spec は「AI が書き、人が図と画面で読む」仕様書のツー�
 
 ## 実行のしかた
 
-| 場所 | コマンド |
+live-spec は npm パッケージ（`npm i -D live-spec` / `pnpm add -D live-spec`）で、`live-spec` コマンドを持つ。
+
+| やりたいこと | コマンド |
 |---|---|
-| live-spec リポジトリの中 | `pnpm spec <file.spec.ts \| dir>...`（`--html --out <file>` / `--json` / `--serve`） |
-| 別のリポジトリ（`pnpm add -D link:<live-spec のパス>` 済み） | `pnpm exec live-spec <file.spec.ts \| dir>...` |
+| Markdown を見る | `npx live-spec specs/`（spec が 1 つなら標準出力、複数なら `--out <ディレクトリ>`） |
+| HTML を書き出す | `npx live-spec specs/ --html --out spec.html` |
+| ブラウザで見ながら書く | `npx live-spec specs/ --serve` |
+| 変更前と比べる | `npx live-spec diff <file.spec.ts> [--base <リビジョン>]` |
+
+（live-spec リポジトリ自身の中では `pnpm spec ...`）
 
 **1 つの spec ファイルが 1 つのドメインオブジェクト**になる。プロジェクトの仕様は `specs/` のようなディレクトリに spec を並べ、ディレクトリごと渡す。
 
 - HTML: `live-spec specs/ --html --out spec.html`。ドメインオブジェクトごとのページとタブを持つ 1 つのファイルになる（`#/<名前>` でページを開ける）
 - Markdown: `live-spec specs/ --out docs/spec/`。ドメインオブジェクトごとの `<名前>.md` と一覧の `README.md` を書き出す
 
-spec からは `import { ensure, ui, api, cli } from "live-spec"` で読み込む。live-spec リポジトリ内でも、パッケージ自身を参照できるので同じ書き方でよい。
+spec からは `import { ensure, ui, api, cli } from "live-spec"` で読み込む（live-spec リポジトリ自身の `specs/` と `examples/` だけは `../src/index.ts` から読み込む）。
 
 型チェックは live-spec の実行とは別に行う（live-spec は型を消して実行するだけなので、型の誤りでは止まらない）:
 
 ```sh
-pnpm exec tsc --noEmit --ignoreConfig --strict --allowImportingTsExtensions --module nodenext --moduleResolution nodenext --target es2024 --skipLibCheck <file.spec.ts>
+npx tsc --noEmit --ignoreConfig --strict --module nodenext --moduleResolution nodenext --target es2024 --skipLibCheck <file.spec.ts>
 ```
 
 ## spec の形

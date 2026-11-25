@@ -3,7 +3,9 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { expandSpecPaths, generateProject, writeProjectOutput, type OutputFormat } from "./generate.ts";
+import { diffSpec } from "./diff.ts";
 import { startServer } from "./serve.ts";
+import { installSkills } from "./skills.ts";
 import { watchSpec } from "./watch.ts";
 
 export { expandSpecPaths, generate, generateProject, specNameOf, type OutputFormat } from "./generate.ts";
@@ -67,7 +69,58 @@ const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // 終了コードを返す関数にしている理由: 失敗したときの終わり方（メッセージと終了コード）をテストで確かめるため。
 // 監視を始めた場合は、プロセスを終わらせないので null を返す。
+const DIFF_USAGE = "usage: live-spec diff <file.spec.ts> [--base <リビジョン>]（既定の base は HEAD）";
+
+const runDiff = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number> => {
+  let parsed;
+  try {
+    parsed = parseArgs({ args: [...argv], allowPositionals: true, options: { base: { type: "string" } } });
+  } catch (e) {
+    io.stderr(`${messageOf(e)}\n${DIFF_USAGE}\n`);
+    return 2;
+  }
+  const path = parsed.positionals[0];
+  if (path === undefined) {
+    io.stderr(`比べる spec ファイルを指定してください\n${DIFF_USAGE}\n`);
+    return 2;
+  }
+  try {
+    io.stdout(await diffSpec(path, parsed.values.base ?? "HEAD"));
+    return 0;
+  } catch (e) {
+    io.stderr(`差分を取れませんでした: ${messageOf(e)}\n`);
+    return 1;
+  }
+};
+
+const SKILLS_USAGE = "usage: live-spec skills install [--dir <path>]（既定は .claude/skills） [--force]";
+
+const runSkills = (argv: ReadonlyArray<string>, io: CliIo): number => {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args: [...argv],
+      allowPositionals: true,
+      options: { dir: { type: "string" }, force: { type: "boolean" } },
+    });
+  } catch (e) {
+    io.stderr(`${messageOf(e)}\n${SKILLS_USAGE}\n`);
+    return 2;
+  }
+  if (parsed.positionals[0] !== "install") {
+    io.stderr(`${SKILLS_USAGE}\n`);
+    return 2;
+  }
+  const dir = parsed.values.dir ?? ".claude/skills";
+  const label = { installed: "入れました", updated: "上書きしました", skipped: "すでにあるので飛ばしました（--force で上書き）" };
+  for (const r of installSkills(dir, { force: parsed.values.force ?? false })) io.stdout(`${r.name}: ${label[r.status]}\n`);
+  io.stdout(`${dir} に live-spec の skill を置きました。Claude Code を起動し直すと使えます。\n`);
+  return 0;
+};
+
 export const runCli = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number | null> => {
+  if (argv[0] === "diff") return runDiff(argv.slice(1), io);
+  if (argv[0] === "skills") return runSkills(argv.slice(1), io);
   let options: CliOptions;
   try {
     options = parseCliArgs(argv);

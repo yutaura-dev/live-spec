@@ -1,4 +1,4 @@
-import { ensure, ui } from "live-spec";
+import { ensure, ui } from "../src/index.ts";
 
 /**
  * --serve の仕様書を開いているブラウザのタブ。

@@ -12,7 +12,7 @@ live-spec では、人は markdown を読みません。図と画面と一覧を
 
 ## 例
 
-[examples/minimal.spec.ts](examples/minimal.spec.ts) の全文です。登場人物を増やし、不変条件や入力の例、詳しい画面を加えた版が [examples/article.spec.ts](examples/article.spec.ts) にあります。API の例は [examples/job-api.spec.ts](examples/job-api.spec.ts) です（ワーカーを登場人物として扱い、`GET /jobs/{id}` の応答を状態ごとに示します）。
+[examples/minimal.spec.ts](examples/minimal.spec.ts) の全文です（このリポジトリの中なので `../src/index.ts` から読み込んでいます。利用するときは `from "live-spec"` です）。登場人物を増やし、不変条件や入力の例、詳しい画面を加えた版が [examples/article.spec.ts](examples/article.spec.ts) にあります。API の例は [examples/job-api.spec.ts](examples/job-api.spec.ts) です（ワーカーを登場人物として扱い、`GET /jobs/{id}` の応答を状態ごとに示します）。
 
 ```ts
 import { ensure, ui } from "../src/index.ts";
@@ -82,26 +82,35 @@ pnpm spec examples/minimal.spec.ts --serve   # http://127.0.0.1:4747/ をブラ�
 - **出力**: ドメインオブジェクトごとのページ（`#/<名前>`）を持つ 1 ファイルの HTML、ドメインオブジェクトごとの Markdown、差分レビュー用の JSON
 - **AI と並走する**: `--serve` を付けると、spec を保存するたびにブラウザが自動で再読み込みします
 
-## セットアップ
+## インストール
 
 ```sh
-direnv allow     # nix devShell（Node.js 22 と pnpm）を有効にする
-pnpm install
+npm i -D live-spec        # pnpm add -D live-spec / yarn add -D live-spec
 ```
 
-依存は nix flake と pnpm の lockfile で固定しています。
+Node.js 22.18 以上が必要です（spec ファイルの TypeScript をそのまま実行するため）。
+
+### Claude Code の skill を入れる
+
+```sh
+npx live-spec skills install    # .claude/skills/ に 3 つの skill を置く（既にあるものは上書きしない。--force で上書き）
+```
+
+- **live-spec-authoring**: spec の書き方の規約と、検査結果の直し方
+- **live-spec-from-code**: 既存のコードから spec を書き起こす。根拠（ファイルと行）を残し、分からないことは質問として返す
+- **live-spec-review**: spec の変更を、振る舞いの変化（誰が何をできるようになったか など）として要約する
+
+Claude Code に「このリポジトリの注文まわりの仕様を書き起こして」のように頼むと使われます。
 
 ## 使い方
 
 ```sh
-pnpm spec specs/ --html --out out/spec.html            # ドメインオブジェクトごとのページを持つ 1 つの HTML
-pnpm spec specs/ --out out/spec/                        # ドメインオブジェクトごとの Markdown と一覧の README.md
-pnpm spec specs/ --serve                                # ブラウザで見ながら書く
-pnpm spec <file.spec.ts>                               # Markdown を標準出力に出す
-pnpm spec <file.spec.ts> --html --out out/spec.html    # HTML を書き出す
-pnpm spec <file.spec.ts> --json                        # 正規化モデル（差分レビュー用）
-pnpm spec <file.spec.ts> --html --out out/spec.html --watch   # 保存のたびに書き出し直す
-pnpm spec <file.spec.ts> --serve [--port 4747]         # ブラウザで見ながら書く（--port は --serve と一緒に）
+npx live-spec specs/ --html --out spec.html             # ドメインオブジェクトごとのページを持つ 1 つの HTML
+npx live-spec specs/ --out docs/spec/                   # ドメインオブジェクトごとの Markdown と一覧の README.md
+npx live-spec specs/ --serve                            # ブラウザで見ながら書く（保存すると自動で再読み込み）
+npx live-spec specs/order.spec.ts                      # spec が 1 つなら Markdown を標準出力に出す
+npx live-spec specs/ --json                            # 正規化モデル（差分レビュー用）
+npx live-spec diff specs/order.spec.ts [--base <rev>]  # 変更前と比べて、振る舞いの変化を出す
 ```
 
 ## spec の書き方
@@ -142,15 +151,14 @@ spec ファイルは素の TypeScript です。export の名前で役割が決�
 
 Phase 1（MVP）を進めています。進捗は [docs/plan.md](docs/plan.md) を参照してください。
 
-## AI と一緒に使う（Claude Code の skill）
+## 開発（このリポジトリ）
 
-このリポジトリで Claude Code を使うと、次の skill が使えます（`.claude/skills/`）。
-
-- **live-spec-authoring**: spec の書き方の規約と、検査結果の直し方
-- **live-spec-from-code**: 既存のリポジトリのコードから spec を書き起こす。根拠（ファイルと行）を残し、分からないことは質問として返す
-- **live-spec-review**: spec の変更を、振る舞いの変化（誰が何をできるようになったか など）として要約する
-
-別のリポジトリで spec を書くときは、そのリポジトリで `pnpm add -D link:<live-spec のパス>` を実行すると、`import { ensure } from "live-spec"` と `pnpm exec live-spec` が使えます。
+```sh
+direnv allow && pnpm install
+pnpm test && pnpm typecheck
+pnpm spec specs/ --serve      # このリポジトリ自身の仕様を見る（src を直接実行する）
+pnpm build                    # dist/ に配布用の JS と型定義を出す（pnpm pack の前に自動で走る）
+```
 
 ## ドキュメント
 

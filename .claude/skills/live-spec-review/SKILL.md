@@ -9,24 +9,24 @@ spec の差分（TypeScript の diff）をそのまま読ませても、人に�
 
 ## 差分を取る
 
-同梱のスクリプトを使う（live-spec リポジトリの中から実行する）。
+`live-spec diff` を使う。変更前の spec（git のリビジョン時点）と作業ツリーの spec を、どちらも実行して比べる。
 
 ```sh
 # 作業ツリーの spec と HEAD を比べる
-node .claude/skills/live-spec-review/scripts/compare.mjs <file.spec.ts>
+npx live-spec diff specs/order.spec.ts
 
 # PR のように、分岐元と比べる
-node .claude/skills/live-spec-review/scripts/compare.mjs <file.spec.ts> "$(git merge-base origin/main HEAD)"
+npx live-spec diff specs/order.spec.ts --base "$(git merge-base origin/main HEAD)"
 ```
 
 出力には次が含まれる。状態はラベルで比べる（ID は探索順で振り直されるため）。
 
-- 状態・遷移の増減
+- 操作・状態・遷移の増減
 - 同じ「状態 × 操作 × 登場人物（× 入力）」で、できる／できない、または理由が変わったもの
 - 検査結果の増減
 - 画面が変わった状態と登場人物
 
-正規化モデルの JSON がすでに 2 つあるなら、`node .claude/skills/live-spec-review/scripts/diff-model.mjs <before.json> <after.json>` で比べられる。
+spec が複数あるときは、変わった spec ごとに実行する（`git diff --name-only <base> -- '*.spec.ts'` で一覧を出す）。
 
 ## 読み方
 
@@ -35,7 +35,7 @@ node .claude/skills/live-spec-review/scripts/compare.mjs <file.spec.ts> "$(git m
 1. **権限が広がった変化**: ❌ から ✅ に変わった行。特に「誰が」の理由（「編集者だけ」など）が消えたもの。意図しない権限の拡大はバグになりやすい
 2. **消えた状態・遷移**: それまでできた業務ができなくなっていないか
 3. **新しい検査結果**: 不変条件の違反、画面と操作の食い違いなど
-4. **画面の変化**: 状態と見る人を挙げ、HTML で確認してもらう（`pnpm spec <file> --serve` の後、`#state-<id>` で開ける）
+4. **画面の変化**: 状態と見る人を挙げ、HTML で確認してもらう（`npx live-spec <dir> --serve` で開き、`#/<名前>/<状態>` で直接開ける）
 
 spec のコードの差分（`git diff`）は、変化の理由を説明するときの補足として読む。
 
@@ -50,7 +50,7 @@ spec のコードの差分（`git diff`）は、変化の理由を説明する�
 1. <権限の拡大や、消えた業務など、意図を確かめたい変化>
 
 ### 振る舞いの変化
-<compare.mjs の出力を、意味のまとまりごとに整理したもの。表はそのまま貼ってよい>
+<live-spec diff の出力を、意味のまとまりごとに整理したもの。表はそのまま貼ってよい>
 
 ### 新しい検査結果
 - <あれば。なければ「なし」>
@@ -62,4 +62,4 @@ spec のコードの差分（`git diff`）は、変化の理由を説明する�
 
 1. 実装の差分（`git diff <base> -- <実装のディレクトリ>`）から、状態・操作・条件・画面に関わる変更を拾う
 2. 対応する spec の箇所を直す。書き方は live-spec-authoring に、根拠コメント（`// 根拠: path:line`）の付け方と「推測で埋めない」方針は live-spec-from-code に従う。行番号が変わった根拠コメントも直す
-3. compare.mjs で spec の振る舞いの変化を出し、実装の変更の意図と一致しているかを確かめる。一致しない変化（実装では変えていないはずの権限が変わっている など）は、spec の書き間違いか実装のバグのどちらかなので、報告に挙げる
+3. live-spec diff で spec の振る舞いの変化を出し、実装の変更の意図と一致しているかを確かめる。一致しない変化（実装では変えていないはずの権限が変わっている など）は、spec の書き間違いか実装のバグのどちらかなので、報告に挙げる

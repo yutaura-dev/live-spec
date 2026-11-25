@@ -64,8 +64,8 @@ export function confirm(order: Order, user: User): Order {
 ## 6. 保存場所とセットアップ
 
 - spec は 1 つのディレクトリ（例: `specs/`）にまとめ、`live-spec specs/ --html --out <file>` で 1 つの HTML にする
-- **このリポジトリ（live-spec）自身が対象**: `specs/` などに置き、`import { ... } from "live-spec"` で読み込む（パッケージが自分自身を参照できる）
-- **別のリポジトリが対象**: spec を置く場所（例: 対象リポジトリの `specs/`）と、`pnpm add -D link:<live-spec のパス>` で依存を足してよいかを、**書き込む前にユーザーに確認する**。他人のリポジトリの package.json を勝手に変えないため。許可がなければ、live-spec リポジトリの `out/` に置き、相対パスで `src/index.ts` を読み込む
+- spec を置く場所（例: `specs/`）と、`npm i -D live-spec`（または pnpm / yarn）で依存を足してよいかを、**書き込む前にユーザーに確認する**。package.json を勝手に変えないため。spec からは `import { ensure, ui, api, cli } from "live-spec"` で読み込む
+- **live-spec リポジトリ自身が対象**: `specs/` に置き、`../src/index.ts` から読み込む
 
 ## 7. 報告する
 

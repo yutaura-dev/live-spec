@@ -89,6 +89,14 @@ ADR にするほどではないが、実装時に守りたい原則。根拠は 
 
 例は `examples/article.spec.ts` にある。
 
+## 配布
+
+- npm パッケージ。`dist/`（tsc で出力した JS と型定義）と、`.claude/skills/*/SKILL.md` を含める
+- `exports` は `dist/index.js`（`ensure` / `ui` / `api` / `cli`）、`bin` は `dist/cli.js`（`live-spec`）
+- tsc の `rewriteRelativeImportExtensions` は型定義の `./foo.ts` を書き換えないので、`scripts/rewrite-dts-extensions.mjs` で `.js` にそろえる
+- このリポジトリの `specs/` と `examples/` は `../src/index.ts` から読み込む（`"live-spec"` は `dist/` を指すので、ビルドしないと動かないため）
+- サブコマンド: `live-spec diff`（spec のリビジョン間の振る舞いの差分）、`live-spec skills install`（同梱の skill を `.claude/skills/` にコピー）
+
 ## 外部依存
 
 | 依存先 | 用途 | リスク |
