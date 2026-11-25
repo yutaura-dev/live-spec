@@ -94,5 +94,5 @@ const summaryOf = (comments: ReadonlyArray<t.Comment> | null | undefined): strin
   );
 };
 
-// 日本語の行は空白を入れずにつなぎ、英語の行は空白を入れてつなぐ。
+// 日本語の行のあいだに空白を入れない理由: JSDoc の折り返しは表示上の都合なので、日本語では空白が入ると文が不自然に途切れる。
 const isCjk = (ch: string | undefined) => ch !== undefined && (ch.codePointAt(0) ?? 0) > 0x2e7f;

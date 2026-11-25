@@ -47,7 +47,7 @@ const loadObject = async (path: string): Promise<DomainObject> => {
 };
 
 export const generateProject = async (paths: ReadonlyArray<string>, format: OutputFormat, title?: string): Promise<Output> => {
-  const objects = await Promise.all(paths.map(loadObject));
+  const objects = resolveLinks(await Promise.all(paths.map(loadObject)));
   const names = objects.map((o) => o.spec.name);
   const duplicated = names.find((n, i) => names.indexOf(n) !== i);
   if (duplicated !== undefined) throw new Error(`ドメインオブジェクトの名前が重複しています: ${duplicated}（spec のファイル名を変えてください）`);
@@ -63,10 +63,26 @@ export const generateProject = async (paths: ReadonlyArray<string>, format: Outp
     kind: "files",
     files: {
       "README.md": renderIndexMarkdown(objects, projectTitle),
-      ...Object.fromEntries(objects.map((o) => [`${o.spec.name}.md`, renderMarkdown(o.spec, o.graph)])),
+      ...Object.fromEntries(objects.map((o) => [`${o.spec.name}.md`, renderMarkdown(o.spec, o.graph, objects)])),
     },
   };
 };
+
+// つながりの名前の誤りをプロジェクトを読み込んだ時点で調べる理由: 相手のドメインオブジェクトは別の spec にあり、
+// 1 つの spec を探索するだけでは確かめられないため。spec が 1 つのときは相手がいないので調べない。
+const resolveLinks = (objects: ReadonlyArray<DomainObject>): Array<DomainObject> =>
+  objects.map((o) => {
+    if (objects.length < 2) return o;
+    const unresolved = o.graph.links.filter((l) => {
+      const target = objects.find((t) => t.spec.name === l.to);
+      return target === undefined || (l.action !== null && !target.spec.actions.some(([n]) => n === l.action));
+    });
+    if (unresolved.length === 0) return o;
+    return {
+      spec: o.spec,
+      graph: { ...o.graph, findings: [...o.graph.findings, ...unresolved.map((l) => ({ kind: "link-unresolved" as const, to: l.to, action: l.action }))] },
+    };
+  });
 
 // プロジェクトの名前を package.json から取る理由: spec を置くディレクトリは specs/ のような汎用の名前が多く、
 // ディレクトリ名をタイトルにすると、どのプロジェクトの仕様書なのかが分からないため。
@@ -78,7 +94,7 @@ const projectNameOf = (specPath: string): string => {
         const name = (JSON.parse(readFileSync(pkg, "utf8")) as { name?: unknown }).name;
         if (typeof name === "string" && name !== "") return name;
       } catch {
-        // 壊れた package.json は無視して、ディレクトリ名にする
+        // 壊れた package.json で生成全体を止めない。タイトルはディレクトリ名で十分に代わりになるため。
       }
       return basename(dir);
     }

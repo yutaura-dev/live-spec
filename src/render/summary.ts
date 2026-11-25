@@ -1,5 +1,6 @@
 import type { Spec } from "../load.ts";
 import type { Graph } from "../model.ts";
+import { ANY, ANY_LABEL, collapseTransitions } from "./collapse.ts";
 
 export interface ActionSummary {
   readonly name: string;
@@ -62,7 +63,9 @@ export const summarizeActions = (spec: Spec, graph: Graph): ReadonlyArray<Action
       othersReasons:
         capable.length === 0 ? [] : unique(entries.filter((a) => !capable.includes(a.actor)).map((a) => a.reason ?? ERROR_REASON)),
       when: uniqueBy(
-        graph.transitions.filter((t) => t.action === name).map((t) => ({ from: labelOf(t.from), to: labelOf(t.to) })),
+        collapseTransitions(graph)
+          .filter((t) => t.action === name)
+          .map((t) => ({ from: t.from === ANY ? ANY : labelOf(t.from), to: labelOf(t.to) })),
         (w) => `${w.from}→${w.to}`,
       ),
       blocked: [...blocked.entries()].map(([reason, states]) => ({ reason, states })),
@@ -130,7 +133,7 @@ const inputOutcomesOf = (
       (t) => `${t.from}→${t.to}`,
     );
     if (transitions.length > 0) return { input, transitions, reasons: [] };
-    // 一度も通らなかった入力は、入力が原因の理由（同じ状態・同じ人なら別の入力で通った）を優先して示す。
+    // 入力が原因の理由を優先する理由: 全員が状態や権限で止まる理由まで並べると、その入力の何がだめなのかが埋もれるため。
     const byInput = inputReasonsOf(entries).filter((r) => r.input === input).map((r) => r.reason);
     const reasons = byInput.length > 0 ? byInput : unique(mine.map((a) => a.reason ?? ERROR_REASON));
     return { input, transitions, reasons };
@@ -150,7 +153,7 @@ export const presentBlocked = (
 };
 
 export const formatTransition = (t: { readonly from: string; readonly to: string }) =>
-  t.from === t.to ? `${t.from}（変わらない）` : `${t.from} → ${t.to}`;
+  t.from === ANY ? `${ANY_LABEL} → ${t.to}` : t.from === t.to ? `${t.from}（変わらない）` : `${t.from} → ${t.to}`;
 
 const effectOf = (graph: Graph, action: string): ActionSummary["effect"] => {
   const changed = new Map<string, Set<string>>();

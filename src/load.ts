@@ -5,6 +5,26 @@ export type ActionFn = (state: never, actor: never) => unknown;
 export type InvariantFn = (state: never) => unknown;
 export type SurfaceFn = (state: never, actor: never) => unknown;
 
+export interface Question {
+  readonly ask: string;
+  readonly note?: string;
+  readonly about?: ActionFn | Readonly<Record<string, unknown>>;
+}
+
+export interface Link {
+  readonly from?: ActionFn;
+  readonly to: string;
+  readonly action?: string;
+  readonly label: string;
+}
+
+export interface ScenarioStep {
+  readonly do: ActionFn;
+  readonly by: string;
+  readonly input?: string;
+  readonly expect?: Readonly<Record<string, unknown>>;
+}
+
 export interface Spec {
   readonly name: string;
   readonly initial: State;
@@ -13,12 +33,15 @@ export interface Spec {
   readonly invariants: ReadonlyArray<readonly [name: string, fn: InvariantFn]>;
   readonly inputs: Readonly<Record<string, ReadonlyArray<readonly [label: string, args: ReadonlyArray<unknown>]>>>;
   readonly surface: SurfaceFn | null;
+  readonly scenarios: ReadonlyArray<readonly [name: string, steps: ReadonlyArray<ScenarioStep>]>;
+  readonly questions: ReadonlyArray<Question>;
+  readonly links: ReadonlyArray<Link>;
   readonly docs: Readonly<Record<string, string>>;
   readonly fields: Readonly<Record<string, ReadonlyArray<FieldValue>>>;
   readonly stateDoc: string | null;
 }
 
-const RESERVED = new Set(["initial", "actors", "invariants", "inputs", "surface"]);
+const RESERVED = new Set(["initial", "actors", "invariants", "inputs", "surface", "scenarios", "questions", "links"]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
   typeof u === "object" && u !== null && !Array.isArray(u);
@@ -45,6 +68,15 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
       : [],
     inputs: inputsOf(mod.inputs),
     surface: typeof mod.surface === "function" ? (mod.surface as SurfaceFn) : null,
+    questions: Array.isArray(mod.questions)
+      ? mod.questions.filter((q): q is Question => isRecord(q) && typeof q.ask === "string")
+      : [],
+    links: Array.isArray(mod.links)
+      ? mod.links.filter((l): l is Link => isRecord(l) && typeof l.to === "string" && typeof l.label === "string")
+      : [],
+    scenarios: isRecord(mod.scenarios)
+      ? Object.entries(mod.scenarios).filter((e): e is [string, Array<ScenarioStep>] => Array.isArray(e[1]))
+      : [],
     docs: info?.docs ?? {},
     fields: info?.fields ?? {},
     stateDoc: info?.stateDoc ?? null,

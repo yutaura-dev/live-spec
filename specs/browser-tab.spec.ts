@@ -21,6 +21,18 @@ export const actors: Record<string, Who> = {
   サーバ: { kind: "server" },
 };
 
+export const questions = [
+  { ask: "サーバを止めたあと、開いたままのタブにそれを知らせるか？", about: { status: "最新を表示" }, note: "今は何も表示されず、古い仕様書がそのまま残る" },
+];
+
+export const scenarios = {
+  開いて保存を待つ: [
+    { do: open, by: "利用者" },
+    { do: notify, by: "サーバ" },
+    { do: reloaded, by: "ブラウザ（自動）", expect: { status: "最新を表示" } },
+  ],
+};
+
 /** URL を開く */
 export function open(tab: Tab, who: Who): Tab {
   ensure(who.kind === "person", "利用者だけ");
@@ -29,7 +41,7 @@ export function open(tab: Tab, who: Who): Tab {
 }
 
 /**
- * spec が生成し直されたことを通知する。
+ * 生成し直したことを通知する
  *
  * 通知の接続がつながったとき、その時点の版数も送る（src/serve.ts）。ページの版数と違えば再読み込みする。
  */
@@ -39,7 +51,11 @@ export function notify(tab: Tab, who: Who): Tab {
   return { status: "再読み込み中" };
 }
 
-/** 再読み込みが終わる（選んでいた状態は URL の hash から復元される） */
+/**
+ * 再読み込みが終わる
+ *
+ * 選んでいた状態は URL の hash から復元される。
+ */
 export function reloaded(tab: Tab, who: Who): Tab {
   ensure(who.kind === "browser", "ブラウザが自動で行う");
   ensure(tab.status === "再読み込み中", "再読み込み中のときだけ");

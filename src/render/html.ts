@@ -1,9 +1,10 @@
 import type { Spec } from "../load.ts";
 import type { Graph } from "../model.ts";
 import type { SurfaceNode } from "../surface.ts";
+import { ANY } from "./collapse.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
-import { describeFinding, formatEffect } from "./markdown.ts";
+import { describeFinding, describeStep, formatEffect, questionTarget } from "./markdown.ts";
 import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
 import { surfaceToHtml } from "./wireframe.ts";
 
@@ -24,8 +25,17 @@ export const renderHtml = (spec: Spec, graph: Graph): Promise<string> => renderP
 // ドメインオブジェクトごとにページを分け、1 つの HTML にまとめる理由: 1 つの図に複数のオブジェクトの
 // 関心を詰め込むと、状態が組み合わせで増えて読めなくなる。オブジェクトごとのページなら図は小さく保てるうえ、
 // ファイルは 1 つなので、そのまま共有できる。ページの切り替えは URL の hash（#/<名前>）で行う。
+interface ProjectLink {
+  readonly source: string;
+  readonly from: string | null;
+  readonly to: string;
+  readonly action: string | null;
+  readonly label: string;
+}
+
 export const renderProjectHtml = async (objects: ReadonlyArray<DomainObject>, options: ProjectOptions): Promise<string> => {
-  const pages = await Promise.all(objects.map((o, i) => renderPage(o, i)));
+  const links: ReadonlyArray<ProjectLink> = objects.flatMap(({ spec, graph }) => graph.links.map((l) => ({ ...l, source: spec.name })));
+  const pages = await Promise.all(objects.map((o, i) => renderPage(o, i, objects, links)));
   const multiple = objects.length > 1;
   const data = {
     single: multiple ? null : objects[0]!.spec.name,
@@ -48,7 +58,7 @@ ${
     .map((o) => `<a href="#/${encodeURIComponent(o.spec.name)}" data-tab="${esc(o.spec.name)}">${esc(o.spec.name)}</a>`)
     .join("")}</nav>
 </header>
-${overviewPage(objects, options)}`
+${await overviewPage(objects, options, links)}`
     : ""
 }
 ${pages.map((p) => p.html).join("\n")}
@@ -61,7 +71,43 @@ ${pages.flatMap((p) => p.templates).join("\n")}
 `;
 };
 
-const overviewPage = (objects: ReadonlyArray<DomainObject>, options: ProjectOptions) => `<section class="page" data-page="" hidden>
+const actionLabel = (objects: ReadonlyArray<DomainObject>, object: string, action: string | null) => {
+  if (action === null) return "";
+  const doc = objects.find((o) => o.spec.name === object)?.spec.docs[action];
+  return doc === undefined ? action : `${doc.replace(/。$/, "")}（${action}）`;
+};
+
+const objectLink = (name: string) => `<a href="#/${encodeURIComponent(name)}">${esc(name)}</a>`;
+
+// つながりの図に状態遷移図と同じ layout を使う理由: 配置の仕組みを 2 つ持たずに済み、見た目もそろうため。
+const relationsSvg = async (objects: ReadonlyArray<DomainObject>, links: ReadonlyArray<ProjectLink>) => {
+  const names = objects.map((o) => o.spec.name);
+  const known = links.filter((l) => names.includes(l.to) && l.to !== l.source);
+  if (known.length === 0) return "";
+  const idOf = (name: string) => `o${names.indexOf(name)}`;
+  const l = await layout({
+    states: names.map((name, i) => ({ id: idOf(name), label: name, values: {}, initial: i === 0, terminal: false })),
+    transitions: known.map((k) => ({ from: idOf(k.source), to: idOf(k.to), action: k.label, actors: [] })),
+    availability: [],
+    findings: [],
+    surfaces: [],
+    links: [],
+    questions: [],
+    scenarios: [],
+  });
+  const nodes = l.nodes
+    .map(
+      (n) =>
+        `<a href="#/${encodeURIComponent(n.label)}" class="rel-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></a>`,
+    )
+    .join("");
+  return `<div class="diagram relations"><svg viewBox="0 0 ${l.width} ${l.height}" width="${l.width}" height="${l.height}" role="img" aria-label="ドメインオブジェクトのつながり">
+    <defs><marker id="arrow-rel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+    ${l.edges.map((e) => edgeSvg(e, "arrow-rel")).join("")}${nodes}
+  </svg></div>`;
+};
+
+const overviewPage = async (objects: ReadonlyArray<DomainObject>, options: ProjectOptions, links: ReadonlyArray<ProjectLink>) => `<section class="page" data-page="" hidden>
 <header class="top">
   <div>
     <p class="eyebrow">仕様書</p>
@@ -76,15 +122,54 @@ const overviewPage = (objects: ReadonlyArray<DomainObject>, options: ProjectOpti
         ({ spec, graph }) => `<a class="card object-card" href="#/${encodeURIComponent(spec.name)}">
       <h3>${esc(spec.name)}</h3>
       ${spec.stateDoc === null ? "" : `<p class="object-doc">${esc(spec.stateDoc)}</p>`}
-      <dl class="object-stats"><div><dt>状態</dt><dd>${graph.states.length}</dd></div><div><dt>操作</dt><dd>${spec.actions.length}</dd></div><div><dt>検査</dt><dd class="${graph.findings.length === 0 ? "ok" : "warn"}">${graph.findings.length === 0 ? "OK" : graph.findings.length}</dd></div></dl>
+      <dl class="object-stats"><div><dt>状態</dt><dd>${graph.states.length}</dd></div><div><dt>操作</dt><dd>${spec.actions.length}</dd></div><div><dt>未決</dt><dd class="${graph.questions.length === 0 ? "" : "warn"}">${graph.questions.length}</dd></div><div><dt>検査</dt><dd class="${graph.findings.length === 0 ? "ok" : "warn"}">${graph.findings.length === 0 ? "OK" : graph.findings.length}</dd></div></dl>
     </a>`,
       )
       .join("\n    ")}
   </div>
+  ${
+    links.length === 0
+      ? ""
+      : `<section class="links-section">
+    <h2>つながり</h2>
+    ${await relationsSvg(objects, links)}
+    <ul class="link-list">${links
+      .map(
+        (l) =>
+          `<li>${objectLink(l.source)}${l.from === null ? "" : ` の ${esc(actionLabel(objects, l.source, l.from))}`} → ${objectLink(l.to)}${l.action === null ? "" : ` の ${esc(actionLabel(objects, l.to, l.action))}`}<span class="sub">${esc(l.label)}</span></li>`,
+      )
+      .join("")}</ul>
+  </section>`
+  }
 </main>
 </section>`;
 
-const renderPage = async ({ spec, graph }: DomainObject, index: number) => {
+const renderPage = async (
+  { spec, graph }: DomainObject,
+  index: number,
+  objects: ReadonlyArray<DomainObject>,
+  links: ReadonlyArray<ProjectLink>,
+) => {
+  const outgoing = links.filter((l) => l.source === spec.name);
+  const incoming = links.filter((l) => l.to === spec.name && l.source !== spec.name);
+  const connections =
+    outgoing.length + incoming.length === 0
+      ? ""
+      : `<section class="links-section">
+    <h2>つながり</h2>
+    <ul class="link-list">${outgoing
+      .map(
+        (l) =>
+          `<li>${l.from === null ? "" : `${esc(actionLabel(objects, spec.name, l.from))} `}→ ${objectLink(l.to)}${l.action === null ? "" : ` の ${esc(actionLabel(objects, l.to, l.action))}`}<span class="sub">${esc(l.label)}</span></li>`,
+      )
+      .join("")}${incoming
+      .map(
+        (l) =>
+          `<li>${l.action === null ? "" : `${esc(actionLabel(objects, spec.name, l.action))} `}← ${objectLink(l.source)}${l.from === null ? "" : ` の ${esc(actionLabel(objects, l.source, l.from))}`}<span class="sub">${esc(l.label)}</span></li>`,
+      )
+      .join("")}</ul>
+  </section>`;
+  const linksOf = (action: string) => outgoing.filter((l) => l.from === action);
   const l = await layout(graph);
   const actions = summarizeActions(spec, graph);
   const labelOf = (id: string) => graph.states.find((s) => s.id === id)?.label ?? id;
@@ -107,7 +192,26 @@ const renderPage = async ({ spec, graph }: DomainObject, index: number) => {
   );
   const data = {
     states: states.map((s) => ({ ...s, surfaces: s.surfaces.map((g, i) => ({ actors: g.actors, template: templateId(s.id, i) })) })),
+    questions: Object.fromEntries(
+      graph.states.map((s) => [s.id, graph.questions.filter((q) => q.states.includes(s.id)).map((q) => q.ask)]),
+    ),
+    scenarios: Object.fromEntries(
+      graph.scenarios.map((s) => [s.name, s.steps.filter((st) => st.ok).map((st) => ({ from: st.from, to: st.to, action: st.action }))]),
+    ),
   };
+  const scenarioCard = (s: Graph["scenarios"][number]) => `<article class="card scenario-card" data-scenario="${esc(s.name)}" tabindex="0">
+        <h3>${s.passed ? "✅" : "❌"} ${esc(s.name)}</h3>
+        <ol class="storyboard">${s.steps
+          .map((st) => {
+            const shown = st.to === null ? undefined : graph.surfaces.find((x) => x.state === st.to && x.actor === st.actor);
+            return `<li class="${st.ok ? "" : "failed"}"><p class="step">${esc(describeStep(spec, st))}</p>${
+              st.ok
+                ? `<p class="flow">${esc(labelOf(st.from ?? ""))} → ${esc(labelOf(st.to ?? ""))}</p>`
+                : `<p class="reason">❌ ${esc(st.reason ?? "")}</p>`
+            }${shown === undefined ? "" : `<div class="frame"><div class="frame-inner">${surfaceToHtml(shown.surface as SurfaceNode, notAllowed(st.to!, [st.actor]))}</div></div>`}</li>`;
+          })
+          .join("")}</ol>
+      </article>`;
   const actorNames = spec.actors.map(([name]) => name);
   const thumbsOf = (state: string) =>
     actorNames.map((actor) => {
@@ -119,7 +223,14 @@ const renderPage = async ({ spec, graph }: DomainObject, index: number) => {
       return [actor, html] as const;
     });
   const wl = graph.surfaces.length > 0 ? await layout(graph, { nodeSize: WIREFLOW_NODE }) : null;
-  const flags = (id: string) => ({ initial: id === initial?.id, terminal: terminal.has(id), violation: violating.has(id) });
+  const questioned = new Set(graph.questions.flatMap((q) => q.states));
+  const flags = (id: string) => ({
+    initial: id === initial?.id,
+    terminal: terminal.has(id),
+    violation: violating.has(id),
+    question: questioned.has(id),
+  });
+  const asksOf = (action: string) => graph.questions.filter((q) => q.action === action).map((q) => q.ask);
   const arrow = `arrow-${index}`;
   const arrowWf = `arrow-wf-${index}`;
 
@@ -133,10 +244,21 @@ const renderPage = async ({ spec, graph }: DomainObject, index: number) => {
   <dl class="stats">
     <div><dt>状態</dt><dd>${graph.states.length}</dd></div>
     <div><dt>操作</dt><dd>${actions.length}</dd></div>
+    <div><dt>未決</dt><dd class="${graph.questions.length === 0 ? "" : "warn"}">${graph.questions.length}</dd></div>
     <div><dt>検査</dt><dd class="${graph.findings.length === 0 ? "ok" : "warn"}">${graph.findings.length === 0 ? "OK" : graph.findings.length}</dd></div>
   </dl>
 </header>
 <main>
+  ${
+    graph.questions.length === 0
+      ? ""
+      : `<section class="questions" aria-label="未決事項">
+    <h2>未決事項</h2>
+    <ol>${graph.questions
+      .map((q) => `<li><span class="ask">${esc(q.ask)}</span><span class="target">${esc(questionTarget(spec, q, labelOf))}</span>${q.note === null ? "" : `<span class="note">${esc(q.note)}</span>`}</li>`)
+      .join("")}</ol>
+  </section>`
+  }
   <section class="board" aria-label="状態遷移図" data-mode="states">
     <p class="hint">状態をクリックすると、その状態でできること・できないことを表示します。矢印のラベルや操作カードをクリックすると、その操作の遷移を強調します。Esc で解除。</p>
     ${
@@ -161,9 +283,19 @@ const renderPage = async ({ spec, graph }: DomainObject, index: number) => {
   <section class="actions">
     <h2>操作</h2>
     <div class="cards">
-      ${actions.map(actionCard).join("\n      ")}
+      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name))).join("\n      ")}
     </div>
   </section>
+  ${connections}
+  ${
+    graph.scenarios.length === 0
+      ? ""
+      : `<section class="scenarios">
+    <h2>シナリオ</h2>
+    <p class="hint">シナリオを選ぶと、状態遷移図の上でその経路を強調します。各段階には、操作した人に見える画面を並べます。</p>
+    ${graph.scenarios.map(scenarioCard).join("\n    ")}
+  </section>`
+  }
   <section class="findings">
     <h2>検査結果</h2>
     ${
@@ -204,6 +336,7 @@ interface NodeFlags {
   readonly initial: boolean;
   readonly terminal: boolean;
   readonly violation: boolean;
+  readonly question: boolean;
 }
 
 const diagramSvg = (name: string, l: Layout, markerId: string, node: (n: LaidOutNode) => string) =>
@@ -216,7 +349,12 @@ const diagramSvg = (name: string, l: Layout, markerId: string, node: (n: LaidOut
       </svg>`;
 
 const nodeClass = (f: NodeFlags, extra = "") =>
-  ["node", f.initial ? "initial" : "", f.terminal ? "terminal" : "", f.violation ? "violation" : "", extra].filter(Boolean).join(" ");
+  ["node", f.initial ? "initial" : "", f.terminal ? "terminal" : "", f.violation ? "violation" : "", f.question ? "has-question" : "", extra]
+    .filter(Boolean)
+    .join(" ");
+
+const questionMark = (n: LaidOutNode, f: NodeFlags) =>
+  f.question ? `<g class="q-mark"><circle cx="${n.x + n.width - 2}" cy="${n.y + 2}" r="8"/><text x="${n.x + n.width - 2}" y="${n.y + 2}">?</text></g>` : "";
 
 const startMarker = (n: LaidOutNode, cy: number, markerId: string) =>
   `<circle class="start" cx="${n.x - 18}" cy="${cy}" r="5"/><path class="start-line" d="M${n.x - 13},${cy} L${n.x - 2},${cy}" marker-end="url(#${markerId})"/>`;
@@ -224,9 +362,14 @@ const startMarker = (n: LaidOutNode, cy: number, markerId: string) =>
 const terminalRect = (n: LaidOutNode) =>
   `<rect class="inner" x="${n.x + 3}" y="${n.y + 3}" width="${n.width - 6}" height="${n.height - 6}" rx="7"/>`;
 
+// 「どの状態からでも」は実在の状態ではないので、点線で描き、クリックできる状態（data-state）にはしない。
+const anyNodeSvg = (n: LaidOutNode) =>
+  `<g class="any-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="${n.height / 2}"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></g>`;
+
 const nodeSvg = (n: LaidOutNode, f: NodeFlags, markerId: string) => {
+  if (n.id === ANY) return anyNodeSvg(n);
   const cy = n.y + n.height / 2;
-  return `${f.initial ? startMarker(n, cy, markerId) : ""}<g class="${nodeClass(f)}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terminal ? terminalRect(n) : ""}<text x="${n.x + n.width / 2}" y="${cy}">${esc(n.label)}</text></g>`;
+  return `${f.initial ? startMarker(n, cy, markerId) : ""}<g class="${nodeClass(f)}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terminal ? terminalRect(n) : ""}<text x="${n.x + n.width / 2}" y="${cy}">${esc(n.label)}</text>${questionMark(n, f)}</g>`;
 };
 
 // サムネイルを SVG の foreignObject に入れる理由: パネルと同じ HTML のワイヤーフレームを、
@@ -238,6 +381,7 @@ const wireflowNodeSvg = (
   visible: string | undefined,
   markerId: string,
 ) => {
+  if (n.id === ANY) return anyNodeSvg(n);
   const inner = n.width - 16;
   const thumbHtml = thumbs
     .map(
@@ -254,7 +398,7 @@ const edgeSvg = (e: LaidOutEdge, markerId: string) => {
   return `<g class="edge" data-action="${esc(e.action)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"><path d="${d}" marker-end="url(#${markerId})"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.action)}</text></g></g>`;
 };
 
-const actionCard = (a: ActionSummary) => {
+const actionCard = (a: ActionSummary, asks: ReadonlyArray<string>, links: ReadonlyArray<ProjectLink>) => {
   const others =
     a.othersReasons.length === 0 ? "" : `<span class="muted">ほかの人は「${a.othersReasons.map(esc).join("」「")}」</span>`;
   const who =
@@ -274,13 +418,15 @@ const actionCard = (a: ActionSummary) => {
   const whenNot = blocked.length === 0 ? '<span class="muted">なし</span>' : `<ul>${blocked.join("")}</ul>`;
   const effect = formatEffect(a);
   return `<article class="card" data-action="${esc(a.name)}" tabindex="0">
-        <h3>${a.summary === null ? "" : `${esc(a.summary)} `}<code>${esc(a.name)}</code></h3>
+        <h3>${a.summary === null ? "" : `${esc(a.summary)} `}<code>${esc(a.name)}</code>${asks.length === 0 ? "" : ` <span class="q-badge">未決 ${asks.length}</span>`}</h3>
         <dl>
           <dt>できる人</dt><dd>${who}</dd>
           <dt>できるとき</dt><dd>${when}</dd>
           <dt>できないとき</dt><dd>${whenNot}</dd>
           ${a.inputOutcomes.length === 0 ? "" : `<dt>入力ごとの結果</dt><dd><ul>${a.inputOutcomes.map((o) => `<li><span class="reason">${esc(o.input)}</span> ${o.transitions.length > 0 ? o.transitions.map((t) => `<span class="flow">${esc(formatTransition(t))}</span>`).join("") : `<span class="state">❌ ${esc(o.reasons.join("、"))}</span>`}</li>`).join("")}</ul></dd>`}
           ${effect === "" ? "" : `<dt>結果</dt><dd>${esc(effect)}</dd>`}
+          ${links.length === 0 ? "" : `<dt>つながり</dt><dd>${links.map((l) => `<span class="flow">→ ${objectLink(l.to)}${l.action === null ? "" : ` の ${esc(l.action)}`}</span>`).join("")}<span class="muted">${esc(links.map((l) => l.label).join(" / "))}</span></dd>`}
+          ${asks.length === 0 ? "" : `<dt>未決</dt><dd><ul>${asks.map((q) => `<li class="ask">${esc(q)}</li>`).join("")}</ul></dd>`}
         </dl>
       </article>`;
 };
@@ -396,6 +542,39 @@ marker path{fill:var(--muted)}
 .card li+li{margin-top:6px}
 .chip,.state,.flow{display:inline-block;font-size:12.5px;border-radius:6px;padding:0 7px;margin:0 4px 4px 0;background:var(--chip)}
 .flow{background:var(--accent-weak)}
+.questions{border:1px solid var(--warn);border-radius:14px;padding:4px 20px 12px;margin:0 0 20px;background:var(--card)}
+.questions h2{margin:14px 0 8px;color:var(--warn);font-size:16px}
+.questions ol{margin:0;padding-left:20px}
+.questions li{margin:6px 0}
+.questions .ask{font-weight:600}
+.questions .target{color:var(--muted);font-size:13px;margin-left:4px}
+.questions .note{display:block;color:var(--muted);font-size:13px}
+.q-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--warn);color:var(--bg);vertical-align:middle}
+.card .ask{color:var(--warn);font-size:13px}
+.q-mark circle{fill:var(--warn)}
+.q-mark text{fill:var(--bg);font-size:11px;font-weight:700}
+.stats .warn,.object-stats .warn{color:var(--warn)}
+.links-section{margin:0 0 8px}
+.link-list{list-style:none;padding:0;margin:8px 0 0}
+.link-list li{padding:6px 0;border-top:1px solid var(--line)}
+.link-list li:first-child{border-top:0}
+.link-list .sub{display:block;color:var(--muted);font-size:13px}
+.link-list a,.card .flow a{color:var(--accent)}
+.relations{margin-bottom:12px}
+.rel-node rect{fill:var(--node);stroke:var(--fg);stroke-width:1.4}
+.rel-node:hover rect{stroke:var(--accent)}
+.any-node rect{fill:none;stroke:var(--muted);stroke-width:1.2;stroke-dasharray:4 3}
+.any-node text{fill:var(--muted);font-size:12px}
+.scenario-card{margin-bottom:16px}
+.storyboard{display:flex;gap:14px;overflow-x:auto;list-style:none;margin:0;padding:0 0 6px;counter-reset:step}
+.storyboard li{flex:0 0 220px;counter-increment:step}
+.storyboard li::before{content:counter(step);display:inline-block;width:20px;height:20px;border-radius:50%;background:var(--accent-weak);color:var(--accent);font-size:12px;font-weight:700;text-align:center;line-height:20px;margin-bottom:4px}
+.storyboard li.failed::before{background:var(--warn);color:var(--bg)}
+.storyboard .step{margin:0 0 4px;font-size:13px;font-weight:600}
+.storyboard .flow{margin:0 0 8px;font-size:12px;display:inline-block}
+.storyboard .reason{margin:0;color:var(--warn);font-size:12.5px}
+.storyboard .frame{height:200px;overflow:hidden;border-radius:8px}
+.storyboard .frame-inner{width:366px;transform:scale(.6);transform-origin:0 0;pointer-events:none}
 .state.rest{background:none;border:1px dashed var(--line)}
 .reason{font-weight:600;margin-right:4px}
 .muted{color:var(--muted);font-size:13px;display:block}
@@ -463,6 +642,7 @@ const CLIENT = `
     if (s.initial) panel.append(el("span", "tag", "初期状態"));
     if (s.terminal) panel.append(el("span", "tag", "終端"));
     s.violations.forEach(function (v) { panel.append(el("p", "violation", "⚠ 不変条件「" + v + "」を破っています")); });
+    (page.questions[id] || []).forEach(function (q) { panel.append(el("p", "violation", "？ 未決: " + q)); });
     if (s.surfaces.length > 0) {
       panel.append(el("h3", null, "見える画面"));
       s.surfaces.forEach(function (g) {
@@ -529,7 +709,26 @@ const CLIENT = `
     if (parts[1] && current && current.name) selectState(parts[1]);
   }
 
+  function selectScenario(name) {
+    var page = current && data.pages[current.name];
+    var steps = page && page.scenarios[name];
+    if (!steps) return;
+    reset(); dimAll();
+    steps.forEach(function (st) {
+      within(".edge" + attr("data-from", st.from) + attr("data-to", st.to) + attr("data-action", st.action)).forEach(function (e) {
+        e.classList.add("is-active"); undim(e);
+      });
+      nodes(st.from).forEach(undim);
+      nodes(st.to).forEach(undim);
+    });
+    within(".scenario-card" + attr("data-scenario", name)).forEach(function (c) { c.classList.add("is-selected"); });
+    var board = current.el.querySelector(".board");
+    if (board) board.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function activate(target) {
+    var scenario = target.closest(".scenario-card");
+    if (scenario) return selectScenario(scenario.dataset.scenario);
     var modeButton = target.closest(".modes button");
     if (modeButton) return setMode(modeButton.dataset.mode);
     if (target.closest("[data-clear]")) return reset();

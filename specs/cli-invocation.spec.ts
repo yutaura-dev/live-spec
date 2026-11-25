@@ -49,7 +49,7 @@ export const inputs = {
 };
 
 /**
- * 引数を渡して起動する。
+ * 引数を渡して起動する
  *
  * 引数の誤りは終了コード 2 で、理由と usage を出して終わる（ここでは「できない入力」として表れる）。
  */
@@ -72,7 +72,28 @@ export function start(inv: Invocation, _user: User, args: Args): Invocation {
   return { status: args.brokenSpec ? "生成に失敗して終了" : "書き出して終了" };
 }
 
-/** Ctrl+C で止める（監視中・配信中は自分では終わらない） */
+export const links = [
+  { from: start, to: "local-server", action: "listen", label: "--serve のときはローカルサーバを起動する" },
+  { from: start, to: "watch-session", action: "save", label: "--watch / --serve のときは監視を始め、最初の生成をする" },
+];
+
+export const questions = [
+  { ask: "spec が 2 つ以上のとき、Markdown を標準出力に連結して出す選択肢も要るか？", about: start },
+];
+
+export const scenarios = {
+  "HTML の仕様書を書き出す": [{ do: start, by: "利用者", input: "--html --out file", expect: { status: "書き出して終了" } }],
+  ブラウザで見ながら書いて終える: [
+    { do: start, by: "利用者", input: "--serve" },
+    { do: interrupt, by: "利用者", expect: { status: "Ctrl+C で終了" } },
+  ],
+};
+
+/**
+ * Ctrl+C で止める
+ *
+ * 監視中・配信中は自分では終わらないので、利用者が止める。
+ */
 export function interrupt(inv: Invocation, _user: User): Invocation {
   ensure(inv.status === "監視中" || inv.status === "配信中", "監視中か配信中のときだけ");
   return { status: "Ctrl+C で終了" };

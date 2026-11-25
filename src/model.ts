@@ -41,6 +41,9 @@ export const Finding = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("invalid-return"), action: Schema.String, actor: Schema.String, state: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("state-limit"), maxStates: Schema.Number }),
   Schema.Struct({ kind: Schema.Literal("missing-inputs"), action: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("question-unmatched"), ask: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("link-unresolved"), to: Schema.String, action: Schema.NullOr(Schema.String) }),
+  Schema.Struct({ kind: Schema.Literal("scenario-failed"), scenario: Schema.String, step: Schema.Number, reason: Schema.String }),
   Schema.Struct({
     kind: Schema.Literal("surface-action-not-allowed"),
     state: Schema.String,
@@ -65,6 +68,34 @@ export const Graph = Schema.Struct({
   availability: Schema.Array(Availability),
   findings: Schema.Array(Finding),
   surfaces: Schema.Array(Schema.Struct({ state: Schema.String, actor: Schema.String, surface: Schema.Unknown })),
+  links: Schema.Array(
+    Schema.Struct({ from: Schema.NullOr(Schema.String), to: Schema.String, action: Schema.NullOr(Schema.String), label: Schema.String }),
+  ),
+  questions: Schema.Array(
+    Schema.Struct({
+      ask: Schema.String,
+      note: Schema.NullOr(Schema.String),
+      action: Schema.NullOr(Schema.String),
+      states: Schema.Array(Schema.String),
+    }),
+  ),
+  scenarios: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      passed: Schema.Boolean,
+      steps: Schema.Array(
+        Schema.Struct({
+          action: Schema.String,
+          actor: Schema.String,
+          input: Schema.NullOr(Schema.String),
+          from: Schema.NullOr(Schema.String),
+          to: Schema.NullOr(Schema.String),
+          ok: Schema.Boolean,
+          reason: Schema.NullOr(Schema.String),
+        }),
+      ),
+    }),
+  ),
 });
 export type Graph = typeof Graph.Type;
 

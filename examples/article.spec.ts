@@ -77,6 +77,25 @@ export function archive(article: Article, user: User): Article {
   return { ...article, status: "archived", pinned: false };
 }
 
+export const scenarios = {
+  書いて公開するまで: [
+    { do: submit, by: "著者alice" },
+    { do: publish, by: "編集者eve", expect: { status: "published" } },
+  ],
+  差し戻されて書き直す: [
+    { do: submit, by: "著者alice" },
+    { do: reject, by: "編集者eve", input: "理由を書いた" },
+    { do: edit, by: "著者alice" },
+    { do: submit, by: "著者alice", expect: { status: "inReview" } },
+  ],
+  固定してからアーカイブする: [
+    { do: submit, by: "著者alice" },
+    { do: publish, by: "管理者root" },
+    { do: pin, by: "編集者eve", expect: { pinned: true } },
+    { do: archive, by: "管理者root", expect: { status: "archived", pinned: false } },
+  ],
+};
+
 /** 記事の詳細画面。見る人の役割と記事の状態によって、出るボタンが変わる。 */
 export function surface(article: Article, user: User) {
   const isAuthor = user.id === article.authorId;

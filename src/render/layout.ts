@@ -1,6 +1,7 @@
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import ElkModule from "elkjs/lib/elk.bundled.js";
 import type { Graph } from "../model.ts";
+import { ANY, ANY_LABEL, collapseTransitions } from "./collapse.ts";
 
 export interface Point {
   readonly x: number;
@@ -69,14 +70,21 @@ export interface LayoutOptions {
 export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise<Layout> => {
   const elk = new ELK();
   // 自分自身に戻る遷移は描かない。ほぼすべての状態にあると、図が線で埋まって読めなくなるため。
-  const transitions = graph.transitions.filter((t) => t.from !== t.to);
+  const transitions = collapseTransitions(graph).filter((t) => t.from !== t.to);
+  const hasAny = transitions.some((t) => t.from === ANY);
+  const nodeList = [
+    ...(hasAny ? [{ id: ANY, label: ANY_LABEL, initial: false }] : []),
+    ...graph.states.map((s) => ({ id: s.id, label: s.label, initial: s.initial })),
+  ];
   const input: ElkNode = {
     id: "root",
     layoutOptions: LAYOUT_OPTIONS,
-    children: graph.states.map((s) => ({
+    children: nodeList.map((s) => ({
       id: s.id,
       width: options.nodeSize?.width ?? textWidth(s.label) + NODE_PADDING_X * 2,
       height: options.nodeSize?.height ?? NODE_HEIGHT,
+      // 「どの状態からでも」には層の指定をしない。初期状態へ戻る遷移（リセットなど）があると、
+      // 初期状態と同じ最初の層に置くことになり、ELK が層の中の辺を扱えずに落ちるため。
       ...(s.initial ? { layoutOptions: { "elk.layered.layering.layerConstraint": "FIRST" } } : {}),
     })),
     edges: transitions.map((t, i) => ({
@@ -88,7 +96,7 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
   };
   const result = await elk.layout(input);
 
-  const nodes = graph.states.map((s) => {
+  const nodes = nodeList.map((s) => {
     const n = result.children!.find((c) => c.id === s.id)!;
     return { id: s.id, label: s.label, x: n.x!, y: n.y!, width: n.width!, height: n.height! };
   });

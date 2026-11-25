@@ -21,10 +21,22 @@ export const inputs = {
   save: { 正しい内容: [true], 壊れた内容: [false] },
 };
 
+export const links = [
+  { from: save, to: "browser-tab", action: "notify", label: "--serve のときは、生成し直したことを開いているタブに通知する" },
+];
+
+export const questions = [
+  {
+    ask: "Markdown / JSON の監視で生成に失敗したとき、古い内容のままにしてよいか？",
+    about: { output: "前回のまま" },
+    note: "HTML はエラーページになるが、Markdown / JSON は前回の内容が残るので、読み手が古い仕様を最新だと取り違えうる（src/watch.ts）",
+  },
+];
+
 /**
- * spec を保存する（起動直後の 1 回目の生成も同じ）。
+ * spec を保存する
  *
- * 保存から 80ms 待ってから生成する（src/watch.ts DEBOUNCE_MS）。
+ * 起動直後の 1 回目の生成も同じ扱い。保存から 80ms 待ってから生成する（src/watch.ts DEBOUNCE_MS）。
  */
 export function save(_s: Session, watcher: Watcher, valid: boolean): Session {
   if (valid) return { output: "最新" };

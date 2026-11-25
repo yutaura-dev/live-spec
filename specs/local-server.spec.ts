@@ -38,7 +38,7 @@ export function listen(s: Server, client: Client, portFree: boolean): Server {
 }
 
 /**
- * ブラウザがリクエストを送る。
+ * ブラウザがリクエストを送る
  *
  * 状態は変わらない。応答は「見える画面」の欄に出る。
  */

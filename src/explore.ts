@@ -139,8 +139,74 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
 
   const surfaces = spec.surface === null ? [] : checkSurfaces(spec.surface, spec, [...processed], valuesById, availability, findings);
 
-  return { states, transitions: [...transitions.values()], availability, findings, surfaces };
+  const scenarios = runScenarios(spec, (values) => ids.get(JSON.stringify(values)) ?? null, findings);
+  const questions = spec.questions.map((q) => {
+    const about = q.about;
+    const action = typeof about === "function" ? about.name : null;
+    const matched =
+      about === undefined || typeof about === "function"
+        ? []
+        : states
+            .filter((s) => Object.entries(about).every(([k, v]) => JSON.stringify(canonical(v)) === JSON.stringify(s.values[k])))
+            .map((s) => s.id);
+    if (about !== undefined && typeof about !== "function" && matched.length === 0) findings.push({ kind: "question-unmatched", ask: q.ask });
+    return { ask: q.ask, note: q.note ?? null, action, states: matched };
+  });
+
+  const links = spec.links.map((l) => ({ from: l.from?.name ?? null, to: l.to, action: l.action ?? null, label: l.label }));
+
+  return { states, transitions: [...transitions.values()], availability, findings, surfaces, links, questions, scenarios };
 };
+
+const show = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
+
+// シナリオは探索とは別に、初期状態から手順どおりに実行する。探索は「到達できるか」を確かめるが、
+// シナリオは「この業務の流れが、この順番で通るか」を名指しで確かめる（受け入れテストの役割）。
+const runScenarios = (spec: Spec, idOf: (values: State) => string | null, findings: Array<Finding>): Graph["scenarios"] =>
+  spec.scenarios.map(([name, steps]) => {
+    let values = canonical(spec.initial) as State;
+    const records: Array<Graph["scenarios"][number]["steps"][number]> = [];
+    for (const [i, step] of steps.entries()) {
+      const action = step.do.name;
+      const fail = (reason: string) => {
+        records.push({ action, actor: step.by, input: step.input ?? null, from: idOf(values), to: null, ok: false, reason });
+        findings.push({ kind: "scenario-failed", scenario: name, step: i + 1, reason });
+      };
+      const actor = spec.actors.find(([n]) => n === step.by);
+      if (actor === undefined) {
+        fail(`登場人物「${step.by}」は actors にない`);
+        break;
+      }
+      if (!spec.actions.some(([n]) => n === action)) {
+        fail(`操作「${action}」はこの spec にない`);
+        break;
+      }
+      const examples = spec.inputs[action];
+      const args = step.input === undefined ? [] : examples?.find(([label]) => label === step.input)?.[1];
+      if (args === undefined) {
+        fail(`入力の例「${step.input}」は inputs にない`);
+        break;
+      }
+      if (step.input === undefined && step.do.length > 2) {
+        fail("この操作には入力の例（input）を指定する");
+        break;
+      }
+      const outcome = run(step.do, values, actor[1], args);
+      if (outcome.kind !== "ok") {
+        fail(outcome.kind === "not-allowed" ? outcome.reason : outcome.kind === "error" ? `例外: ${outcome.message}` : "オブジェクトを返さなかった");
+        break;
+      }
+      const mismatch = Object.entries(step.expect ?? {}).find(([k, v]) => JSON.stringify(canonical(v)) !== JSON.stringify(outcome.next[k]));
+      if (mismatch !== undefined) {
+        const [k, v] = mismatch;
+        fail(`期待: ${k} = ${show(v)}、実際: ${k} = ${show(outcome.next[k])}`);
+        break;
+      }
+      records.push({ action, actor: step.by, input: step.input ?? null, from: idOf(values), to: idOf(outcome.next), ok: true, reason: null });
+      values = outcome.next;
+    }
+    return { name, passed: records.length === steps.length && records.every((r) => r.ok), steps: records };
+  });
 
 // 画面のボタンと探索の結果を突き合わせる。画面と状態遷移が同じ spec から作られているので、
 // 「押しても実行できないボタン」「実行できるのに画面から辿れない操作」を機械的に見つけられる。
