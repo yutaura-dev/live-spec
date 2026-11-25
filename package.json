@@ -1,5 +1,5 @@
 {
-  "name": "live-spec",
+  "name": "@yutaura/live-spec",
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
@@ -49,5 +49,8 @@
     "@types/node": "^24.19.2",
     "typescript": "7.0.2",
     "vitest": "5.1.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

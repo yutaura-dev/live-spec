@@ -9,7 +9,7 @@ live-spec は「AI が書き、人が図と画面で読む」仕様書のツー�
 
 ## 実行のしかた
 
-live-spec は npm パッケージ（`npm i -D live-spec` / `pnpm add -D live-spec`）で、`live-spec` コマンドを持つ。
+live-spec は npm パッケージ `@yutaura/live-spec`（`npm i -D @yutaura/live-spec` / `pnpm add -D @yutaura/live-spec`）で、`live-spec` コマンドを持つ。
 
 | やりたいこと | コマンド |
 |---|---|
@@ -25,7 +25,7 @@ live-spec は npm パッケージ（`npm i -D live-spec` / `pnpm add -D live-spe
 - HTML: `live-spec specs/ --html --out spec.html`。ドメインオブジェクトごとのページとタブを持つ 1 つのファイルになる（`#/<名前>` でページを開ける）
 - Markdown: `live-spec specs/ --out docs/spec/`。ドメインオブジェクトごとの `<名前>.md` と一覧の `README.md` を書き出す
 
-spec からは `import { ensure, ui, api, cli } from "live-spec"` で読み込む（live-spec リポジトリ自身の `specs/` と `examples/` だけは `../src/index.ts` から読み込む）。
+spec からは `import { ensure, ui, api, cli } from "@yutaura/live-spec"` で読み込む（live-spec リポジトリ自身の `specs/` と `examples/` だけは `../src/index.ts` から読み込む）。
 
 型チェックは live-spec の実行とは別に行う（live-spec は型を消して実行するだけなので、型の誤りでは止まらない）:
 

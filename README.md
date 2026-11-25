@@ -12,7 +12,7 @@ live-spec では、人は markdown を読みません。図と画面と一覧を
 
 ## 例
 
-[examples/minimal.spec.ts](examples/minimal.spec.ts) の全文です（このリポジトリの中なので `../src/index.ts` から読み込んでいます。利用するときは `from "live-spec"` です）。登場人物を増やし、不変条件や入力の例、詳しい画面を加えた版が [examples/article.spec.ts](examples/article.spec.ts) にあります。API の例は [examples/job-api.spec.ts](examples/job-api.spec.ts) です（ワーカーを登場人物として扱い、`GET /jobs/{id}` の応答を状態ごとに示します）。
+[examples/minimal.spec.ts](examples/minimal.spec.ts) の全文です（このリポジトリの中なので `../src/index.ts` から読み込んでいます。利用するときは `from "@yutaura/live-spec"` です）。登場人物を増やし、不変条件や入力の例、詳しい画面を加えた版が [examples/article.spec.ts](examples/article.spec.ts) にあります。API の例は [examples/job-api.spec.ts](examples/job-api.spec.ts) です（ワーカーを登場人物として扱い、`GET /jobs/{id}` の応答を状態ごとに示します）。
 
 ```ts
 import { ensure, ui } from "../src/index.ts";
@@ -85,10 +85,10 @@ pnpm spec examples/minimal.spec.ts --serve   # http://127.0.0.1:4747/ をブラ�
 ## インストール
 
 ```sh
-npm i -D live-spec        # pnpm add -D live-spec / yarn add -D live-spec
+npm i -D @yutaura/live-spec        # pnpm add -D @yutaura/live-spec / yarn add -D @yutaura/live-spec
 ```
 
-Node.js 22.18 以上が必要です（spec ファイルの TypeScript をそのまま実行するため）。
+Node.js 22.18 以上が必要です（spec ファイルの TypeScript をそのまま実行するため）。パッケージ名は `@yutaura/live-spec`、コマンド名は `live-spec` です。
 
 ### Claude Code の skill を入れる
 

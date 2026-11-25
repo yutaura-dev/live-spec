@@ -64,7 +64,7 @@ export function confirm(order: Order, user: User): Order {
 ## 6. 保存場所とセットアップ
 
 - spec は 1 つのディレクトリ（例: `specs/`）にまとめ、`live-spec specs/ --html --out <file>` で 1 つの HTML にする
-- spec を置く場所（例: `specs/`）と、`npm i -D live-spec`（または pnpm / yarn）で依存を足してよいかを、**書き込む前にユーザーに確認する**。package.json を勝手に変えないため。spec からは `import { ensure, ui, api, cli } from "live-spec"` で読み込む
+- spec を置く場所（例: `specs/`）と、`npm i -D @yutaura/live-spec`（または pnpm / yarn）で依存を足してよいかを、**書き込む前にユーザーに確認する**。package.json を勝手に変えないため。spec からは `import { ensure, ui, api, cli } from "@yutaura/live-spec"` で読み込む
 - **live-spec リポジトリ自身が対象**: `specs/` に置き、`../src/index.ts` から読み込む
 
 ## 7. 報告する
