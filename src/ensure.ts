@@ -5,19 +5,24 @@ export class NotAllowed extends Error {
 // 外す ensure を globalThis に Symbol.for で置く理由: spec ファイルと live-spec 本体が別々に読み込まれて
 // このモジュールが 2 つ存在する場合でも、同じ設定を見られるようにするため（isNotAllowed を _tag で判定するのと同じ事情）。
 const BYPASS = Symbol.for("live-spec.ensure.bypass");
-type BypassHolder = { [BYPASS]?: string };
+interface BypassMode {
+  /** skip: 理由が reason の ensure だけを素通りさせる。only: 理由が reason の ensure だけを効かせる */
+  readonly mode: "skip" | "only";
+  readonly reason: string;
+}
+type BypassHolder = { [BYPASS]?: BypassMode };
 
 export function ensure(condition: unknown, reason: string): asserts condition {
   if (condition) return;
-  if ((globalThis as BypassHolder)[BYPASS] === reason) return;
+  const bypass = (globalThis as BypassHolder)[BYPASS];
+  if (bypass !== undefined && (bypass.mode === "skip" ? bypass.reason === reason : bypass.reason !== reason)) return;
   throw new NotAllowed(reason);
 }
 
-/** fn を実行している間だけ、理由が reason の ensure を素通りさせる（ミューテーションで使う） */
-export const withEnsureBypassed = <A>(reason: string, fn: () => A): A => {
+const withBypass = <A>(mode: BypassMode, fn: () => A): A => {
   const holder = globalThis as BypassHolder;
   const previous = holder[BYPASS];
-  holder[BYPASS] = reason;
+  holder[BYPASS] = mode;
   try {
     return fn();
   } finally {
@@ -25,6 +30,12 @@ export const withEnsureBypassed = <A>(reason: string, fn: () => A): A => {
     else holder[BYPASS] = previous;
   }
 };
+
+/** fn を実行している間だけ、理由が reason の ensure を素通りさせる（ミューテーションで使う） */
+export const withEnsureBypassed = <A>(reason: string, fn: () => A): A => withBypass({ mode: "skip", reason }, fn);
+
+/** fn を実行している間だけ、理由が reason の ensure 以外を素通りさせる（その ensure が実際に止める範囲を求めるのに使う） */
+export const withOnlyEnsure = <A>(reason: string, fn: () => A): A => withBypass({ mode: "only", reason }, fn);
 
 // instanceof ではなく _tag で判定する理由: spec ファイルと live-spec 本体が別々に
 // 読み込まれて NotAllowed クラスが 2 つ存在する場合でも、正しく判定できるようにするため。
