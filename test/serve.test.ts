@@ -118,6 +118,13 @@ describe("injectReload: 再読み込み用のスクリプトを差し込む", ()
     expect(injectReload("<html><body>x</body></html>", 3)).toMatch(/x<script>[\s\S]*<\/script>\n<\/body>/);
   });
 
+  it("サーバとの接続が切れたら、ページの上部にそのことを表示する", () => {
+    const script = injectReload("<html><body>x</body></html>", 3);
+
+    expect(script).toContain("onerror");
+    expect(script).toContain("サーバとの接続が切れました");
+  });
+
   it("受け取った版数がページの版数と違えば再読み込みする", () => {
     const script = injectReload("<html><body>x</body></html>", 3);
 

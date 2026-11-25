@@ -7,7 +7,7 @@ import { ensure, ui } from "live-spec";
  * ページを読み込んでから通知の接続がつながるまでに生成し直されても、接続したときに版数を比べて再読み込みする。
  */
 export type Tab = {
-  status: "閉じている" | "最新を表示" | "再読み込み中";
+  status: "閉じている" | "最新を表示" | "再読み込み中" | "接続が切れた";
 };
 
 type Who = { kind: "person" } | { kind: "browser" } | { kind: "server" };
@@ -20,10 +20,6 @@ export const actors: Record<string, Who> = {
   "ブラウザ（自動）": { kind: "browser" },
   サーバ: { kind: "server" },
 };
-
-export const questions = [
-  { ask: "サーバを止めたあと、開いたままのタブにそれを知らせるか？", about: { status: "最新を表示" }, note: "今は何も表示されず、古い仕様書がそのまま残る" },
-];
 
 export const scenarios = {
   開いて保存を待つ: [
@@ -62,6 +58,28 @@ export function reloaded(tab: Tab, who: Who): Tab {
   return { status: "最新を表示" };
 }
 
+/**
+ * サーバが止まる
+ *
+ * 通知の接続が切れたことをページの上部に表示する（src/serve.ts injectReload の onerror）。
+ */
+export function serverStopped(tab: Tab, who: Who): Tab {
+  ensure(who.kind === "server", "サーバだけ");
+  ensure(tab.status === "最新を表示" || tab.status === "再読み込み中", "開いているときだけ");
+  return { status: "接続が切れた" };
+}
+
+/**
+ * サーバが再び起動する
+ *
+ * EventSource がつなぎ直し、表示を消す。版数が変わっていれば再読み込みする。
+ */
+export function serverRestarted(tab: Tab, who: Who): Tab {
+  ensure(who.kind === "server", "サーバだけ");
+  ensure(tab.status === "接続が切れた", "接続が切れているときだけ");
+  return { status: "最新を表示" };
+}
+
 /** タブを閉じる */
 export function close(tab: Tab, who: Who): Tab {
   ensure(who.kind === "person", "利用者だけ");
@@ -76,6 +94,7 @@ export function surface(tab: Tab, who: Who) {
     ui.badge(tab.status),
     tab.status === "閉じている" && ui.button("http://127.0.0.1:4747/ を開く", open),
     tab.status === "再読み込み中" && ui.text("再読み込みしています…"),
+    tab.status === "接続が切れた" && ui.text("サーバとの接続が切れました。この仕様書は最新ではないかもしれません。"),
     tab.status !== "閉じている" && ui.button("タブを閉じる", close),
   );
 }

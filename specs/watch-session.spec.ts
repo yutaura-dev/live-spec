@@ -5,7 +5,7 @@ import { cli } from "live-spec";
  *
  * spec を保存するたびに生成し直す。失敗しても監視は止まらない。
  */
-export type Session = { output: "未生成" | "最新" | "エラーページ" | "前回のまま" };
+export type Session = { output: "未生成" | "最新" | "エラーページ" | "失敗のお知らせ" };
 
 type Watcher = { format: "html" | "markdown" };
 
@@ -25,14 +25,6 @@ export const links = [
   { from: save, to: "browser-tab", action: "notify", label: "--serve のときは、生成し直したことを開いているタブに通知する" },
 ];
 
-export const questions = [
-  {
-    ask: "Markdown / JSON の監視で生成に失敗したとき、古い内容のままにしてよいか？",
-    about: { output: "前回のまま" },
-    note: "HTML はエラーページになるが、Markdown / JSON は前回の内容が残るので、読み手が古い仕様を最新だと取り違えうる（src/watch.ts）",
-  },
-];
-
 /**
  * spec を保存する
  *
@@ -40,8 +32,9 @@ export const questions = [
  */
 export function save(_s: Session, watcher: Watcher, valid: boolean): Session {
   if (valid) return { output: "最新" };
-  // 根拠: src/watch.ts rebuild（HTML のときだけエラーページを書き出す）
-  return { output: watcher.format === "html" ? "エラーページ" : "前回のまま" };
+  // 根拠: src/generate.ts failureOutput（HTML はエラーページ、Markdown は失敗を知らせる文書）
+  // 前回の内容のまま残すと、古い仕様を最新だと取り違えるため、どの形式でも失敗したことを書き出す。
+  return { output: watcher.format === "html" ? "エラーページ" : "失敗のお知らせ" };
 }
 
 export function surface(s: Session, watcher: Watcher) {
@@ -53,7 +46,7 @@ export function surface(s: Session, watcher: Watcher) {
       return cli.output(`✓ ${file} を生成しました（268ms）`);
     case "エラーページ":
       return cli.output(`✗ 生成に失敗しました: Expression expected\n（${file} はエラーページになる）`);
-    case "前回のまま":
-      return cli.output(`✗ 生成に失敗しました: Expression expected\n（${file} は前回の内容のまま）`);
+    case "失敗のお知らせ":
+      return cli.output(`✗ 生成に失敗しました: Expression expected\n（${file} には「仕様書を生成できませんでした」と書き出す）`);
   }
 }

@@ -64,6 +64,7 @@ export function start(inv: Invocation, _user: User, args: Args): Invocation {
   ensure(args.port !== "empty" && args.port !== "invalid", "--port は 0〜65535 の整数");
   ensure(!(args.watch && !args.serve && !args.out), "--watch には --out が必要");
   // 根拠: src/cli.ts runCli（複数の Markdown は --out のディレクトリに書く）
+  // 標準出力に連結して出す選択肢は設けない（決定済み。ほかのツールにつなぐ必要が出てから考える）。
   ensure(!(args.paths > 1 && !args.html && !args.json && !args.out && !args.watch && !args.serve), "spec が複数の Markdown には --out <ディレクトリ> が必要");
   // 根拠: src/cli.ts runCli（startServer の EADDRINUSE を捕まえて終了コード 1）
   if (args.serve) return { status: args.portInUse ? "ポートが使えず終了" : "配信中" };
@@ -75,10 +76,6 @@ export function start(inv: Invocation, _user: User, args: Args): Invocation {
 export const links = [
   { from: start, to: "local-server", action: "listen", label: "--serve のときはローカルサーバを起動する" },
   { from: start, to: "watch-session", action: "save", label: "--watch / --serve のときは監視を始め、最初の生成をする" },
-];
-
-export const questions = [
-  { ask: "spec が 2 つ以上のとき、Markdown を標準出力に連結して出す選択肢も要るか？", about: start },
 ];
 
 export const scenarios = {

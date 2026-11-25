@@ -17,7 +17,24 @@ export interface SpecServer {
 export const injectReload = (html: string, version: number): string =>
   html.replace(
     "</body>",
-    `<script>(function () { var version = ${version}; new EventSource("${EVENTS_PATH}").onmessage = function (e) { if (e.data === "reload" || (e.data.indexOf("version ") === 0 && e.data !== "version " + version)) location.reload(); }; })();</script>\n</body>`,
+    `<script>(function () {
+  var version = ${version};
+  var es = new EventSource("${EVENTS_PATH}");
+  es.onmessage = function (e) {
+    if (e.data === "reload" || (e.data.indexOf("version ") === 0 && e.data !== "version " + version)) location.reload();
+  };
+  // 接続が切れたことを表示する理由: サーバを止めると、開いたままのタブは何も知らせずに古い仕様書を
+  // 表示し続けていた（specs/browser-tab.spec.ts の未決事項だったもの）。つなぎ直せたら消す。
+  var banner = null;
+  es.onerror = function () {
+    if (banner) return;
+    banner = document.createElement("div");
+    banner.textContent = "サーバとの接続が切れました。この仕様書は最新ではないかもしれません。";
+    banner.setAttribute("style", "position:fixed;top:0;left:0;right:0;z-index:100;padding:8px 16px;background:#b3501a;color:#fff;font:14px system-ui,sans-serif;text-align:center");
+    document.body.append(banner);
+  };
+  es.onopen = function () { if (banner) { banner.remove(); banner = null; } };
+})();</script>\n</body>`,
   );
 
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost"]);

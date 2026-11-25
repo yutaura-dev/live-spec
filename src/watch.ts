@@ -1,7 +1,6 @@
 import { watch, type FSWatcher } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import { expandSpecPaths, generateProject, specNameOf, writeProjectOutput, type OutputFormat } from "./generate.ts";
-import { renderErrorHtml } from "./render/html.ts";
+import { expandSpecPaths, failureOutput, generateProject, writeProjectOutput, type OutputFormat } from "./generate.ts";
 
 export interface WatchOptions {
   readonly paths: ReadonlyArray<string>;
@@ -33,11 +32,9 @@ export const watchSpec = (options: WatchOptions, log: (message: string) => void 
       } catch (e) {
         log(`✗ 生成に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
         // 失敗しても監視は続ける。書きかけの spec が一時的に壊れているのはよくあることなので。
-        if (options.format === "html") {
-          const page = renderErrorHtml(paths.length === 1 ? specNameOf(paths[0]!) : "仕様書", e);
-          if (options.out !== null) await writeProjectOutput(options.out, { kind: "text", content: page });
-          options.onBuilt?.(page);
-        }
+        const failure = failureOutput(options.format, paths, e);
+        if (options.out !== null) await writeProjectOutput(options.out, failure);
+        if (failure.kind === "text") options.onBuilt?.(failure.content);
       }
     });
   };

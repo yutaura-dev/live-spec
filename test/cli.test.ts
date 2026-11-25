@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { createServer } from "node:net";
 import { mkdirSync, readFileSync } from "node:fs";
 import { expandSpecPaths, generate, generateProject, isMain, outputFormatOf, parseCliArgs, runCli, specNameOf } from "../src/cli.ts";
+import { failureOutput } from "../src/generate.ts";
 import { renderErrorHtml } from "../src/render/html.ts";
 
 describe("outputFormatOf: 出力形式をフラグから決める", () => {
@@ -202,6 +203,29 @@ describe("generateProject: 複数のドメインオブジェクトから仕様�
 
     expect(code).toBe(0);
     expect(readFileSync(join(dir, "payment.md"), "utf8")).toContain("# payment");
+  });
+});
+
+describe("failureOutput: 監視中に生成に失敗したときに書き出すもの", () => {
+  const error = new Error("Expression expected");
+
+  it("Markdown では、古い仕様と取り違えないよう、失敗したことを書いた文書にする", () => {
+    const out = failureOutput("markdown", ["specs/a.spec.ts"], error);
+
+    expect(out.kind === "text" && out.content).toContain("# 仕様書を生成できませんでした");
+    expect(out.kind === "text" && out.content).toContain("Expression expected");
+  });
+
+  it("Markdown をディレクトリに分けて書くときは、一覧の README.md に失敗したことを書く", () => {
+    const out = failureOutput("markdown", ["specs/a.spec.ts", "specs/b.spec.ts"], error);
+
+    expect(out.kind === "files" && out.files["README.md"]).toContain("前回の生成のまま");
+  });
+
+  it("JSON では、error を持つオブジェクトにする", () => {
+    const out = failureOutput("json", ["specs/a.spec.ts"], error);
+
+    expect(out.kind === "text" && JSON.parse(out.content)).toEqual({ error: "Expression expected" });
   });
 });
 

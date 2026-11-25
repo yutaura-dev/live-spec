@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { explore } from "./explore.ts";
 import { loadSpec } from "./load.ts";
 import { normalize } from "./model.ts";
-import { renderProjectHtml, type DomainObject } from "./render/html.ts";
+import { renderErrorHtml, renderProjectHtml, type DomainObject } from "./render/html.ts";
 import { renderIndexMarkdown, renderMarkdown } from "./render/markdown.ts";
 
 export type OutputFormat = "markdown" | "json" | "html";
@@ -100,6 +100,29 @@ const projectNameOf = (specPath: string): string => {
     }
     if (dirname(dir) === dir) return basename(dirname(resolve(specPath)));
   }
+};
+
+// 失敗したことを出力そのものに書く理由: Markdown や JSON を前回の内容のまま残すと、読む人が古い仕様を
+// 最新だと取り違えるため（specs/watch-session.spec.ts の未決事項だったもの）。HTML はエラーページにする。
+export const failureOutput = (format: OutputFormat, paths: ReadonlyArray<string>, error: unknown): Output => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (format === "html") return { kind: "text", content: renderErrorHtml(paths.length === 1 ? specNameOf(paths[0]!) : "仕様書", error) };
+  if (format === "json") return { kind: "text", content: JSON.stringify({ error: message }, null, 2) };
+  const notice = [
+    "# 仕様書を生成できませんでした",
+    "",
+    "spec ファイルを直して保存すると、自動で生成し直します。",
+    "",
+    "```",
+    message,
+    "```",
+    "",
+  ];
+  if (paths.length === 1) return { kind: "text", content: notice.join("\n") };
+  return {
+    kind: "files",
+    files: { "README.md": [...notice, "このディレクトリのほかのファイルは、前回の生成のままです。", ""].join("\n") },
+  };
 };
 
 export const generate = async (path: string, format: OutputFormat): Promise<string> => {
