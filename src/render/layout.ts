@@ -62,15 +62,19 @@ const LAYOUT_OPTIONS = {
 // 実体は ELKNode.default = ELKNode も設定しているので、.default なら型と実行時の両方で正しく動く。
 const ELK = ElkModule.default;
 
-export const layout = async (graph: Graph): Promise<Layout> => {
+export interface LayoutOptions {
+  readonly nodeSize?: { readonly width: number; readonly height: number };
+}
+
+export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise<Layout> => {
   const elk = new ELK();
   const input: ElkNode = {
     id: "root",
     layoutOptions: LAYOUT_OPTIONS,
     children: graph.states.map((s) => ({
       id: s.id,
-      width: textWidth(s.label) + NODE_PADDING_X * 2,
-      height: NODE_HEIGHT,
+      width: options.nodeSize?.width ?? textWidth(s.label) + NODE_PADDING_X * 2,
+      height: options.nodeSize?.height ?? NODE_HEIGHT,
       ...(s.initial ? { layoutOptions: { "elk.layered.layering.layerConstraint": "FIRST" } } : {}),
     })),
     edges: graph.transitions.map((t, i) => ({

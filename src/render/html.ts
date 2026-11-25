@@ -1,8 +1,14 @@
 import type { Spec } from "../load.ts";
 import type { Graph } from "../model.ts";
-import { layout, type LaidOutEdge, type LaidOutNode } from "./layout.ts";
+import type { SurfaceNode } from "../surface.ts";
+import { esc } from "./escape.ts";
+import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
 import { describeFinding, formatEffect } from "./markdown.ts";
 import { summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
+import { surfaceToHtml } from "./wireframe.ts";
+
+const WIREFLOW_NODE = { width: 260, height: 220 };
+const THUMB_SCALE = 0.6;
 
 export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
   const l = await layout(graph);
@@ -11,10 +17,32 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
   const initial = graph.states.find((s) => s.initial);
   const terminal = new Set(graph.states.filter((s) => s.terminal).map((s) => s.id));
   const violating = new Set(graph.findings.flatMap((f) => (f.kind === "invariant-violation" ? [f.state] : [])));
+  const notAllowed = (state: string, actors: ReadonlyArray<string>) =>
+    graph.findings.flatMap((f) =>
+      f.kind === "surface-action-not-allowed" && f.state === state && actors.includes(f.actor) ? [f.action] : [],
+    );
+  const states = summarizeStates(spec, graph);
+  // パネルの画面はサーバ側で描いた HTML を <template> に置き、クライアントは複製するだけにする。
+  const templates = states.flatMap((s) =>
+    s.surfaces.map(
+      (g, i) => `<template id="sf-${esc(s.id)}-${i}">${surfaceToHtml(g.surface as SurfaceNode, notAllowed(s.id, g.actors))}</template>`,
+    ),
+  );
   const data = {
-    states: summarizeStates(spec, graph),
-    notAllowed: graph.findings.flatMap((f) => (f.kind === "surface-action-not-allowed" ? [{ state: f.state, actor: f.actor, action: f.action }] : [])),
+    states: states.map((s) => ({ ...s, surfaces: s.surfaces.map((g, i) => ({ actors: g.actors, template: `sf-${s.id}-${i}` })) })),
   };
+  const actorNames = spec.actors.map(([name]) => name);
+  const thumbsOf = (state: string) =>
+    actorNames.map((actor) => {
+      const found = graph.surfaces.find((x) => x.state === state && x.actor === actor);
+      const html =
+        found === undefined
+          ? '<p class="wf-text">（画面を作れませんでした）</p>'
+          : surfaceToHtml(found.surface as SurfaceNode, notAllowed(state, [actor]));
+      return [actor, html] as const;
+    });
+  const wl = graph.surfaces.length > 0 ? await layout(graph, { nodeSize: WIREFLOW_NODE }) : null;
+  const flags = (id: string) => ({ initial: id === initial?.id, terminal: terminal.has(id), violation: violating.has(id) });
 
   return `<!doctype html>
 <html lang="ja">
@@ -38,17 +66,26 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
   </dl>
 </header>
 <main>
-  <section class="board" aria-label="状態遷移図">
+  <section class="board" aria-label="状態遷移図" data-mode="states">
     <p class="hint">状態をクリックすると、その状態でできること・できないことを表示します。矢印のラベルや操作カードをクリックすると、その操作の遷移を強調します。Esc で解除。</p>
-    <div class="diagram">
-      <svg viewBox="0 0 ${l.width + 24} ${l.height}" width="${l.width + 24}" height="${l.height}" role="img" aria-label="${esc(spec.name)} の状態遷移図">
-        <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
-        <g transform="translate(24 0)">
-        ${l.edges.map(edgeSvg).join("\n        ")}
-        ${l.nodes.map((n) => nodeSvg(n, n.id === initial?.id, terminal.has(n.id), violating.has(n.id))).join("\n        ")}
-        </g>
-      </svg>
+    ${
+      wl === null
+        ? ""
+        : `<div class="toolbar">
+      <div class="modes" role="group" aria-label="図の表示"><button type="button" data-mode="states" aria-pressed="true">状態遷移図</button><button type="button" data-mode="wireflow" aria-pressed="false">画面つき</button></div>
+      <label class="viewpoint">視点 <select id="viewpoint">${actorNames.map((a) => `<option value="${esc(a)}">${esc(a)}</option>`).join("")}</select></label>
+    </div>`
+    }
+    <div class="diagram diagram-states">
+      ${diagramSvg(spec.name, l, "arrow", (n) => nodeSvg(n, flags(n.id)))}
     </div>
+    ${
+      wl === null
+        ? ""
+        : `<div class="diagram diagram-wireflow">
+      ${diagramSvg(spec.name, wl, "arrow-wf", (n) => wireflowNodeSvg(n, flags(n.id), thumbsOf(n.id), actorNames[0]))}
+    </div>`
+    }
     <aside class="panel" id="panel" aria-live="polite" hidden></aside>
   </section>
   <section class="actions">
@@ -66,6 +103,7 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
     }
   </section>
 </main>
+${templates.join("\n")}
 <script type="application/json" id="live-spec-data">${jsonForScript(data)}</script>
 <script>${CLIENT}</script>
 </body>
@@ -96,22 +134,52 @@ export const renderErrorHtml = (name: string, error: unknown): string => {
 `;
 };
 
-const nodeSvg = (n: LaidOutNode, initial: boolean, terminal: boolean, violation: boolean) => {
-  const cls = ["node", initial ? "initial" : "", terminal ? "terminal" : "", violation ? "violation" : ""].filter(Boolean).join(" ");
+interface NodeFlags {
+  readonly initial: boolean;
+  readonly terminal: boolean;
+  readonly violation: boolean;
+}
+
+const diagramSvg = (name: string, l: Layout, markerId: string, node: (n: LaidOutNode) => string) =>
+  `<svg viewBox="0 0 ${l.width + 24} ${l.height}" width="${l.width + 24}" height="${l.height}" role="img" aria-label="${esc(name)} の状態遷移図">
+        <defs><marker id="${markerId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+        <g transform="translate(24 0)">
+        ${l.edges.map((e) => edgeSvg(e, markerId)).join("\n        ")}
+        ${l.nodes.map(node).join("\n        ")}
+        </g>
+      </svg>`;
+
+const nodeClass = (f: NodeFlags, extra = "") =>
+  ["node", f.initial ? "initial" : "", f.terminal ? "terminal" : "", f.violation ? "violation" : "", extra].filter(Boolean).join(" ");
+
+const startMarker = (n: LaidOutNode, cy: number, markerId: string) =>
+  `<circle class="start" cx="${n.x - 18}" cy="${cy}" r="5"/><path class="start-line" d="M${n.x - 13},${cy} L${n.x - 2},${cy}" marker-end="url(#${markerId})"/>`;
+
+const terminalRect = (n: LaidOutNode) =>
+  `<rect class="inner" x="${n.x + 3}" y="${n.y + 3}" width="${n.width - 6}" height="${n.height - 6}" rx="7"/>`;
+
+const nodeSvg = (n: LaidOutNode, f: NodeFlags) => {
   const cy = n.y + n.height / 2;
-  const start = initial
-    ? `<circle class="start" cx="${n.x - 18}" cy="${cy}" r="5"/><path class="start-line" d="M${n.x - 13},${cy} L${n.x - 2},${cy}" marker-end="url(#arrow)"/>`
-    : "";
-  const inner = terminal
-    ? `<rect class="inner" x="${n.x + 3}" y="${n.y + 3}" width="${n.width - 6}" height="${n.height - 6}" rx="7"/>`
-    : "";
-  return `${start}<g class="${cls}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${inner}<text x="${n.x + n.width / 2}" y="${cy}">${esc(n.label)}</text></g>`;
+  return `${f.initial ? startMarker(n, cy, "arrow") : ""}<g class="${nodeClass(f)}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terminal ? terminalRect(n) : ""}<text x="${n.x + n.width / 2}" y="${cy}">${esc(n.label)}</text></g>`;
 };
 
-const edgeSvg = (e: LaidOutEdge) => {
+// サムネイルを SVG の foreignObject に入れる理由: パネルと同じ HTML のワイヤーフレームを、
+// 縮小してそのまま図の中に置けるため。見る人ごとに用意し、視点の切り替えで表示を変える。
+const wireflowNodeSvg = (n: LaidOutNode, f: NodeFlags, thumbs: ReadonlyArray<readonly [string, string]>, visible: string | undefined) => {
+  const inner = n.width - 16;
+  const thumbHtml = thumbs
+    .map(
+      ([actor, html]) =>
+        `<div class="thumb" data-actor="${esc(actor)}"${actor === visible ? "" : " hidden"}><div class="thumb-inner" style="width:${inner / THUMB_SCALE}px">${html}</div></div>`,
+    )
+    .join("");
+  return `${f.initial ? startMarker(n, n.y + n.height / 2, "arrow-wf") : ""}<g class="${nodeClass(f, "wf-node")}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terminal ? terminalRect(n) : ""}<text class="wf-node-label" x="${n.x + 12}" y="${n.y + 16}">${esc(n.label)}</text><foreignObject x="${n.x + 8}" y="${n.y + 30}" width="${inner}" height="${n.height - 38}"><div class="thumb-frame">${thumbHtml}</div></foreignObject></g>`;
+};
+
+const edgeSvg = (e: LaidOutEdge, markerId: string) => {
   const d = e.points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
   const lb = e.label;
-  return `<g class="edge" data-action="${esc(e.action)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"><path d="${d}" marker-end="url(#arrow)"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.action)}</text></g></g>`;
+  return `<g class="edge" data-action="${esc(e.action)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"><path d="${d}" marker-end="url(#${markerId})"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.action)}</text></g></g>`;
 };
 
 const actionCard = (a: ActionSummary) => {
@@ -142,8 +210,6 @@ const actionCard = (a: ActionSummary) => {
       </article>`;
 };
 
-const ESCAPES: Readonly<Record<string, string>> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ESCAPES[c]!);
 
 // < などをエスケープする理由: spec の文字列に "</script>" が含まれていても、
 // 埋め込んだ JSON が script 要素を途中で閉じないようにするため。
@@ -182,6 +248,16 @@ h2{font-size:18px;margin:40px 0 16px}
 .panel .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;background:var(--chip);margin-right:6px}
 .panel button{margin-top:16px;font:inherit;font-size:13px;background:none;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
 .hint{font-size:12px;color:var(--muted)}
+.toolbar{display:flex;gap:16px;align-items:center;margin:0 0 10px;font-size:13px}
+.modes{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.modes button{font:inherit;font-size:13px;background:none;border:0;color:var(--muted);padding:4px 12px;cursor:pointer}
+.modes button[aria-pressed="true"]{background:var(--accent-weak);color:var(--accent);font-weight:600}
+.viewpoint{color:var(--muted)}.viewpoint select{font:inherit;font-size:13px;margin-left:4px}
+.board[data-mode="states"] .diagram-wireflow,.board[data-mode="wireflow"] .diagram-states{display:none}
+.board:not([data-mode="wireflow"]) .viewpoint{display:none}
+svg text.wf-node-label{text-anchor:start;font-weight:600;font-size:13px}
+.thumb-frame{width:100%;height:100%;overflow:hidden;pointer-events:none}
+.thumb-inner{transform:scale(${THUMB_SCALE});transform-origin:0 0}
 .wf-group{margin:10px 0 16px}
 .wf-screen{border:1.5px solid var(--fg);border-radius:8px;background:var(--node);font-size:13px;overflow:hidden}
 .wf-title{border-bottom:1.5px solid var(--fg);padding:6px 10px;font-weight:600;display:flex;gap:6px;align-items:center}
@@ -260,6 +336,8 @@ const CLIENT = `
   }
   function dimAll() { all(".node,.edge").forEach(function (n) { n.classList.add("is-dim"); }); }
   function undim(n) { if (n) n.classList.remove("is-dim"); }
+  // 状態遷移図と wireflow の両方に同じ状態のノードがあるので、常に全部を対象にする。
+  function nodes(id) { return all(".node" + attr("data-state", id)); }
   function reset() {
     clear(); panel.replaceChildren(); panel.hidden = true;
     if (location.hash) history.replaceState(null, "", location.pathname + location.search);
@@ -272,59 +350,16 @@ const CLIENT = `
     return ul;
   }
 
-  // ワイヤーフレームも textContent で組み立てる（文言は spec 由来の文字列なので）。
-  function renderSurface(node, invalid) {
-    var children = function (parent, list) { list.forEach(function (c) { parent.append(renderSurface(c, invalid)); }); return parent; };
-    switch (node.kind) {
-      case "screen": {
-        var screen = el("div", "wf-screen");
-        screen.append(el("div", "wf-title", node.title), children(el("div", "wf-body"), node.children));
-        return screen;
-      }
-      case "section": {
-        var section = el("div", "wf-section");
-        section.append(el("span", "wf-label", node.title));
-        return children(section, node.children);
-      }
-      case "heading": return el("div", "wf-heading", node.text);
-      case "text": return el("p", "wf-text", node.text);
-      case "field": {
-        var field = el("label", "wf-field", node.label);
-        field.append(el("div", "wf-input", node.value));
-        return field;
-      }
-      case "button": {
-        var cls = "wf-button" + (node.disabled ? " is-disabled" : "") + (!node.disabled && invalid.indexOf(node.action) >= 0 ? " is-invalid" : "");
-        var button = el("span", cls, node.label);
-        if (cls.indexOf("is-invalid") >= 0) button.title = "このボタンを押しても " + node.action + " は実行できません";
-        return button;
-      }
-      case "badge": return el("span", "wf-badge", node.text);
-      case "list": {
-        var ul = el("ul", "wf-list");
-        node.items.forEach(function (item) { var li = el("li"); li.append(renderSurface(item, invalid)); ul.append(li); });
-        return ul;
-      }
-      case "code": {
-        var pre = el("pre", "wf-code", node.text);
-        pre.setAttribute("data-language", node.language);
-        return pre;
-      }
-      default: return el("span", "sub", "（未対応の要素: " + String(node.kind) + "）");
-    }
-  }
-
   function selectState(id) {
     var s = data.states.find(function (x) { return x.id === id; });
     if (!s) return;
     clear(); dimAll();
     // 選択を URL の hash に残す理由: --serve で自動再読み込みしたあとも、同じ状態を見続けられるようにするため。
     history.replaceState(null, "", "#state-" + encodeURIComponent(id));
-    var node = document.querySelector(".node" + attr("data-state", id));
-    node.classList.add("is-selected"); undim(node);
+    nodes(id).forEach(function (n) { n.classList.add("is-selected"); undim(n); });
     all(".edge" + attr("data-from", id)).forEach(function (e) {
       e.classList.add("is-active"); undim(e);
-      undim(document.querySelector(".node" + attr("data-state", e.dataset.to)));
+      nodes(e.dataset.to).forEach(undim);
     });
 
     panel.replaceChildren();
@@ -338,9 +373,7 @@ const CLIENT = `
       s.surfaces.forEach(function (g) {
         var group = el("div", "wf-group");
         group.append(el("span", "sub", g.actors.join(", ") + " が見る画面"));
-        var invalid = data.notAllowed.filter(function (n) { return n.state === s.id && g.actors.indexOf(n.actor) >= 0; })
-          .map(function (n) { return n.action; });
-        group.append(renderSurface(g.surface, invalid));
+        group.append(document.getElementById(g.template).content.cloneNode(true));
         panel.append(group);
       });
     }
@@ -365,13 +398,27 @@ const CLIENT = `
     reset(); dimAll();
     all(".edge" + attr("data-action", name)).forEach(function (e) {
       e.classList.add("is-active"); undim(e);
-      undim(document.querySelector(".node" + attr("data-state", e.dataset.from)));
-      undim(document.querySelector(".node" + attr("data-state", e.dataset.to)));
+      nodes(e.dataset.from).forEach(undim);
+      nodes(e.dataset.to).forEach(undim);
     });
     all(".card" + attr("data-action", name)).forEach(function (c) { c.classList.add("is-selected"); });
   }
 
+  var board = document.querySelector(".board");
+  function setMode(mode) {
+    board.dataset.mode = mode;
+    all(".modes button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.mode === mode)); });
+  }
+  var viewpoint = document.getElementById("viewpoint");
+  if (viewpoint) {
+    viewpoint.addEventListener("change", function () {
+      all(".thumb").forEach(function (t) { t.hidden = t.dataset.actor !== viewpoint.value; });
+    });
+  }
+
   function activate(target) {
+    var modeButton = target.closest(".modes button");
+    if (modeButton) return setMode(modeButton.dataset.mode);
     if (target.closest("[data-clear]")) return reset();
     var node = target.closest(".node");
     if (node) return selectState(node.dataset.state);
