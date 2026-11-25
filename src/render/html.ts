@@ -4,7 +4,7 @@ import type { SurfaceNode } from "../surface.ts";
 import { ANY } from "./collapse.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
-import { describeFinding, describeStep, formatEffect, questionTarget, splitEvidence } from "./markdown.ts";
+import { describeFinding, describeStep, formatEffect, inputCell, questionTarget, resultCell, splitEvidence } from "./markdown.ts";
 import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
 import { surfaceToHtml } from "./wireframe.ts";
 
@@ -91,6 +91,7 @@ const relationsSvg = async (objects: ReadonlyArray<DomainObject>, links: Readonl
     availability: [],
     findings: [],
     surfaces: [],
+    decisions: [],
     links: [],
     questions: [],
     scenarios: [],
@@ -296,6 +297,22 @@ const renderPage = async (
       ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), spec.evidence[a.name] ?? [])).join("\n      ")}
     </div>
   </section>
+  ${
+    graph.decisions.length === 0
+      ? ""
+      : `<section class="decisions">
+    <h2>ルール</h2>
+    ${graph.decisions
+      .map(
+        (d) => `<h3>${esc(d.name)}</h3><table class="decision"><thead><tr>${d.columns.map((c) => `<th>${esc(c)}</th>`).join("")}<th>結果</th></tr></thead><tbody>${d.rows
+          .map(
+            (r) => `<tr class="${r.ok ? "" : "ng"}">${d.columns.map((c) => `<td>${esc(inputCell(r.input, c))}</td>`).join("")}<td class="result">${esc(resultCell(r))}</td></tr>`,
+          )
+          .join("")}</tbody></table>`,
+      )
+      .join("\n    ")}
+  </section>`
+  }
   ${connections}
   ${
     graph.scenarios.length === 0
@@ -608,6 +625,12 @@ marker path{fill:var(--muted)}
 .glossary .sub{display:block;color:var(--muted);font-size:13px}
 .ev{display:block;font-size:13px}
 code.evidence{font-size:12px}
+table.decision{border-collapse:collapse;margin:8px 0 20px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:14px}
+table.decision th,table.decision td{padding:6px 14px;border-bottom:1px solid var(--line);text-align:left}
+table.decision th{color:var(--muted);font-weight:600;font-size:12.5px}
+table.decision td.result{font-weight:600}
+table.decision tr.ng td.result{color:var(--warn)}
+.decisions h3{font-size:15px;margin:16px 0 4px}
 .scenario-card{margin-bottom:16px}
 .storyboard{display:flex;gap:14px;overflow-x:auto;list-style:none;margin:0;padding:0 0 6px;counter-reset:step}
 .storyboard li{flex:0 0 220px;counter-increment:step}

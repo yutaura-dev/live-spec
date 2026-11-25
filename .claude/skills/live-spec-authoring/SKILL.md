@@ -40,6 +40,8 @@ pnpm exec tsc --noEmit --ignoreConfig --strict --allowImportingTsExtensions --mo
 | `scenarios` | | `{ 名前: [{ do: 操作, by: "登場人物", input?: "例の名前", expect?: { 項目: 値 } }] }` |
 | `questions` | | `[{ ask, about?: 操作 \| { 項目: 値 }, note? }]` |
 | `links` | | `[{ from?: 操作, to: "相手の名前", action?: "相手の操作名", label }]` |
+| `decisions` | | `{ 名前: { decide: (入力) => 結果, cases: [{ input, expect? }] } }` |
+| `glossary` | | `{ 用語: "説明" }` |
 
 状態の型の JSDoc は仕様書の冒頭の説明に、関数の JSDoc の最初の段落（空行まで）は操作の見出しになる。読み手が業務の言葉で理解できる文を書く。見出しは短く、詳しい説明は空行のあとの段落に書く（仕様書には出ないが、spec を読む人の役に立つ）。
 
@@ -102,6 +104,10 @@ export const actors = {
 ### 6.5 用語と項目の説明を書く
 
 状態の名前（`inReview`）や項目（`pinned`）だけでは意味が伝わらないことがある。状態の型の各項目に JSDoc（`/** 公開の段階 */ status: ...`）を付け、値や業務の言葉は `export const glossary = { inReview: "編集者のレビュー待ち" }` に書く。仕様書の「用語」の節に並び、状態遷移図のノードにカーソルを合わせると説明が出る。
+
+### 6.6 条件の組み合わせが多いルールは判断表にする
+
+送料・割引・料金区分のように「入力の組み合わせ → 結果」で決まるルールは、状態遷移ではなく `decisions` に書く。判断の関数（`decide`）と入力の例（`cases`）を書くと、live-spec が実行して表にする。境界の値（4999 円と 5000 円など）を例に入れ、`expect` を付けておくと、期待と違うときに検査結果に出る。
 
 ### 7. シナリオで業務の流れを書く
 

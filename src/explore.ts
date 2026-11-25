@@ -153,9 +153,25 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
     return { ask: q.ask, note: q.note ?? null, action, states: matched };
   });
 
+  const decisions = spec.decisions.map(([name, d]) => {
+    const columns = [...new Set(d.cases.flatMap((c) => (typeof c.input === "object" && c.input !== null ? Object.keys(c.input) : ["入力"])))];
+    const rows = d.cases.map((c, i) => {
+      let result: unknown;
+      try {
+        result = (d.decide as (input: unknown) => unknown)(structuredClone(c.input));
+      } catch (e) {
+        findings.push({ kind: "decision-error", decision: name, row: i + 1, message: e instanceof Error ? e.message : String(e) });
+        return { input: c.input, result: null, expect: c.expect ?? null, ok: false };
+      }
+      const ok = !("expect" in c) || JSON.stringify(canonical(c.expect)) === JSON.stringify(canonical(result));
+      if (!ok) findings.push({ kind: "decision-mismatch", decision: name, row: i + 1, expected: show(c.expect), actual: show(result) });
+      return { input: c.input, result, expect: "expect" in c ? c.expect : null, ok };
+    });
+    return { name, columns, rows };
+  });
   const links = spec.links.map((l) => ({ from: l.from?.name ?? null, to: l.to, action: l.action ?? null, label: l.label }));
 
-  return { states, transitions: [...transitions.values()], availability, findings, surfaces, links, questions, scenarios };
+  return { states, transitions: [...transitions.values()], availability, findings, surfaces, decisions, links, questions, scenarios };
 };
 
 const show = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));

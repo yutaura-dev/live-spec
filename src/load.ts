@@ -18,6 +18,11 @@ export interface Link {
   readonly label: string;
 }
 
+export interface Decision {
+  readonly decide: (input: never) => unknown;
+  readonly cases: ReadonlyArray<{ readonly input: unknown; readonly expect?: unknown }>;
+}
+
 export interface ScenarioStep {
   readonly do: ActionFn;
   readonly by: string;
@@ -36,6 +41,7 @@ export interface Spec {
   readonly scenarios: ReadonlyArray<readonly [name: string, steps: ReadonlyArray<ScenarioStep>]>;
   readonly questions: ReadonlyArray<Question>;
   readonly links: ReadonlyArray<Link>;
+  readonly decisions: ReadonlyArray<readonly [name: string, decision: Decision]>;
   readonly docs: Readonly<Record<string, string>>;
   readonly fieldDocs: Readonly<Record<string, string>>;
   readonly evidence: Readonly<Record<string, ReadonlyArray<string>>>;
@@ -44,7 +50,18 @@ export interface Spec {
   readonly stateDoc: string | null;
 }
 
-const RESERVED = new Set(["initial", "actors", "invariants", "inputs", "surface", "scenarios", "questions", "links", "glossary"]);
+const RESERVED = new Set([
+  "initial",
+  "actors",
+  "invariants",
+  "inputs",
+  "surface",
+  "scenarios",
+  "questions",
+  "links",
+  "glossary",
+  "decisions",
+]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
   typeof u === "object" && u !== null && !Array.isArray(u);
@@ -73,6 +90,11 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
     surface: typeof mod.surface === "function" ? (mod.surface as SurfaceFn) : null,
     questions: Array.isArray(mod.questions)
       ? mod.questions.filter((q): q is Question => isRecord(q) && typeof q.ask === "string")
+      : [],
+    decisions: isRecord(mod.decisions)
+      ? Object.entries(mod.decisions).filter(
+          (e): e is [string, Decision] => isRecord(e[1]) && typeof e[1].decide === "function" && Array.isArray(e[1].cases),
+        )
       : [],
     links: Array.isArray(mod.links)
       ? mod.links.filter((l): l is Link => isRecord(l) && typeof l.to === "string" && typeof l.label === "string")

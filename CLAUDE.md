@@ -26,6 +26,7 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 | シナリオ (scenario) | `export const scenarios`。業務の流れを名前付きの手順で書く。受け入れテストとして実行される |
 | 未決事項 (question) | `export const questions`。人の判断が必要な点。推測で埋めず、ここに書く |
 | つながり (link) | `export const links`。ほかのドメインオブジェクトの操作を引き起こす関係。相手は名前の文字列で書く |
+| ルール (decision) | `export const decisions`。判断の関数と入力の例から「条件 × 結果」の表を作る。送料・割引のような境界のある業務ルールに使う |
 | 用語 (glossary) | `export const glossary` と、状態の型の項目の JSDoc。状態の値や業務の言葉の意味 |
 | 根拠 (evidence) | 操作の関数の中の `// 根拠: path:line`。仕様書の操作カードに出る |
 | 登場人物 (actor) | 探索に使う具体的な人物。ロールに加えて「本人かどうか」も表す（`著者alice` / `別の著者bob`） |

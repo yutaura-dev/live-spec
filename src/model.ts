@@ -42,6 +42,14 @@ export const Finding = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("state-limit"), maxStates: Schema.Number }),
   Schema.Struct({ kind: Schema.Literal("missing-inputs"), action: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("question-unmatched"), ask: Schema.String }),
+  Schema.Struct({
+    kind: Schema.Literal("decision-mismatch"),
+    decision: Schema.String,
+    row: Schema.Number,
+    expected: Schema.String,
+    actual: Schema.String,
+  }),
+  Schema.Struct({ kind: Schema.Literal("decision-error"), decision: Schema.String, row: Schema.Number, message: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("link-unresolved"), to: Schema.String, action: Schema.NullOr(Schema.String) }),
   Schema.Struct({ kind: Schema.Literal("scenario-failed"), scenario: Schema.String, step: Schema.Number, reason: Schema.String }),
   Schema.Struct({
@@ -68,6 +76,15 @@ export const Graph = Schema.Struct({
   availability: Schema.Array(Availability),
   findings: Schema.Array(Finding),
   surfaces: Schema.Array(Schema.Struct({ state: Schema.String, actor: Schema.String, surface: Schema.Unknown })),
+  decisions: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      columns: Schema.Array(Schema.String),
+      rows: Schema.Array(
+        Schema.Struct({ input: Schema.Unknown, result: Schema.Unknown, expect: Schema.Unknown, ok: Schema.Boolean }),
+      ),
+    }),
+  ),
   links: Schema.Array(
     Schema.Struct({ from: Schema.NullOr(Schema.String), to: Schema.String, action: Schema.NullOr(Schema.String), label: Schema.String }),
   ),

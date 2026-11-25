@@ -1,7 +1,9 @@
 import type { Spec } from "../load.ts";
 import type { Finding, Graph } from "../model.ts";
 import { ANY, ANY_LABEL, collapseTransitions } from "./collapse.ts";
-import { formatTransition, presentBlocked, summarizeActions, type ActionSummary } from "./summary.ts";
+import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
+import type { SurfaceNode } from "../surface.ts";
+import { surfaceToText } from "./wireframe.ts";
 
 type Objects = ReadonlyArray<{ readonly spec: Spec; readonly graph: Graph }>;
 
@@ -95,7 +97,9 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
           ...incoming.map((l) => `- ${l.action === null ? "" : `${ownAction(l.action)} `}← ${endpoint(objects, l.source, l.from)}から: ${l.label}`),
           "",
         ]),
+    ...(graph.decisions.length === 0 ? [] : ["## ルール", "", ...graph.decisions.flatMap((d) => [...decisionTable(d), ""])]),
     ...(graph.scenarios.length === 0 ? [] : ["## シナリオ", "", ...graph.scenarios.flatMap((s) => [...scenarioSection(spec, s, labelOf), ""])]),
+    ...screensSection(spec, graph),
     "## 検査結果",
     "",
     ...(graph.findings.length === 0 ? ["問題は見つかりませんでした。"] : graph.findings.map((f) => `- ⚠ ${describeFinding(f, labelOf)}`)),
@@ -158,6 +162,45 @@ const glossarySection = (spec: Spec): Array<string> => {
   return fields.length + terms.length === 0 ? [] : ["## 用語", "", ...fields, ...terms, ""];
 };
 
+const screensSection = (spec: Spec, graph: Graph): Array<string> => {
+  const states = summarizeStates(spec, graph).filter((s) => s.surfaces.length > 0);
+  if (states.length === 0) return [];
+  const invalidFor = (state: string, actors: ReadonlyArray<string>) =>
+    graph.findings.flatMap((f) => (f.kind === "surface-action-not-allowed" && f.state === state && actors.includes(f.actor) ? [f.action] : []));
+  return [
+    "## 画面",
+    "",
+    ...states.flatMap((s) => [
+      `### ${s.label}`,
+      "",
+      ...s.surfaces.flatMap((g) => [
+        `${g.actors.join(", ")} が見る画面:`,
+        "",
+        "```text",
+        surfaceToText(g.surface as SurfaceNode, invalidFor(s.id, g.actors)),
+        "```",
+        "",
+      ]),
+    ]),
+  ];
+};
+
+const cell = (v: unknown) => (v === undefined || v === null ? "" : typeof v === "string" ? v : JSON.stringify(v));
+
+export const inputCell = (input: unknown, column: string) =>
+  typeof input === "object" && input !== null ? cell((input as Record<string, unknown>)[column]) : cell(input);
+
+export const resultCell = (r: Graph["decisions"][number]["rows"][number]) =>
+  r.ok ? cell(r.result) : `❌ ${cell(r.result)}（期待: ${cell(r.expect)}）`;
+
+const decisionTable = (d: Graph["decisions"][number]): Array<string> => [
+  `### ${d.name}`,
+  "",
+  `| ${[...d.columns, "結果"].join(" | ")} |`,
+  `|${[...d.columns, "結果"].map(() => "---").join("|")}|`,
+  ...d.rows.map((r) => `| ${[...d.columns.map((c) => inputCell(r.input, c)), resultCell(r)].join(" | ")} |`),
+];
+
 export const questionTarget = (spec: Spec, q: Graph["questions"][number], labelOf: (id: string) => string) =>
   q.action !== null
     ? `（操作: ${(spec.docs[q.action] ?? q.action).replace(/。$/, "")}）`
@@ -210,6 +253,10 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       return `${labelOf(f.state)} で ${f.actor} の画面を作るときに例外を投げた: ${f.message}`;
     case "link-unresolved":
       return `つながりの相手 ${f.to}${f.action === null ? "" : ` の ${f.action}`} が見つからない`;
+    case "decision-mismatch":
+      return `ルール「${f.decision}」の ${f.row} 行目の結果が期待と違う（期待: ${f.expected}、実際: ${f.actual}）`;
+    case "decision-error":
+      return `ルール「${f.decision}」の ${f.row} 行目で例外を投げた: ${f.message}`;
     case "question-unmatched":
       return `未決事項「${f.ask}」の対象の状態が、到達できるどの状態にも当てはまらない`;
     case "scenario-failed":
