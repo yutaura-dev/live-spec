@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "description": "AI が書き、人が見て理解できる「生きた仕様書」を作り・管理するツール",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "live-spec": "./src/cli.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",

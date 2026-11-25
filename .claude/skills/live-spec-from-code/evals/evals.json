@@ -1,0 +1,39 @@
+{
+  "skill_name": "live-spec-from-code",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "このリポジトリ（live-spec）の CLI（pnpm spec コマンド）の振る舞いを live-spec の spec に書き起こしてほしい。--watch と --serve も含めて、どういう引数の組み合わせのときに何が起きるか分かるようにしたい。",
+      "expected_output": "CLI の引数の組み合わせと実行の状態を spec にし、根拠と未決事項を含む報告と HTML の仕様書を出す",
+      "files": [],
+      "assertions": [
+        "spec ファイルが出力にあり、live-spec で生成すると正常に終わる（ensure 以外の例外の検出もない）",
+        "HTML の仕様書（spec.html）が出力にある",
+        "spec の中に、根拠となるソースの場所（src/…:行番号）が 3 か所以上書かれている",
+        "report.md に、依頼者に判断してほしい点（質問）が書かれている",
+        "report.md で、推測した点をコードで確認した点と区別して書いている",
+        "状態数の上限で探索が打ち切られておらず、状態数が 50 以下に収まっている",
+        "spec が surface を定義し、CLI の出力か API の応答（cli.output / api.response）を使っている",
+        "spec が型チェックを通る",
+        "「--watch には --out が必要」という引数のルールが spec の条件として書かれている"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "src/serve.ts のローカルサーバ（--serve）がどう振る舞うかを spec にして、仕様書を HTML で見たい。",
+      "expected_output": "サーバの状態とリクエストごとの応答を spec にし、API の応答をサーフェスとして示す。根拠と未決事項を含む報告と HTML の仕様書を出す",
+      "files": [],
+      "assertions": [
+        "spec ファイルが出力にあり、live-spec で生成すると正常に終わる（ensure 以外の例外の検出もない）",
+        "HTML の仕様書（spec.html）が出力にある",
+        "spec の中に、根拠となるソースの場所（src/…:行番号）が 3 か所以上書かれている",
+        "report.md に、依頼者に判断してほしい点（質問）が書かれている",
+        "report.md で、推測した点をコードで確認した点と区別して書いている",
+        "状態数の上限で探索が打ち切られておらず、状態数が 50 以下に収まっている",
+        "spec が surface を定義し、CLI の出力か API の応答（cli.output / api.response）を使っている",
+        "spec が型チェックを通る",
+        "Host ヘッダが localhost でないと拒否する（403）ことが spec の条件として書かれている"
+      ]
+    }
+  ]
+}
