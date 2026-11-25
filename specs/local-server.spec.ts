@@ -57,6 +57,33 @@ export function request(s: Server, client: Client, path: string): Server {
   return s;
 }
 
+export const scenarios = {
+  ブラウザで仕様書を開く: [
+    { do: listen, by: "CLI", input: "空いているポート", expect: { status: "待ち受け中" } },
+    { do: request, by: "127.0.0.1 で開いたブラウザ", input: "GET /" },
+  ],
+  外部サイトからは読めない: [
+    { do: listen, by: "CLI", input: "空いているポート" },
+    { do: request, by: "外部サイト経由のブラウザ（DNS リバインディング）", input: "GET /", denied: "Host が 127.0.0.1 か localhost のときだけ（ほかは 403）" },
+  ],
+  仕様書と通知のほかは返さない: [
+    { do: listen, by: "CLI", input: "空いているポート" },
+    { do: request, by: "127.0.0.1 で開いたブラウザ", input: "GET /package.json", denied: "仕様書のページと通知の接続だけ（ほかは 404）" },
+  ],
+  起動に失敗したらつながらない: [
+    { do: listen, by: "CLI", input: "使用中のポート", expect: { status: "起動に失敗" } },
+    { do: request, by: "127.0.0.1 で開いたブラウザ", input: "GET /", denied: "待ち受け中のときだけ" },
+  ],
+};
+
+export const reviewed = {
+  "unguarded:listen:CLI だけ": "待ち受けを始めるのは live-spec のコマンド。出来事を起こす主体の区別で、要件としての制限ではない",
+  "unguarded:listen:起動中のときだけ": "1 回の起動で待ち受けを始めるのは 1 回だけ（モデルの前提）",
+  "unguarded:request:ブラウザだけ": "リクエストを送るのはブラウザ。live-spec のコマンドは自分のサーバにリクエストを送らない",
+  "indistinguishable-example:request:GET /,GET /__live-spec/events": "どちらにも応える。違いは中身（仕様書の HTML か、通知のストリームか）で、状態として表す必要はない",
+  "indistinguishable-actor:127.0.0.1 で開いたブラウザ,localhost で開いたブラウザ": "Host が 127.0.0.1 でも localhost でも同じように受け付けることを示すための 2 人",
+};
+
 /** ブラウザが GET / を送ったときの応答 */
 export function surface(s: Server, client: Client) {
   if (client.kind === "cli") return null;

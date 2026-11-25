@@ -65,6 +65,16 @@ describe("確かめてほしい点: 漏れの候補と、意図がほかに書�
     expect(md).toContain("- `unused-field:flagged`: 印は表示だけに使う");
   });
 
+  it("reviewed に書いた条件は、操作の節でも ⚠ を外し、確認済みと示す", async () => {
+    const { spec, graph } = await load('export const reviewed = { "unguarded:publish:編集者だけ": "誰が公開するかは画面で分ける" };');
+
+    const md = renderMarkdown(spec, graph);
+
+    expect(md).toContain("  - 「編集者だけ」— 通るのは 編集者eve のとき。外すと、");
+    expect(md).toContain("気づくものがない（確認済み）");
+    expect(md).not.toContain("⚠ 「編集者だけ」");
+  });
+
   it("どの候補にも当たらない reviewed のキーは、検査結果に出す", async () => {
     const { graph } = await load('export const reviewed = { "anytime:nothing": "古い" };');
 

@@ -1,6 +1,6 @@
 import type { EnsureCheck } from "../model.ts";
 import { describeEnsure } from "./ensures.ts";
-import { REVIEW_LEAD, REVIEW_TITLE, reviewItems } from "./review.ts";
+import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
 import type { Spec } from "../load.ts";
 import type { Graph } from "../model.ts";
 import type { SurfaceNode } from "../surface.ts";
@@ -300,7 +300,7 @@ const renderPage = async (
   <section class="actions">
     <h2>操作</h2>
     <div class="cards">
-      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), spec.evidence[a.name] ?? [], (graph.ensures ?? []).filter((e) => e.action === a.name))).join("\n      ")}
+      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), spec.evidence[a.name] ?? [], (graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed)).join("\n      ")}
     </div>
   </section>
   ${
@@ -446,7 +446,7 @@ const edgeSvg = (e: LaidOutEdge, markerId: string) => {
 const reviewHtml = (spec: Spec, graph: Graph) => {
   const { pending, acknowledged } = reviewItems(spec, graph);
   if (pending.length + acknowledged.length === 0) return "";
-  return `<section class="questions review" aria-label="${REVIEW_TITLE}">
+  return `<section class="questions review${pending.length === 0 ? " done" : ""}" aria-label="${REVIEW_TITLE}">
     <h2>${REVIEW_TITLE}</h2>
     ${
       pending.length === 0
@@ -467,6 +467,7 @@ const actionCard = (
   links: ReadonlyArray<ProjectLink>,
   evidence: ReadonlyArray<string>,
   ensures: ReadonlyArray<EnsureCheck>,
+  reviewed: Spec["reviewed"],
 ) => {
   const others =
     a.othersReasons.length === 0 ? "" : `<span class="muted">ほかの人は「${a.othersReasons.map(esc).join("」「")}」</span>`;
@@ -508,7 +509,12 @@ const actionCard = (
           ${
             ensures.length === 0
               ? ""
-              : `<dt>条件</dt><dd><ul>${ensures.map((e) => `<li class="ensure ${e.verdict}">${esc(describeEnsure(e))}</li>`).join("")}</ul></dd>`
+              : `<dt>条件</dt><dd><ul>${ensures
+                  .map((e) => {
+                    const acknowledged = reviewed[unguardedId(e)] !== undefined;
+                    return `<li class="ensure ${e.verdict}${acknowledged ? " acknowledged" : ""}">${esc(describeEnsure(e, acknowledged))}</li>`;
+                  })
+                  .join("")}</ul></dd>`
           }
           ${asks.length === 0 ? "" : `<dt>未決</dt><dd><ul>${asks.map((q) => `<li class="ask">${esc(q)}</li>`).join("")}</ul></dd>`}
         </dl>
@@ -633,6 +639,7 @@ marker path{fill:var(--muted)}
 .questions .ask{font-weight:600}
 .questions .target{color:var(--muted);font-size:13px;margin-left:4px}
 .questions .note{display:block;color:var(--muted);font-size:13px}
+.questions.review.done{border-color:var(--line)}.questions.review.done h2{color:var(--muted)}.ensure.unguarded.acknowledged{color:var(--muted);font-weight:400;font-size:12.5px}
 .review-id{font-size:11.5px;color:var(--muted);margin-left:4px}.acknowledged{margin:8px 0 4px;font-size:13px}.acknowledged summary{cursor:pointer;color:var(--muted)}
 .ensure{font-size:12.5px;margin:2px 0;color:var(--muted)}.ensure.unguarded{color:var(--warn);font-weight:600;font-size:13px}
 .q-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--warn);color:var(--bg);vertical-align:middle}

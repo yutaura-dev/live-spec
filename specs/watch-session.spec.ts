@@ -37,6 +37,11 @@ export function save(_s: Session, watcher: Watcher, valid: boolean): Session {
   return { output: watcher.format === "html" ? "エラーページ" : "失敗のお知らせ" };
 }
 
+export const reviewed = {
+  "anytime:save": "監視中は、spec をいつ保存しても生成し直す。保存を断る状態はない",
+  "unused-field:output": "output は書き出した仕様書の中身を表す。保存はどの中身のときでもできるので、可否には使わない",
+};
+
 export function surface(s: Session, watcher: Watcher) {
   const file = watcher.format === "html" ? "out/spec.html" : "out/spec/";
   switch (s.output) {

@@ -1,6 +1,6 @@
 import type { EnsureCheck } from "../model.ts";
 import { describeEnsure } from "./ensures.ts";
-import { REVIEW_LEAD, REVIEW_TITLE, reviewItems } from "./review.ts";
+import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
 import type { Spec } from "../load.ts";
 import type { Finding, Graph } from "../model.ts";
 import { ANY, ANY_LABEL, collapseTransitions } from "./collapse.ts";
@@ -90,7 +90,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
       ...actionSection(a),
       ...((spec.evidence[a.name] ?? []).length === 0 ? [] : [`- **根拠**: ${spec.evidence[a.name]!.map(formatEvidence).join("、")}`]),
       ...graph.questions.filter((q) => q.action === a.name).map((q) => `- **未決**: ${q.ask}`),
-      ...ensureLines((graph.ensures ?? []).filter((e) => e.action === a.name)),
+      ...ensureLines((graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed),
       "",
     ]),
     ...(graph.links.length + incoming.length === 0
@@ -112,8 +112,8 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
   ].join("\n");
 };
 
-const ensureLines = (ensures: ReadonlyArray<EnsureCheck>): Array<string> =>
-  ensures.length === 0 ? [] : ["- **条件**:", ...ensures.map((e) => `  - ${describeEnsure(e)}`)];
+const ensureLines = (ensures: ReadonlyArray<EnsureCheck>, reviewed: Spec["reviewed"]): Array<string> =>
+  ensures.length === 0 ? [] : ["- **条件**:", ...ensures.map((e) => `  - ${describeEnsure(e, reviewed[unguardedId(e)] !== undefined)}`)];
 
 const reviewSection = (spec: Spec, graph: Graph): Array<string> => {
   const { pending, acknowledged } = reviewItems(spec, graph);

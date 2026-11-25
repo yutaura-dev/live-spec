@@ -27,6 +27,20 @@ export const scenarios = {
     { do: notify, by: "サーバ" },
     { do: reloaded, by: "ブラウザ（自動）", expect: { status: "最新を表示" } },
   ],
+  接続が切れたタブは通知では再読み込みしない: [
+    { do: open, by: "利用者" },
+    { do: serverStopped, by: "サーバ", expect: { status: "接続が切れた" } },
+    { do: notify, by: "サーバ", denied: "最新を表示しているときだけ" },
+    { do: serverRestarted, by: "サーバ", expect: { status: "最新を表示" } },
+  ],
+};
+
+export const reviewed = {
+  "unguarded:open:利用者だけ": "タブを開くのは利用者。出来事を起こす主体の区別で、要件としての制限ではない",
+  "unguarded:close:利用者だけ": "タブを閉じるのは利用者。出来事を起こす主体の区別で、要件としての制限ではない",
+  "unguarded:reloaded:再読み込み中のときだけ": "再読み込みが終わるのは、再読み込みを始めたあとだけ（出来事の順序）",
+  "unguarded:serverStopped:開いているときだけ": "閉じたタブはサーバとつながっていないので、サーバが止まっても何も起きない",
+  "unguarded:serverRestarted:接続が切れているときだけ": "つながったままのタブは通知で最新になる。再起動を検知して読み直すのは、接続が切れたタブだけ",
 };
 
 /** URL を開く */
