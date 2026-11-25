@@ -1,4 +1,5 @@
 import { diffModels, groupAvailability } from "./diff.ts";
+import { ensureScope } from "./ensure-scope.ts";
 import { explore } from "./explore.ts";
 import type { Spec } from "./load.ts";
 import { normalize, type EnsureCheck, type Graph } from "./model.ts";
@@ -48,6 +49,6 @@ export const checkEnsures = (spec: Spec, graph: Graph): Array<EnsureCheck> => {
     const caughtBy = [...new Set(d.findings.added.map((f) => caughtLabel(f as Readonly<Record<string, unknown>>)))];
     const changed = effects.length + d.states.added.length + d.transitions.added.length > 0;
     const verdict = caughtBy.length > 0 ? "caught" : changed ? "unguarded" : "no-effect";
-    return [{ ...target, verdict, caughtBy, effects, newStates: d.states.added }];
+    return [{ ...target, verdict, caughtBy, effects, newStates: d.states.added, passes: ensureScope(spec, graph, target.action, target.reason).passes }];
   });
 };

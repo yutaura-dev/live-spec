@@ -1,22 +1,9 @@
 import { runAction, type ExploreOptions } from "./explore.ts";
 import type { Spec, State } from "./load.ts";
-import type { Graph } from "./model.ts";
+import type { Graph, OmissionHint } from "./model.ts";
 
-export type OmissionKind =
-  | "anyone-can"
-  | "anytime"
-  | "ignores-input"
-  | "same-for-similar-actors"
-  | "indistinguishable-example"
-  | "indistinguishable-actor"
-  | "unused-field";
-
-export interface OmissionHint {
-  readonly kind: OmissionKind;
-  readonly action: string | null;
-  readonly field: string | null;
-  readonly message: string;
-}
+export type { OmissionHint } from "./model.ts";
+export type OmissionKind = OmissionHint["kind"];
 
 type Row = Graph["availability"][number];
 
@@ -87,6 +74,7 @@ export const findOmissionHints = (spec: Spec, graph: Graph, options: Pick<Explor
     if (!rows.some((r) => r.enabled)) continue;
     if (distinctActors > 1 && invariantAcross(rows, (r) => [r.state, r.input], outcomeOf)) {
       hints.push({
+        id: `anyone-can:${action}`,
         kind: "anyone-can",
         action,
         field: null,
@@ -95,6 +83,7 @@ export const findOmissionHints = (spec: Spec, graph: Graph, options: Pick<Explor
     }
     if (graph.states.length > 1 && invariantAcross(rows, (r) => [r.actor, r.input], enabledOf)) {
       hints.push({
+        id: `anytime:${action}`,
         kind: "anytime",
         action,
         field: null,
@@ -105,6 +94,7 @@ export const findOmissionHints = (spec: Spec, graph: Graph, options: Pick<Explor
     const ignoresInput = inputCount > 1 && invariantAcross(rows, (r) => [r.state, r.actor], outcomeOf);
     if (ignoresInput) {
       hints.push({
+        id: `ignores-input:${action}`,
         kind: "ignores-input",
         action,
         field: null,
@@ -118,6 +108,7 @@ export const findOmissionHints = (spec: Spec, graph: Graph, options: Pick<Explor
       for (const group of sameGroups(signatures(rows, (r) => r.input ?? "", (r) => [r.state, r.actor]))) {
         if (!group.every((g) => accepted.has(g))) continue;
         hints.push({
+          id: `indistinguishable-example:${action}:${group.join(",")}`,
           kind: "indistinguishable-example",
           action,
           field: null,
@@ -132,6 +123,7 @@ export const findOmissionHints = (spec: Spec, graph: Graph, options: Pick<Explor
     if (reported.length > 0) {
       const others = [...new Set(reported.flatMap((b) => b.others))];
       hints.push({
+        id: `same-for-similar-actors:${action}`,
         kind: "same-for-similar-actors",
         action,
         field: null,
@@ -145,6 +137,7 @@ export const findOmissionHints = (spec: Spec, graph: Graph, options: Pick<Explor
   for (const group of sameGroups(signatures(graph.availability, (r) => r.actor, (r) => [r.state, r.action, r.input]))) {
     if (!graph.availability.some((r) => r.enabled && group.includes(r.actor))) continue;
     hints.push({
+      id: `indistinguishable-actor:${group.join(",")}`,
       kind: "indistinguishable-actor",
       action: null,
       field: null,
@@ -197,6 +190,7 @@ const unusedFields = (spec: Spec, graph: Graph, options: Pick<ExploreOptions, "b
   return fields
     .filter((f) => !used(f))
     .map((field) => ({
+      id: `unused-field:${field}`,
       kind: "unused-field" as const,
       action: null,
       field,

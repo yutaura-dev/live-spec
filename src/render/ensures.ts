@@ -8,19 +8,18 @@ const effectText = (e: EnsureCheck): string => {
   return `${who} が ${first.state} で実行できるようになる（${first.after.replace(/^✅ /, "")}）${rest}`;
 };
 
-export const describeEnsure = (e: EnsureCheck): string => {
+const effectOf = (e: EnsureCheck): string => {
   switch (e.verdict) {
     case "caught":
-      return `「${e.reason}」を外すと、${e.caughtBy.join("・")}が気づく`;
+      return `外すと、${e.caughtBy.join("・")}が気づく`;
     case "unguarded":
-      return `⚠ 「${e.reason}」を外すと、${effectText(e)}。気づくものがない`;
+      return `外すと、${effectText(e)}。気づくものがない`;
     case "no-effect":
-      return `「${e.reason}」は外しても振る舞いが変わらない（ほかの条件と重なっている）`;
+      return "外しても振る舞いが変わらない（ほかの条件と重なっている）";
   }
 };
 
-export const unguardedEnsures = (ensures: ReadonlyArray<EnsureCheck> | undefined) => (ensures ?? []).filter((e) => e.verdict === "unguarded");
-
-export const UNGUARDED_TITLE = "意図がほかに書かれていない条件";
-export const UNGUARDED_LEAD =
-  "次の条件は、外しても不変条件・シナリオ・画面のどれも気づきません。条件そのものが正しいかを確かめ、正しければ、その意図を不変条件かシナリオに書いてください。";
+// 理由の文と「実際に通るとき」を並べる理由: 理由の文は書き手の意図をもう一度書いたものなので、
+// 実行して求めた事実と見比べると、状態の取り違えのような書き間違いが見える。
+export const describeEnsure = (e: EnsureCheck): string =>
+  `${e.verdict === "unguarded" ? "⚠ " : ""}「${e.reason}」— 通るのは ${e.passes}。${effectOf(e)}`;

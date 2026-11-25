@@ -50,6 +50,8 @@ export interface Spec {
   /** 操作ごとの ensure（静的解析で読んだもの。ソースがなければ空） */
   readonly ensures: Readonly<Record<string, ReadonlyArray<EnsureCall>>>;
   readonly glossary: Readonly<Record<string, string>>;
+  /** 確かめてほしい点のうち、人や AI が「意図どおり」と答えたもの（キーは候補の id、値はその理由） */
+  readonly reviewed: Readonly<Record<string, string>>;
   readonly fields: Readonly<Record<string, ReadonlyArray<FieldValue>>>;
   readonly stateDoc: string | null;
 }
@@ -65,6 +67,7 @@ const RESERVED = new Set([
   "links",
   "glossary",
   "decisions",
+  "reviewed",
 ]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
@@ -110,6 +113,9 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
     fieldDocs: info?.fieldDocs ?? {},
     evidence: info?.evidence ?? {},
     ensures: info?.ensures ?? {},
+    reviewed: isRecord(mod.reviewed)
+      ? Object.fromEntries(Object.entries(mod.reviewed).filter((e): e is [string, string] => typeof e[1] === "string"))
+      : {},
     glossary: isRecord(mod.glossary)
       ? Object.fromEntries(Object.entries(mod.glossary).filter((e): e is [string, string] => typeof e[1] === "string"))
       : {},

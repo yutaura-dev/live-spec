@@ -1,5 +1,6 @@
 import type { EnsureCheck } from "../model.ts";
-import { describeEnsure, UNGUARDED_LEAD, UNGUARDED_TITLE, unguardedEnsures } from "./ensures.ts";
+import { describeEnsure } from "./ensures.ts";
+import { REVIEW_LEAD, REVIEW_TITLE, reviewItems } from "./review.ts";
 import type { Spec } from "../load.ts";
 import type { Graph } from "../model.ts";
 import type { SurfaceNode } from "../surface.ts";
@@ -273,17 +274,7 @@ const renderPage = async (
       .join("")}</ol>
   </section>`
   }
-  ${
-    unguardedEnsures(graph.ensures).length === 0
-      ? ""
-      : `<section class="questions unguarded" aria-label="${UNGUARDED_TITLE}">
-    <h2>${UNGUARDED_TITLE}</h2>
-    <p class="note">${UNGUARDED_LEAD}</p>
-    <ol>${unguardedEnsures(graph.ensures)
-      .map((e) => `<li><code>${esc(e.action)}</code> の<span class="ask">${esc(describeEnsure(e).replace(/^⚠ /, ""))}</span></li>`)
-      .join("")}</ol>
-  </section>`
-  }
+  ${reviewHtml(spec, graph)}
   <section class="board" aria-label="状態遷移図" data-mode="states">
     <p class="hint">状態をクリックすると、その状態でできること・できないことを表示します。矢印のラベルや操作カードをクリックすると、その操作の遷移を強調します。Esc で解除。</p>
     ${
@@ -452,6 +443,24 @@ const edgeSvg = (e: LaidOutEdge, markerId: string) => {
   return `<g class="edge" data-action="${esc(e.action)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"><path d="${d}" marker-end="url(#${markerId})"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.action)}</text></g></g>`;
 };
 
+const reviewHtml = (spec: Spec, graph: Graph) => {
+  const { pending, acknowledged } = reviewItems(spec, graph);
+  if (pending.length + acknowledged.length === 0) return "";
+  return `<section class="questions review" aria-label="${REVIEW_TITLE}">
+    <h2>${REVIEW_TITLE}</h2>
+    ${
+      pending.length === 0
+        ? '<p class="note">確かめてほしい点はありません。</p>'
+        : `<p class="note">${esc(REVIEW_LEAD)}</p><ol>${pending.map((i) => `<li><span class="ask">${esc(i.message)}</span> <code class="review-id">${esc(i.id)}</code></li>`).join("")}</ol>`
+    }
+    ${
+      acknowledged.length === 0
+        ? ""
+        : `<details class="acknowledged"><summary>確認済み（${acknowledged.length} 件）</summary><ul>${acknowledged.map((i) => `<li><code class="review-id">${esc(i.id)}</code> ${esc(i.note)}</li>`).join("")}</ul></details>`
+    }
+  </section>`;
+};
+
 const actionCard = (
   a: ActionSummary,
   asks: ReadonlyArray<string>,
@@ -499,7 +508,7 @@ const actionCard = (
           ${
             ensures.length === 0
               ? ""
-              : `<dt>条件の効き目</dt><dd><ul>${ensures.map((e) => `<li class="ensure ${e.verdict}">${esc(describeEnsure(e))}</li>`).join("")}</ul></dd>`
+              : `<dt>条件</dt><dd><ul>${ensures.map((e) => `<li class="ensure ${e.verdict}">${esc(describeEnsure(e))}</li>`).join("")}</ul></dd>`
           }
           ${asks.length === 0 ? "" : `<dt>未決</dt><dd><ul>${asks.map((q) => `<li class="ask">${esc(q)}</li>`).join("")}</ul></dd>`}
         </dl>
@@ -624,6 +633,7 @@ marker path{fill:var(--muted)}
 .questions .ask{font-weight:600}
 .questions .target{color:var(--muted);font-size:13px;margin-left:4px}
 .questions .note{display:block;color:var(--muted);font-size:13px}
+.review-id{font-size:11.5px;color:var(--muted);margin-left:4px}.acknowledged{margin:8px 0 4px;font-size:13px}.acknowledged summary{cursor:pointer;color:var(--muted)}
 .ensure{font-size:12.5px;margin:2px 0;color:var(--muted)}.ensure.unguarded{color:var(--warn);font-weight:600;font-size:13px}
 .q-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--warn);color:var(--bg);vertical-align:middle}
 .card .ask{color:var(--warn);font-size:13px}

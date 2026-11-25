@@ -61,6 +61,7 @@ export const Finding = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("surface-action-missing"), state: Schema.String, actor: Schema.String, action: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("surface-error"), state: Schema.String, actor: Schema.String, message: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("unknown-inputs"), action: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("reviewed-unmatched"), id: Schema.String }),
   Schema.Struct({
     kind: Schema.Literal("invariant-violation"),
     invariant: Schema.String,
@@ -83,8 +84,28 @@ export const EnsureCheck = Schema.Struct({
     Schema.Struct({ state: Schema.String, action: Schema.String, actor: Schema.String, input: Schema.NullOr(Schema.String), after: Schema.String }),
   ),
   newStates: Schema.Array(Schema.String),
+  /** 実際に通るのはどんなときか（その ensure だけを効かせて実行して求めたもの） */
+  passes: Schema.String,
 });
 export type EnsureCheck = typeof EnsureCheck.Type;
+
+// spec を実行した結果から見つけた、書き忘れていそうな条件の候補。id は reviewed で「意図どおり」と答えるときのキー。
+export const OmissionHint = Schema.Struct({
+  id: Schema.String,
+  kind: Schema.Literals([
+    "anyone-can",
+    "anytime",
+    "ignores-input",
+    "same-for-similar-actors",
+    "indistinguishable-example",
+    "indistinguishable-actor",
+    "unused-field",
+  ]),
+  action: Schema.NullOr(Schema.String),
+  field: Schema.NullOr(Schema.String),
+  message: Schema.String,
+});
+export type OmissionHint = typeof OmissionHint.Type;
 
 export const Graph = Schema.Struct({
   states: Schema.Array(ExploredState),
@@ -113,6 +134,7 @@ export const Graph = Schema.Struct({
     }),
   ),
   ensures: Schema.optionalKey(Schema.Array(EnsureCheck)),
+  omissions: Schema.optionalKey(Schema.Array(OmissionHint)),
   scenarios: Schema.Array(
     Schema.Struct({
       name: Schema.String,

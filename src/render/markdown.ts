@@ -1,5 +1,6 @@
 import type { EnsureCheck } from "../model.ts";
-import { describeEnsure, UNGUARDED_LEAD, UNGUARDED_TITLE, unguardedEnsures } from "./ensures.ts";
+import { describeEnsure } from "./ensures.ts";
+import { REVIEW_LEAD, REVIEW_TITLE, reviewItems } from "./review.ts";
 import type { Spec } from "../load.ts";
 import type { Finding, Graph } from "../model.ts";
 import { ANY, ANY_LABEL, collapseTransitions } from "./collapse.ts";
@@ -67,16 +68,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
           ]),
           "",
         ]),
-    ...(unguardedEnsures(graph.ensures).length === 0
-      ? []
-      : [
-          `## ${UNGUARDED_TITLE}`,
-          "",
-          UNGUARDED_LEAD,
-          "",
-          ...unguardedEnsures(graph.ensures).map((e) => `- \`${e.action}\` の${describeEnsure(e).replace(/^⚠ /, "")}`),
-          "",
-        ]),
+    ...reviewSection(spec, graph),
     "## 状態遷移図",
     "",
     "```mermaid",
@@ -121,7 +113,19 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
 };
 
 const ensureLines = (ensures: ReadonlyArray<EnsureCheck>): Array<string> =>
-  ensures.length === 0 ? [] : ["- **条件の効き目**:", ...ensures.map((e) => `  - ${describeEnsure(e)}`)];
+  ensures.length === 0 ? [] : ["- **条件**:", ...ensures.map((e) => `  - ${describeEnsure(e)}`)];
+
+const reviewSection = (spec: Spec, graph: Graph): Array<string> => {
+  const { pending, acknowledged } = reviewItems(spec, graph);
+  if (pending.length + acknowledged.length === 0) return [];
+  return [
+    `## ${REVIEW_TITLE}`,
+    "",
+    ...(pending.length === 0 ? ["確かめてほしい点はありません。"] : [REVIEW_LEAD, "", ...pending.map((i) => `- ${i.message}（\`${i.id}\`）`)]),
+    "",
+    ...(acknowledged.length === 0 ? [] : ["### 確認済み", "", ...acknowledged.map((i) => `- \`${i.id}\`: ${i.note}`), ""]),
+  ];
+};
 
 const actionSection = (a: ActionSummary): Array<string> => {
   const heading = a.summary === null ? `### \`${a.name}\`` : `### ${a.summary}（\`${a.name}\`）`;
@@ -263,6 +267,8 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       return `操作 ${f.action} は 3 つ目以降の引数をとるが、inputs に例がないので実行していない`;
     case "unknown-inputs":
       return `inputs に書かれた ${f.action} という操作は存在しない`;
+    case "reviewed-unmatched":
+      return `reviewed に書かれた ${f.id} は、確かめてほしい点のどれにも当たらない（ID の書き間違いか、もう出なくなった候補）`;
     case "surface-action-not-allowed":
       return `${labelOf(f.state)} で ${f.actor} に ${f.action} のボタンが見えているが、実行できない`;
     case "surface-action-missing":

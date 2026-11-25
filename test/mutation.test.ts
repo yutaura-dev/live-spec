@@ -95,10 +95,10 @@ describe("ensure のミューテーション: 1 つずつ外して探索し直�
 
     const md = renderMarkdown(spec, graph);
 
-    expect(md).toContain("- **条件の効き目**:");
-    expect(md).toContain("⚠ 「編集者だけ」を外すと、著者alice が");
-    expect(md).toContain("「承認済みのときだけ」を外すと、不変条件「公開した文書は承認済み」が気づく");
-    expect(md).toContain("「著者は公開できない」は外しても振る舞いが変わらない");
+    expect(md).toContain("- **条件**:");
+    expect(md).toContain("⚠ 「編集者だけ」— 通るのは 編集者eve のとき。外すと、著者alice が");
+    expect(md).toContain("「承認済みのときだけ」— 通るのは approved が true のとき。外すと、不変条件「公開した文書は承認済み」が気づく");
+    expect(md).toContain("外しても振る舞いが変わらない（ほかの条件と重なっている）");
   });
 
   it("HTML の操作カードにも、条件ごとの効き目を出す", async () => {
@@ -106,7 +106,7 @@ describe("ensure のミューテーション: 1 つずつ外して探索し直�
 
     const html = await renderHtml(spec, graph);
 
-    expect(html).toContain("<dt>条件の効き目</dt>");
+    expect(html).toContain("<dt>条件</dt>");
     expect(html).toContain('class="ensure unguarded"');
   });
 });

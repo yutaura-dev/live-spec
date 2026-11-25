@@ -4,6 +4,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { explore } from "./explore.ts";
 import { checkEnsures } from "./mutation.ts";
+import { findOmissionHints } from "./omission.ts";
+import { unguardedId } from "./render/review.ts";
 import { loadSpec } from "./load.ts";
 import { normalize } from "./model.ts";
 import { renderErrorHtml, renderProjectHtml, type DomainObject } from "./render/html.ts";
@@ -52,7 +54,13 @@ export const loadObject = async (path: string, options: LoadObjectOptions = {}):
   const mod = (await import(url.href)) as Record<string, unknown>;
   const spec = loadSpec(options.name ?? specNameOf(path), mod, { source: options.source ?? (await readFile(path, "utf8")) });
   const graph = explore(spec);
-  return { spec, graph: { ...graph, ensures: checkEnsures(spec, graph) } };
+  const ensures = checkEnsures(spec, graph);
+  const omissions = findOmissionHints(spec, graph);
+  const known = new Set([...omissions.map((h) => h.id), ...ensures.filter((e) => e.verdict === "unguarded").map(unguardedId)]);
+  const unmatched = Object.keys(spec.reviewed)
+    .filter((id) => !known.has(id))
+    .map((id) => ({ kind: "reviewed-unmatched" as const, id }));
+  return { spec, graph: { ...graph, ensures, omissions, findings: [...graph.findings, ...unmatched] } };
 };
 
 export const generateProject = async (paths: ReadonlyArray<string>, format: OutputFormat, title?: string): Promise<Output> => {
