@@ -193,4 +193,4 @@ pnpm build                    # dist/ に配布用の JS と型定義を出す�
 
 ## ライセンス
 
-TBD（OSS として公開するときに決める。依存の `elkjs` は EPL-2.0 / GPL-3.0 なので、その相性も確認する）
+MIT（[LICENSE](LICENSE)）
