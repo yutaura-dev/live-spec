@@ -9,6 +9,7 @@ export interface ActionSummary {
   readonly when: ReadonlyArray<{ readonly from: string; readonly to: string }>;
   readonly blocked: ReadonlyArray<{ readonly reason: string; readonly states: ReadonlyArray<string> }>;
   readonly effect: ReadonlyArray<{ readonly field: string; readonly values: ReadonlyArray<string> }>;
+  readonly inputReasons: ReadonlyArray<{ readonly input: string; readonly reason: string }>;
 }
 
 export interface StateSummary {
@@ -60,6 +61,7 @@ export const summarizeActions = (spec: Spec, graph: Graph): ReadonlyArray<Action
       ),
       blocked: [...blocked.entries()].map(([reason, states]) => ({ reason, states })),
       effect: effectOf(graph, name),
+      inputReasons: inputReasonsOf(entries),
     };
   });
 };
@@ -73,7 +75,7 @@ export const summarizeStates = (spec: Spec, graph: Graph): ReadonlyArray<StateSu
       const enabled = graph.availability.filter((a) => a.state === s.id && a.action === action && a.enabled);
       if (enabled.length > 0) {
         for (const to of unique(enabled.map((a) => a.to!))) {
-          can.push({ action, actors: enabled.filter((a) => a.to === to).map((a) => a.actor), to: labelOf(to) });
+          can.push({ action, actors: unique(enabled.filter((a) => a.to === to).map((a) => a.actor)), to: labelOf(to) });
         }
       } else if (graph.availability.some((a) => a.state === s.id && a.action === action)) {
         cannot.push({ action, reason: whenReason(graph, s.id, action, capableOf(graph, action)) });
@@ -82,6 +84,21 @@ export const summarizeStates = (spec: Spec, graph: Graph): ReadonlyArray<StateSu
     const violations = graph.findings.flatMap((f) => (f.kind === "invariant-violation" && f.state === s.id ? [f.invariant] : []));
     return { id: s.id, label: s.label, initial: s.initial, terminal: s.terminal, can, cannot, violations };
   });
+};
+
+// 同じ状態・同じ登場人物で、ある入力では成功し別の入力では失敗したときだけ、その失敗を
+// 「入力の条件」とみなす。状態や権限による失敗と混ぜないため。
+const inputReasonsOf = (entries: Graph["availability"]): ActionSummary["inputReasons"] => {
+  const found = entries.filter(
+    (a) =>
+      !a.enabled &&
+      a.input !== null &&
+      entries.some((b) => b.enabled && b.state === a.state && b.actor === a.actor),
+  );
+  return uniqueBy(
+    found.map((a) => ({ input: a.input!, reason: a.reason ?? ERROR_REASON })),
+    (r) => `${r.input}|${r.reason}`,
+  );
 };
 
 const effectOf = (graph: Graph, action: string): ActionSummary["effect"] => {

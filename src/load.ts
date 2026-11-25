@@ -10,12 +10,13 @@ export interface Spec {
   readonly actors: ReadonlyArray<readonly [name: string, actor: unknown]>;
   readonly actions: ReadonlyArray<readonly [name: string, fn: ActionFn]>;
   readonly invariants: ReadonlyArray<readonly [name: string, fn: InvariantFn]>;
+  readonly inputs: Readonly<Record<string, ReadonlyArray<readonly [label: string, args: ReadonlyArray<unknown>]>>>;
   readonly docs: Readonly<Record<string, string>>;
   readonly fields: Readonly<Record<string, ReadonlyArray<FieldValue>>>;
   readonly stateDoc: string | null;
 }
 
-const RESERVED = new Set(["initial", "actors", "invariants"]);
+const RESERVED = new Set(["initial", "actors", "invariants", "inputs"]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
   typeof u === "object" && u !== null && !Array.isArray(u);
@@ -40,6 +41,7 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
     invariants: isRecord(mod.invariants)
       ? Object.entries(mod.invariants).filter((e): e is [string, InvariantFn] => typeof e[1] === "function")
       : [],
+    inputs: inputsOf(mod.inputs),
     docs: info?.docs ?? {},
     fields: info?.fields ?? {},
     stateDoc: info?.stateDoc ?? null,
@@ -50,6 +52,17 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
 // import した結果からは書かれた順が分からない。仕様書では業務の流れ（edit → submit → publish）の
 // 順に操作を見せたいので、構文解析で得た export の順を使う。
 // ソースがないときに名前順にするのは、実行環境（Node と Vitest など）によって順序が変わらないようにするため。
+const inputsOf = (u: unknown): Spec["inputs"] => {
+  if (!isRecord(u)) return {};
+  return Object.fromEntries(
+    Object.entries(u).flatMap(([action, examples]) =>
+      isRecord(examples)
+        ? [[action, Object.entries(examples).filter((e): e is [string, ReadonlyArray<unknown>] => Array.isArray(e[1]))]]
+        : [],
+    ),
+  );
+};
+
 const orderActions = (actions: Array<[string, ActionFn]>, order: ReadonlyArray<string> | undefined) => {
   const byName = actions.sort(([a], [b]) => a.localeCompare(b));
   if (order === undefined) return byName;

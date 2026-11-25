@@ -47,6 +47,9 @@ const actionSection = (a: ActionSummary): Array<string> => {
     `- **できる人**: ${who}`,
     `- **できるとき**: ${a.when.map((w) => `${w.from} → ${w.to}`).join(" / ")}`,
     whenNot,
+    ...(a.inputReasons.length === 0
+      ? []
+      : [`- **できない入力**: ${a.inputReasons.map((r) => `${r.input}（${r.reason}）`).join("、")}`]),
     ...(effect === "" ? [] : [`- **結果**: ${effect}`]),
   ];
 };
@@ -67,6 +70,10 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       const path = f.path.length === 0 ? "初期状態" : f.path.map((p) => `${p.action} (${p.actor})`).join(" → ");
       return `不変条件「${f.invariant}」を ${labelOf(f.state)} で破る（${path}）`;
     }
+    case "missing-inputs":
+      return `操作 ${f.action} は 3 つ目以降の引数をとるが、inputs に例がないので実行していない`;
+    case "unknown-inputs":
+      return `inputs に書かれた ${f.action} という操作は存在しない`;
     case "state-limit":
       return `状態が ${f.maxStates} 個を超えたので探索を打ち切った（値が増え続ける項目がないか確認する）`;
   }

@@ -15,6 +15,10 @@ export const invariants = {
   固定できるのは公開中の記事だけ: (a: Article) => !a.pinned || a.status === "published",
 };
 
+export const inputs = {
+  reject: { 理由を書いた: ["見出しに誤字があります"], 理由が空: [""] },
+};
+
 export const actors: Record<string, User> = {
   著者alice: { id: "alice", role: "author" },
   別の著者bob: { id: "bob", role: "author" },
@@ -37,9 +41,10 @@ export function submit(article: Article, user: User): Article {
 }
 
 /** 差し戻す */
-export function reject(article: Article, user: User): Article {
+export function reject(article: Article, user: User, comment: string): Article {
   ensure(user.role === "editor", "編集者だけ");
   ensure(article.status === "inReview", "レビュー中のときだけ");
+  ensure(comment.trim() !== "", "差し戻し理由が必要");
   return { ...article, status: "draft" };
 }
 

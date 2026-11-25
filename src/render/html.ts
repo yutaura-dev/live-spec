@@ -110,6 +110,7 @@ const actionCard = (a: ActionSummary) => {
           <dt>できる人</dt><dd>${who}</dd>
           <dt>できるとき</dt><dd>${when}</dd>
           <dt>できないとき</dt><dd>${whenNot}</dd>
+          ${a.inputReasons.length === 0 ? "" : `<dt>できない入力</dt><dd><ul>${a.inputReasons.map((r) => `<li><span class="reason">${esc(r.reason)}</span> <span class="state">${esc(r.input)}</span></li>`).join("")}</ul></dd>`}
           ${effect === "" ? "" : `<dt>結果</dt><dd>${esc(effect)}</dd>`}
         </dl>
       </article>`;

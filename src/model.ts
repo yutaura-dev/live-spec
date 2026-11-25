@@ -20,6 +20,7 @@ export const Availability = Schema.Struct({
   state: Schema.String,
   action: Schema.String,
   actor: Schema.String,
+  input: Schema.NullOr(Schema.String),
   enabled: Schema.Boolean,
   to: Schema.NullOr(Schema.String),
   reason: Schema.NullOr(Schema.String),
@@ -39,6 +40,8 @@ export const Finding = Schema.Union([
   }),
   Schema.Struct({ kind: Schema.Literal("invalid-return"), action: Schema.String, actor: Schema.String, state: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("state-limit"), maxStates: Schema.Number }),
+  Schema.Struct({ kind: Schema.Literal("missing-inputs"), action: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("unknown-inputs"), action: Schema.String }),
   Schema.Struct({
     kind: Schema.Literal("invariant-violation"),
     invariant: Schema.String,

@@ -14,10 +14,14 @@ type Outcome =
   | { readonly kind: "error"; readonly message: string }
   | { readonly kind: "invalid-return" };
 
-const run = (fn: Spec["actions"][number][1], state: State, actor: unknown): Outcome => {
+const run = (fn: Spec["actions"][number][1], state: State, actor: unknown, args: ReadonlyArray<unknown>): Outcome => {
   try {
     // structuredClone を渡す理由: 関数が引数を破壊的に変更しても、探索済みの状態が壊れないようにするため。
-    const next = (fn as (s: unknown, a: unknown) => unknown)(structuredClone(state), structuredClone(actor));
+    const next = (fn as (s: unknown, a: unknown, ...rest: Array<unknown>) => unknown)(
+      structuredClone(state),
+      structuredClone(actor),
+      ...structuredClone(args),
+    );
     if (typeof next !== "object" || next === null || Array.isArray(next)) return { kind: "invalid-return" };
     return { kind: "ok", next: canonical(next) as State };
   } catch (e) {
@@ -70,32 +74,40 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   const findings: Array<Finding> = [];
   const processed = new Set<string>();
 
+  // 3 つ目以降の引数がある操作は、inputs に例がなければ実行しない。
+  // undefined を渡して実行すると TypeError などが「仕様のバグ」として大量に出て、本当の原因が埋もれるため。
+  const missingInputs = spec.actions.filter(([name, fn]) => fn.length > 2 && spec.inputs[name] === undefined).map(([name]) => name);
+  const runnable = spec.actions.filter(([name]) => !missingInputs.includes(name));
+  const NO_INPUT: ReadonlyArray<readonly [string | null, ReadonlyArray<unknown>]> = [[null, []]];
+
   register(canonical(spec.initial) as State);
   // 幅優先探索の理由: 状態 ID と表の行の並びを「初期状態からの近さ」順に固定し、
   // spec の書き換えで出力の順序が揺れないようにするため（差分レビューの前提）。
   explore: for (let i = 0; i < queue.length; i++) {
     const from = queue[i]!;
     const values = valuesById.get(from)!;
-    for (const [action, fn] of spec.actions) {
+    for (const [action, fn] of runnable) {
       for (const [actor, actorValue] of spec.actors) {
-        const outcome = run(fn, values, actorValue);
-        if (outcome.kind !== "ok") {
-          if (outcome.kind === "error") findings.push({ kind: "action-error", action, actor, state: from, message: outcome.message });
-          if (outcome.kind === "invalid-return") findings.push({ kind: "invalid-return", action, actor, state: from });
-          const reason = outcome.kind === "not-allowed" ? outcome.reason : null;
-          availability.push({ state: from, action, actor, enabled: false, to: null, reason });
-          continue;
+        for (const [input, args] of spec.inputs[action] ?? NO_INPUT) {
+          const outcome = run(fn, values, actorValue, args);
+          if (outcome.kind !== "ok") {
+            if (outcome.kind === "error") findings.push({ kind: "action-error", action, actor, state: from, message: outcome.message });
+            if (outcome.kind === "invalid-return") findings.push({ kind: "invalid-return", action, actor, state: from });
+            const reason = outcome.kind === "not-allowed" ? outcome.reason : null;
+            availability.push({ state: from, action, actor, input, enabled: false, to: null, reason });
+            continue;
+          }
+          const to = register(outcome.next, { from, action, actor });
+          if (to === undefined) {
+            findings.push({ kind: "state-limit", maxStates });
+            break explore;
+          }
+          availability.push({ state: from, action, actor, input, enabled: true, to, reason: null });
+          const key = `${from}|${action}|${to}`;
+          const t = transitions.get(key) ?? { from, to, action, actors: [] };
+          if (!t.actors.includes(actor)) t.actors.push(actor);
+          transitions.set(key, t);
         }
-        const to = register(outcome.next, { from, action, actor });
-        if (to === undefined) {
-          findings.push({ kind: "state-limit", maxStates });
-          break explore;
-        }
-        availability.push({ state: from, action, actor, enabled: true, to, reason: null });
-        const key = `${from}|${action}|${to}`;
-        const t = transitions.get(key) ?? { from, to, action, actors: [] };
-        t.actors.push(actor);
-        transitions.set(key, t);
       }
     }
     processed.add(from);
@@ -116,7 +128,11 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
       if (!states.some((s) => s.values[field] === value)) findings.push({ kind: "unreachable-value", field, value });
     }
   }
-  for (const [action] of spec.actions) {
+  for (const action of missingInputs) findings.push({ kind: "missing-inputs", action });
+  for (const action of Object.keys(spec.inputs)) {
+    if (!spec.actions.some(([name]) => name === action)) findings.push({ kind: "unknown-inputs", action });
+  }
+  for (const [action] of runnable) {
     if (!availability.some((a) => a.action === action && a.enabled)) findings.push({ kind: "never-enabled-action", action });
   }
 

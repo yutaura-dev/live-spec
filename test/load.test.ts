@@ -24,6 +24,13 @@ describe("loadSpec: spec ファイルの export を仕様として読み取る",
     expect(spec.actions.map(([name]) => name)).toEqual(["act"]);
   });
 
+  it("inputs を操作ごとの引数の例として読み、操作には含めない", () => {
+    const spec = loadSpec("x", { initial: {}, actors: {}, inputs: { act: { 例: [1, 2] } }, act: () => ({}) });
+
+    expect(spec.inputs).toEqual({ act: [["例", [1, 2]]] });
+    expect(spec.actions.map(([name]) => name)).toEqual(["act"]);
+  });
+
   it("initial がなければエラーにする", () => {
     expect(() => loadSpec("broken", { actors: {} })).toThrow("initial");
   });
