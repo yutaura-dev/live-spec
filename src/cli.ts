@@ -4,21 +4,33 @@ import { pathToFileURL } from "node:url";
 import { explore } from "./explore.ts";
 import { loadSpec } from "./load.ts";
 import { normalize } from "./model.ts";
+import { renderHtml } from "./render/html.ts";
 import { renderMarkdown } from "./render/markdown.ts";
+
+export type OutputFormat = "markdown" | "json" | "html";
+
+export const outputFormatOf = (flags: ReadonlyArray<string>): OutputFormat =>
+  flags.includes("--html") ? "html" : flags.includes("--json") ? "json" : "markdown";
 
 export const specNameOf = (path: string): string => basename(path).replace(/(\.spec)?\.[cm]?ts$/, "");
 
 const main = async (argv: ReadonlyArray<string>) => {
   const [path, ...flags] = argv;
   if (path === undefined) {
-    console.error("usage: pnpm spec <file.spec.ts> [--json]");
+    console.error("usage: pnpm spec <file.spec.ts> [--html | --json]");
     process.exitCode = 2;
     return;
   }
   const mod = (await import(pathToFileURL(path).href)) as Record<string, unknown>;
   const spec = loadSpec(specNameOf(path), mod, { source: await readFile(path, "utf8") });
   const graph = explore(spec);
-  const output = flags.includes("--json") ? JSON.stringify(normalize(spec, graph), null, 2) : renderMarkdown(spec, graph);
+  const format = outputFormatOf(flags);
+  const output =
+    format === "html"
+      ? await renderHtml(spec, graph)
+      : format === "json"
+        ? JSON.stringify(normalize(spec, graph), null, 2)
+        : renderMarkdown(spec, graph);
   process.stdout.write(output + "\n");
 };
 

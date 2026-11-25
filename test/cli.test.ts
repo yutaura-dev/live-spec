@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { specNameOf } from "../src/cli.ts";
+import { outputFormatOf, specNameOf } from "../src/cli.ts";
+
+describe("outputFormatOf: 出力形式をフラグから決める", () => {
+  it("フラグがなければ Markdown にする", () => {
+    expect(outputFormatOf([])).toBe("markdown");
+  });
+
+  it("--html なら HTML、--json なら JSON にする", () => {
+    expect(outputFormatOf(["--html"])).toBe("html");
+    expect(outputFormatOf(["--json"])).toBe("json");
+  });
+});
 
 describe("specNameOf: ファイル名から spec 名を決める", () => {
   it(".spec.ts を除いたファイル名を spec 名にする", () => {

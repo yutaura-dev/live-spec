@@ -75,8 +75,11 @@ ADR にするほどではないが、実装時に守りたい原則。根拠は 
 | `src/static.ts` | spec のソースを構文解析し（`@babel/parser`）、export の順、JSDoc の説明文、`initial` の型が取りうる有限の値を得る |
 | `src/explore.ts` | 「状態 × 操作 × 登場人物」を実行して幅優先で探索し、遷移、できる・できない、検査結果を計算する |
 | `src/model.ts` | 正規化モデル（Effect Schema）。差分と JSON 出力の基準 |
-| `src/render/markdown.ts` | Mermaid の状態遷移図と表を含む仕様書を生成する |
-| `src/cli.ts` | `pnpm spec <file.spec.ts> [--json]` |
+| `src/render/summary.ts` | 操作ごと・状態ごとの要約を作る。「誰が」と「いつ」の理由を実行結果から分ける |
+| `src/render/markdown.ts` | Mermaid の状態遷移図と操作ごとの節を含む Markdown の仕様書を生成する |
+| `src/render/layout.ts` | ELK（`elkjs`）で状態遷移図の配置を計算する |
+| `src/render/html.ts` | 1 ファイルで完結する HTML の仕様書を生成する（SVG の図、状態ごとのパネル、操作カード） |
+| `src/cli.ts` | `pnpm spec <file.spec.ts> [--html \| --json]` |
 
 例は `examples/article.spec.ts` にある。
 
@@ -86,6 +89,14 @@ ADR にするほどではないが、実装時に守りたい原則。根拠は 
 |---|---|---|
 | `effect` | 正規化モデルのスキーマ | v4 の `unstable/*` には破壊的変更が入りうる（今は使っていない） |
 | `@babel/parser` | spec のソースの構文解析 | 型の解決はできない。TS 7 の JS API が安定したら差し替えを検討する |
+| `elkjs` | HTML の状態遷移図のレイアウト | ライセンスが EPL-2.0 / GPL-3.0。OSS として公開するときにライセンスの相性を確認する |
+
+### HTML 出力の方針
+
+- 外部のファイル（CDN の Mermaid など）を読み込まず、1 ファイルで完結させる。オフラインでも開け、表示のたびに通信しない
+- 図は生成時に ELK で配置を計算して SVG で埋め込む。初期状態を左端に固定し、循環は幅優先探索の順で断ち切る
+- spec 由来の文字列はすべてエスケープする。クライアントの JS は `innerHTML` を使わず `textContent` で組み立てる
+- `#state-<id>` で特定の状態を選んだ状態で開ける
 
 ### 静的解析の限界
 

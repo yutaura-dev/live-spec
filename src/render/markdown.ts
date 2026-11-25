@@ -1,10 +1,9 @@
 import type { Spec } from "../load.ts";
 import type { Finding, Graph } from "../model.ts";
+import { summarizeActions, type ActionSummary } from "./summary.ts";
 
 export const renderMarkdown = (spec: Spec, graph: Graph): string => {
-  const actions = spec.actions.map(([name]) => name);
   const labelOf = (id: string) => graph.states.find((s) => s.id === id)?.label ?? id;
-
   return [
     `# ${spec.name}`,
     "",
@@ -21,75 +20,40 @@ export const renderMarkdown = (spec: Spec, graph: Graph): string => {
     "",
     "## 操作",
     "",
-    ...actions.flatMap((name) => [...actionSection(graph, name, spec.docs[name], labelOf), ""]),
+    ...summarizeActions(spec, graph).flatMap((a) => [...actionSection(a), ""]),
     "## 検査結果",
     "",
-    ...(graph.findings.length === 0 ? ["問題は見つかりませんでした。"] : graph.findings.map((f) => `- ⚠ ${describe(f, labelOf)}`)),
+    ...(graph.findings.length === 0 ? ["問題は見つかりませんでした。"] : graph.findings.map((f) => `- ⚠ ${describeFinding(f, labelOf)}`)),
     "",
   ].join("\n");
 };
 
-// 「担当者」= どこかの状態で一度でもその操作を実行できた登場人物。
-// 担当者が止められた理由を「いつ」の条件、担当者以外が止められた理由を「誰が」の条件とみなす。
-// spec の書き手に ensure を「権限」「状態」と分類させずに、実行結果だけから両者を分けるため。
-const actionSection = (
-  graph: Graph,
-  action: string,
-  summary: string | undefined,
-  labelOf: (id: string) => string,
-): Array<string> => {
-  const heading = summary === undefined ? `### \`${action}\`` : `### ${summary}（\`${action}\`）`;
-  const entries = graph.availability.filter((a) => a.action === action);
-  const capable = unique(entries.filter((a) => a.enabled).map((a) => a.actor));
-  if (capable.length === 0) return [heading, "", "- **できる人**: なし（どの状態でも誰も実行できない）"];
-
-  const othersReasons = unique(entries.filter((a) => !capable.includes(a.actor)).map((a) => a.reason ?? "エラー"));
-  const who = othersReasons.length === 0 ? capable.join(", ") : `${capable.join(", ")}（ほかの人は「${othersReasons.join("」「")}」）`;
-
-  const when = unique(
-    graph.transitions.filter((t) => t.action === action).map((t) => `${labelOf(t.from)} → ${labelOf(t.to)}`),
-  ).join(" / ");
-
-  const blockedGroups = new Map<string, Array<string>>();
-  for (const state of unique(entries.map((a) => a.state))) {
-    const byCapable = entries.filter((a) => a.state === state && capable.includes(a.actor));
-    if (byCapable.some((a) => a.enabled)) continue;
-    const reason = unique(byCapable.map((a) => a.reason ?? "エラー")).join("、");
-    blockedGroups.set(reason, [...(blockedGroups.get(reason) ?? []), labelOf(state)]);
-  }
-  const groups = [...blockedGroups.entries()].map(([reason, states]) => `${states.join(", ")}（${reason}）`);
+const actionSection = (a: ActionSummary): Array<string> => {
+  const heading = a.summary === null ? `### \`${a.name}\`` : `### ${a.summary}（\`${a.name}\`）`;
+  if (a.capable.length === 0) return [heading, "", "- **できる人**: なし（どの状態でも誰も実行できない）"];
+  const who =
+    a.othersReasons.length === 0 ? a.capable.join(", ") : `${a.capable.join(", ")}（ほかの人は「${a.othersReasons.join("」「")}」）`;
+  const groups = a.blocked.map((b) => `${b.states.join(", ")}（${b.reason}）`);
   const whenNot =
-    groups.length === 0 ? "- **できないとき**: なし" : groups.length === 1 ? `- **できないとき**: ${groups[0]}` : ["- **できないとき**:", ...groups.map((g) => `  - ${g}`)].join("\n");
-
-  const effect = effectOf(graph, action);
+    groups.length === 0
+      ? "- **できないとき**: なし"
+      : groups.length === 1
+        ? `- **できないとき**: ${groups[0]}`
+        : ["- **できないとき**:", ...groups.map((g) => `  - ${g}`)].join("\n");
+  const effect = formatEffect(a);
   return [
     heading,
     "",
     `- **できる人**: ${who}`,
-    `- **できるとき**: ${when}`,
+    `- **できるとき**: ${a.when.map((w) => `${w.from} → ${w.to}`).join(" / ")}`,
     whenNot,
     ...(effect === "" ? [] : [`- **結果**: ${effect}`]),
   ];
 };
 
-const unique = <A>(xs: ReadonlyArray<A>): Array<A> => [...new Set(xs)];
+export const formatEffect = (a: ActionSummary) => a.effect.map((e) => `${e.field} → ${e.values.join(" / ")}`).join(", ");
 
-const effectOf = (graph: Graph, action: string): string => {
-  const changed = new Map<string, Set<string>>();
-  for (const t of graph.transitions) {
-    if (t.action !== action) continue;
-    const from = graph.states.find((s) => s.id === t.from)!.values;
-    const to = graph.states.find((s) => s.id === t.to)!.values;
-    for (const k of Object.keys(to)) {
-      if (JSON.stringify(from[k]) === JSON.stringify(to[k])) continue;
-      if (!changed.has(k)) changed.set(k, new Set());
-      changed.get(k)!.add(typeof to[k] === "string" ? (to[k] as string) : JSON.stringify(to[k]));
-    }
-  }
-  return [...changed.entries()].map(([k, vs]) => `${k} → ${[...vs].join(" / ")}`).join(", ");
-};
-
-const describe = (f: Finding, labelOf: (id: string) => string): string => {
+export const describeFinding = (f: Finding, labelOf: (id: string) => string): string => {
   switch (f.kind) {
     case "unreachable-value":
       return `${f.field} = ${String(f.value)} は型に書かれているが、到達できるどの状態でもとらない`;
@@ -103,4 +67,3 @@ const describe = (f: Finding, labelOf: (id: string) => string): string => {
       return `状態が ${f.maxStates} 個を超えたので探索を打ち切った（値が増え続ける項目がないか確認する）`;
   }
 };
-
