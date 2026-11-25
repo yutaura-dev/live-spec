@@ -1,0 +1,91 @@
+# 題材 A: ログインフロー（UI）— YAML 案
+spec: login
+kind: ui
+title: ログイン
+summary: メールアドレスとパスワードでログインする。5 回連続で失敗するとアカウントをロックする。
+
+context:
+  failedAttempts: { type: integer, initial: 0 }
+  email: { type: string, initial: "" }
+  password: { type: string, initial: "" }
+  lastError: { type: string, nullable: true, initial: null }
+
+guards:
+  canSubmit:
+    summary: 両方の欄が入力済み
+    when: email != "" && password != ""
+  willLock:
+    summary: 今回の失敗でロックに達する
+    when: failedAttempts + 1 >= 5
+    examples:            # ルールと例の 2 階層（Example Mapping）
+      - { given: { failedAttempts: 3 }, expect: false }
+      - { given: { failedAttempts: 4 }, expect: true }
+
+initial: editing
+
+states:
+  editing:
+    summary: 入力中
+    surface:
+      ui:
+        - heading: ログイン
+        - input: { id: email, label: メールアドレス }
+        - input: { id: password, label: パスワード, secret: true }
+        - text: { id: error, visible: lastError != null }
+        - button: { id: submit, label: ログイン, enabled: canSubmit }
+    on:
+      SUBMIT:
+        to: submitting
+        guard: canSubmit
+        do: click submit
+
+  submitting:
+    summary: 認証中
+    surface:
+      ui:
+        - heading: ログイン
+        - button: { id: submit, label: ログイン中…, enabled: false }
+        - spinner: {}
+    on:
+      AUTH_OK:
+        to: loggedIn
+        trigger: system
+      AUTH_NG:
+        - to: locked
+          guard: willLock
+          trigger: system
+        - to: editing
+          trigger: system
+          effect: failedAttempts += 1; lastError = "メールアドレスまたはパスワードが違います"
+
+  locked:
+    summary: ロック中
+    final: true
+    surface:
+      ui:
+        - heading: アカウントがロックされました
+        - text: { id: lockMessage, value: しばらく経ってから再度お試しください }
+
+  loggedIn:
+    summary: ログイン完了
+    final: true
+    surface:
+      ui:
+        - redirect: /home
+
+scenarios:
+  - id: happy-path
+    summary: 正しい認証情報でログインできる
+    path: [editing, submitting, loggedIn]
+  - id: lock-after-5-failures
+    summary: 5 回失敗するとロックされる
+    given: { failedAttempts: 4 }
+    path: [editing, submitting, locked]
+
+questions:
+  - id: unlock
+    on: locked
+    ask: ロックの解除方法は？（時間経過 / メールリンク / 管理者）
+  - id: reset-count
+    on: loggedIn
+    ask: ログインに成功したら failedAttempts を 0 に戻すか？

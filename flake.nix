@@ -17,7 +17,7 @@
         devShells.default = pkgs.mkShell {
           # グローバルインストール（brew / npm i -g）に頼らない理由:
           # 版が flake.lock で固定され、手元・CI・worktree で同じものが入る。
-          # 言語は TypeScript を暫定採用（docs/architecture.md）。Phase 0 で確定したら見直す。
+          # TypeScript + Effect を採用（docs/decisions/0003-adopt-effect-ts.md）。
           packages = [
             pkgs.nodejs_22
             pkgs.pnpm

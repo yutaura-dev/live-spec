@@ -1,6 +1,6 @@
 > **Stability**: 🌊 living
 > **最終更新**: 2026-11-25
-> **直近の変更 ADR**: なし（初版）
+> **直近の変更 ADR**: [ADR-0004](decisions/0004-spec-format-typescript-dsl.md)
 
 # Architecture: live-spec
 
@@ -14,7 +14,7 @@
             AI エージェント（Claude Code など）
                     │ 書く / CLI・MCP で検査する
                     ▼
-        ┌──────── 正本（構造化データ, git 管理）────────┐
+        ┌──── 正本（*.spec.ts → 評価して正規化モデル）────┐
         │  状態 / 遷移 / サーフェス / シナリオ / 未決事項  │
         └──────────────────────────────────────┘
           │            │             │            │
@@ -28,8 +28,9 @@
 
 | 領域 | 採用技術 | 採用理由 / 関連 ADR |
 |------|----------|---------------------|
-| 正本のフォーマット | TBD（Phase 0 で決める。候補は YAML + JSON Schema、TS DSL） | [ADR-0002](decisions/0002-structured-source-of-truth.md) で「構造化データであること」だけを決めている |
-| 言語 | TypeScript（暫定） | ビューアが Web で、XState のエコシステムとも連携しやすい。Phase 0 で確定する |
+| 正本のフォーマット | TypeScript DSL（`*.spec.ts`）。評価したものを正規化モデルにする | [ADR-0004](decisions/0004-spec-format-typescript-dsl.md) |
+| 言語 / 基盤 | TypeScript + Effect（v4 系） | [ADR-0003](decisions/0003-adopt-effect-ts.md) |
+| 正本のモデル定義 | `effect/Schema` | 型、検証、JSON Schema を 1 つの定義から導く（[ADR-0003](decisions/0003-adopt-effect-ts.md)） |
 | ビューア | TBD | |
 | 開発環境 | nix flake + direnv | `flake.lock` で版を固定し、手元、CI、worktree で同じ環境にする |
 
@@ -47,13 +48,15 @@
 ## 主要な設計判断
 
 - [ADR-0001: アーキテクチャ判断の記録方式の採用](decisions/0001-record-architecture-decisions.md)
-- [ADR-0002: 仕様の正本を構造化データにし、人向けの表示はすべて生成する](decisions/0002-structured-source-of-truth.md)（Proposed）
+- [ADR-0002: 仕様の正本を構造化データにし、人向けの表示はすべて生成する](decisions/0002-structured-source-of-truth.md)
+- [ADR-0003: 実装スタックに Effect（TypeScript）を採用する](decisions/0003-adopt-effect-ts.md)
+- [ADR-0004: 仕様の正本を TypeScript DSL で書く](decisions/0004-spec-format-typescript-dsl.md)
 
 ### 設計で押さえるポイント（調査から）
 
 ADR にするほどではないが、実装時に守りたい原則。根拠は [research/2026-11-prior-art.md](research/2026-11-prior-art.md) にある。
 
-- **シリアライズを決定的にする**: キーの順序と ID を安定させ、AI が書き直したときの差分を最小にする。差分レビューが成り立つための前提
+- **差分は正規化モデルで取る**: TS のテキスト差分ではなく、評価したモデルを比べる。モデルはキーの順序と ID を安定させて、決定的にシリアライズする
 - **意味のデータとレイアウトを分ける**: 座標は自動レイアウトに任せる。どうしても固定したい場合は別ファイルに置く
 - **自動生成するのは経路だけにする**: 各状態のアサーションと各遷移の操作は正本に明示的に書かせる。書かれていなければ lint で警告する
 - **パス爆発への対策を最初から入れる**: 最短経路、全遷移カバー、ランダムウォーク + shrink の生成戦略を選べるようにする
