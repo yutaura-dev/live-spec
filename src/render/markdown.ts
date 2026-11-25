@@ -77,10 +77,12 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...graph.states.filter((s) => s.terminal).map((s) => `  ${s.id} --> [*]`),
     "```",
     "",
+    ...glossarySection(spec),
     "## 操作",
     "",
     ...summarizeActions(spec, graph).flatMap((a) => [
       ...actionSection(a),
+      ...((spec.evidence[a.name] ?? []).length === 0 ? [] : [`- **根拠**: ${spec.evidence[a.name]!.map(formatEvidence).join("、")}`]),
       ...graph.questions.filter((q) => q.action === a.name).map((q) => `- **未決**: ${q.ask}`),
       "",
     ]),
@@ -134,6 +136,26 @@ const actionSection = (a: ActionSummary): Array<string> => {
         ]),
     ...(effect === "" ? [] : [`- **結果**: ${effect}`]),
   ];
+};
+
+// 根拠の先頭（空白か「（」まで）をコードの場所としてコード書式にし、残りは補足として続ける。
+export const splitEvidence = (text: string): { readonly path: string; readonly rest: string } => {
+  const m = /^(\S+?)((?:（|\s).*)?$/.exec(text);
+  return { path: m?.[1] ?? text, rest: m?.[2] ?? "" };
+};
+
+const formatEvidence = (text: string) => {
+  const { path, rest } = splitEvidence(text);
+  return `\`${path}\`${rest}`;
+};
+
+const glossarySection = (spec: Spec): Array<string> => {
+  const fields = Object.entries(spec.fieldDocs).map(([field, doc]) => {
+    const values = spec.fields[field];
+    return `- **${field}**（項目）: ${doc}${values === undefined ? "" : `。値: ${values.map(String).join(" / ")}`}`;
+  });
+  const terms = Object.entries(spec.glossary).map(([term, doc]) => `- **${term}**: ${doc}`);
+  return fields.length + terms.length === 0 ? [] : ["## 用語", "", ...fields, ...terms, ""];
 };
 
 export const questionTarget = (spec: Spec, q: Graph["questions"][number], labelOf: (id: string) => string) =>

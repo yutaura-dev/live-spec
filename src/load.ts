@@ -37,11 +37,14 @@ export interface Spec {
   readonly questions: ReadonlyArray<Question>;
   readonly links: ReadonlyArray<Link>;
   readonly docs: Readonly<Record<string, string>>;
+  readonly fieldDocs: Readonly<Record<string, string>>;
+  readonly evidence: Readonly<Record<string, ReadonlyArray<string>>>;
+  readonly glossary: Readonly<Record<string, string>>;
   readonly fields: Readonly<Record<string, ReadonlyArray<FieldValue>>>;
   readonly stateDoc: string | null;
 }
 
-const RESERVED = new Set(["initial", "actors", "invariants", "inputs", "surface", "scenarios", "questions", "links"]);
+const RESERVED = new Set(["initial", "actors", "invariants", "inputs", "surface", "scenarios", "questions", "links", "glossary"]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
   typeof u === "object" && u !== null && !Array.isArray(u);
@@ -78,6 +81,11 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
       ? Object.entries(mod.scenarios).filter((e): e is [string, Array<ScenarioStep>] => Array.isArray(e[1]))
       : [],
     docs: info?.docs ?? {},
+    fieldDocs: info?.fieldDocs ?? {},
+    evidence: info?.evidence ?? {},
+    glossary: isRecord(mod.glossary)
+      ? Object.fromEntries(Object.entries(mod.glossary).filter((e): e is [string, string] => typeof e[1] === "string"))
+      : {},
     fields: info?.fields ?? {},
     stateDoc: info?.stateDoc ?? null,
   };

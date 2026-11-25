@@ -13,6 +13,11 @@ type Client =
 
 export const initial: Server = { status: "起動中" };
 
+export const glossary = {
+  "DNS リバインディング": "外部のサイトが自分のドメイン名を 127.0.0.1 に向け直し、ブラウザ経由でローカルのサーバの内容を読み取る攻撃",
+  SSE: "Server-Sent Events。サーバからブラウザへ通知を送り続ける仕組み。再読み込みの通知に使う",
+};
+
 export const actors: Record<string, Client> = {
   CLI: { kind: "cli" },
   "127.0.0.1 で開いたブラウザ": { kind: "browser", host: "127.0.0.1" },

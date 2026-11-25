@@ -4,7 +4,7 @@ import type { SurfaceNode } from "../surface.ts";
 import { ANY } from "./collapse.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
-import { describeFinding, describeStep, formatEffect, questionTarget } from "./markdown.ts";
+import { describeFinding, describeStep, formatEffect, questionTarget, splitEvidence } from "./markdown.ts";
 import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
 import { surfaceToHtml } from "./wireframe.ts";
 
@@ -195,6 +195,7 @@ const renderPage = async (
     questions: Object.fromEntries(
       graph.states.map((s) => [s.id, graph.questions.filter((q) => q.states.includes(s.id)).map((q) => q.ask)]),
     ),
+    terms: Object.fromEntries(graph.states.map((s) => [s.id, termsOf(s.id)])),
     scenarios: Object.fromEntries(
       graph.scenarios.map((s) => [s.name, s.steps.filter((st) => st.ok).map((st) => ({ from: st.from, to: st.to, action: st.action }))]),
     ),
@@ -224,7 +225,15 @@ const renderPage = async (
     });
   const wl = graph.surfaces.length > 0 ? await layout(graph, { nodeSize: WIREFLOW_NODE }) : null;
   const questioned = new Set(graph.questions.flatMap((q) => q.states));
+  // ノードにカーソルを合わせたとき、状態の名前に含まれる用語の説明を出す（名前だけでは意味が伝わらないことがあるため）。
+  // データ（data）を組み立てる時点でも使うので、巻き上げられる関数宣言にしている。
+  function termsOf(id: string) {
+    return labelOf(id)
+      .split(" · ")
+      .flatMap((part) => (spec.glossary[part] === undefined ? [] : [`${part}: ${spec.glossary[part]}`]));
+  }
   const flags = (id: string) => ({
+    terms: termsOf(id),
     initial: id === initial?.id,
     terminal: terminal.has(id),
     violation: violating.has(id),
@@ -280,10 +289,11 @@ const renderPage = async (
     </div>`
     }
   </section>
+  ${glossaryHtml(spec)}
   <section class="actions">
     <h2>操作</h2>
     <div class="cards">
-      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name))).join("\n      ")}
+      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), spec.evidence[a.name] ?? [])).join("\n      ")}
     </div>
   </section>
   ${connections}
@@ -333,6 +343,7 @@ export const renderErrorHtml = (name: string, error: unknown): string => {
 };
 
 interface NodeFlags {
+  readonly terms: ReadonlyArray<string>;
   readonly initial: boolean;
   readonly terminal: boolean;
   readonly violation: boolean;
@@ -347,6 +358,17 @@ const diagramSvg = (name: string, l: Layout, markerId: string, node: (n: LaidOut
         ${l.nodes.map(node).join("\n        ")}
         </g>
       </svg>`;
+
+const glossaryHtml = (spec: Spec) => {
+  const fields = Object.entries(spec.fieldDocs).map(([field, doc]) => {
+    const values = spec.fields[field];
+    return `<dt>${esc(field)} <span class="kind">項目</span></dt><dd>${esc(doc)}${values === undefined ? "" : `<span class="sub">値: ${esc(values.map(String).join(" / "))}</span>`}</dd>`;
+  });
+  const terms = Object.entries(spec.glossary).map(([term, doc]) => `<dt>${esc(term)}</dt><dd>${esc(doc)}</dd>`);
+  return fields.length + terms.length === 0
+    ? ""
+    : `<section class="glossary"><h2>用語</h2><dl>${[...fields, ...terms].join("")}</dl></section>`;
+};
 
 const nodeClass = (f: NodeFlags, extra = "") =>
   ["node", f.initial ? "initial" : "", f.terminal ? "terminal" : "", f.violation ? "violation" : "", f.question ? "has-question" : "", extra]
@@ -369,7 +391,7 @@ const anyNodeSvg = (n: LaidOutNode) =>
 const nodeSvg = (n: LaidOutNode, f: NodeFlags, markerId: string) => {
   if (n.id === ANY) return anyNodeSvg(n);
   const cy = n.y + n.height / 2;
-  return `${f.initial ? startMarker(n, cy, markerId) : ""}<g class="${nodeClass(f)}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terminal ? terminalRect(n) : ""}<text x="${n.x + n.width / 2}" y="${cy}">${esc(n.label)}</text>${questionMark(n, f)}</g>`;
+  return `${f.initial ? startMarker(n, cy, markerId) : ""}<g class="${nodeClass(f)}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terms.length === 0 ? "" : `<title>${esc(f.terms.join("\n"))}</title>`}${f.terminal ? terminalRect(n) : ""}<text x="${n.x + n.width / 2}" y="${cy}">${esc(n.label)}</text>${questionMark(n, f)}</g>`;
 };
 
 // サムネイルを SVG の foreignObject に入れる理由: パネルと同じ HTML のワイヤーフレームを、
@@ -398,7 +420,12 @@ const edgeSvg = (e: LaidOutEdge, markerId: string) => {
   return `<g class="edge" data-action="${esc(e.action)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"><path d="${d}" marker-end="url(#${markerId})"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.action)}</text></g></g>`;
 };
 
-const actionCard = (a: ActionSummary, asks: ReadonlyArray<string>, links: ReadonlyArray<ProjectLink>) => {
+const actionCard = (
+  a: ActionSummary,
+  asks: ReadonlyArray<string>,
+  links: ReadonlyArray<ProjectLink>,
+  evidence: ReadonlyArray<string>,
+) => {
   const others =
     a.othersReasons.length === 0 ? "" : `<span class="muted">ほかの人は「${a.othersReasons.map(esc).join("」「")}」</span>`;
   const who =
@@ -425,6 +452,16 @@ const actionCard = (a: ActionSummary, asks: ReadonlyArray<string>, links: Readon
           <dt>できないとき</dt><dd>${whenNot}</dd>
           ${a.inputOutcomes.length === 0 ? "" : `<dt>入力ごとの結果</dt><dd><ul>${a.inputOutcomes.map((o) => `<li><span class="reason">${esc(o.input)}</span> ${o.transitions.length > 0 ? o.transitions.map((t) => `<span class="flow">${esc(formatTransition(t))}</span>`).join("") : `<span class="state">❌ ${esc(o.reasons.join("、"))}</span>`}</li>`).join("")}</ul></dd>`}
           ${effect === "" ? "" : `<dt>結果</dt><dd>${esc(effect)}</dd>`}
+          ${
+            evidence.length === 0
+              ? ""
+              : `<dt>根拠</dt><dd>${evidence
+                  .map((e) => {
+                    const { path, rest } = splitEvidence(e);
+                    return `<span class="ev"><code class="evidence">${esc(path)}</code>${esc(rest)}</span>`;
+                  })
+                  .join("")}</dd>`
+          }
           ${links.length === 0 ? "" : `<dt>つながり</dt><dd>${links.map((l) => `<span class="flow">→ ${objectLink(l.to)}${l.action === null ? "" : ` の ${esc(l.action)}`}</span>`).join("")}<span class="muted">${esc(links.map((l) => l.label).join(" / "))}</span></dd>`}
           ${asks.length === 0 ? "" : `<dt>未決</dt><dd><ul>${asks.map((q) => `<li class="ask">${esc(q)}</li>`).join("")}</ul></dd>`}
         </dl>
@@ -565,6 +602,12 @@ marker path{fill:var(--muted)}
 .rel-node:hover rect{stroke:var(--accent)}
 .any-node rect{fill:none;stroke:var(--muted);stroke-width:1.2;stroke-dasharray:4 3}
 .any-node text{fill:var(--muted);font-size:12px}
+.glossary dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}
+.glossary dt{font-weight:600}
+.glossary .kind{font-size:11px;color:var(--muted);font-weight:400;margin-left:4px}
+.glossary .sub{display:block;color:var(--muted);font-size:13px}
+.ev{display:block;font-size:13px}
+code.evidence{font-size:12px}
 .scenario-card{margin-bottom:16px}
 .storyboard{display:flex;gap:14px;overflow-x:auto;list-style:none;margin:0;padding:0 0 6px;counter-reset:step}
 .storyboard li{flex:0 0 220px;counter-increment:step}
@@ -643,6 +686,7 @@ const CLIENT = `
     if (s.terminal) panel.append(el("span", "tag", "終端"));
     s.violations.forEach(function (v) { panel.append(el("p", "violation", "⚠ 不変条件「" + v + "」を破っています")); });
     (page.questions[id] || []).forEach(function (q) { panel.append(el("p", "violation", "？ 未決: " + q)); });
+    (page.terms[id] || []).forEach(function (t) { panel.append(el("p", "sub", t)); });
     if (s.surfaces.length > 0) {
       panel.append(el("h3", null, "見える画面"));
       s.surfaces.forEach(function (g) {

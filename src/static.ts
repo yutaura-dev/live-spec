@@ -8,14 +8,21 @@ export interface StaticInfo {
   readonly docs: Readonly<Record<string, string>>;
   readonly fields: Readonly<Record<string, ReadonlyArray<FieldValue>>>;
   readonly stateDoc: string | null;
+  readonly fieldDocs: Readonly<Record<string, string>>;
+  readonly evidence: Readonly<Record<string, ReadonlyArray<string>>>;
 }
+
+const EVIDENCE = /^\s*根拠[:：]\s*(.+?)\s*$/;
 
 // TypeScript の型チェッカーではなく構文解析にとどめる理由:
 // TypeScript 7 の JS API は typescript/unstable/sync しかなく、まだ不安定。
 // 構文だけでも「同じファイルの type / interface に書かれたリテラル union」と JSDoc は読める。
 // import した型や型の別名をまたぐ解決が必要になったら、この関数だけを差し替える。
 export const analyze = (source: string): StaticInfo => {
-  const body = parse(source, { sourceType: "module", plugins: ["typescript"] }).program.body;
+  const file = parse(source, { sourceType: "module", plugins: ["typescript"] });
+  const body = file.program.body;
+  const comments = file.comments ?? [];
+  const evidence: Record<string, Array<string>> = {};
   const order: Array<string> = [];
   const docs: Record<string, string> = {};
   const types = new Map<string, { members: ReadonlyArray<t.TSTypeElement>; doc: string | null }>();
@@ -36,6 +43,15 @@ export const analyze = (source: string): StaticInfo => {
       if (node.type !== "ExportNamedDeclaration") continue;
       order.push(name);
       if (doc !== null) docs[name] = doc;
+      // 関数の範囲にある「// 根拠:」をその操作の根拠とする。spec とコードを突き合わせられるように、
+      // 書き起こした人が残した場所を仕様書にも出すため。
+      const found = comments
+        .filter((c) => c.type === "CommentLine" && c.start! >= decl.start! && c.end! <= decl.end!)
+        .flatMap((c) => {
+          const m = EVIDENCE.exec(c.value);
+          return m === null ? [] : [m[1]!];
+        });
+      if (found.length > 0) evidence[name] = found;
     }
   }
 
@@ -45,6 +61,8 @@ export const analyze = (source: string): StaticInfo => {
     docs,
     fields: stateType === undefined ? {} : fieldsOf(stateType.members),
     stateDoc: stateType?.doc ?? null,
+    fieldDocs: stateType === undefined ? {} : fieldDocsOf(stateType.members),
+    evidence,
   };
 };
 
@@ -69,6 +87,17 @@ const fieldsOf = (members: ReadonlyArray<t.TSTypeElement>): Record<string, Reado
     if (key !== null && values !== null) fields[key] = values;
   }
   return fields;
+};
+
+const fieldDocsOf = (members: ReadonlyArray<t.TSTypeElement>): Record<string, string> => {
+  const docs: Record<string, string> = {};
+  for (const m of members) {
+    if (m.type !== "TSPropertySignature") continue;
+    const key = m.key.type === "Identifier" ? m.key.name : m.key.type === "StringLiteral" ? m.key.value : null;
+    const doc = summaryOf(m.leadingComments);
+    if (key !== null && doc !== null) docs[key] = doc;
+  }
+  return docs;
 };
 
 const finiteValuesOf = (type: t.TSType): ReadonlyArray<FieldValue> | null => {

@@ -2,9 +2,20 @@ import { ensure, ui } from "../src/index.ts";
 
 /** ブログ記事。著者が書き、編集者がレビューして公開する。 */
 export type Article = {
+  /** 公開の段階 */
   status: "draft" | "inReview" | "published" | "archived";
+  /** トップページに固定しているか */
   pinned: boolean;
+  /** 書いた著者のユーザー ID（「自分の記事だけ」の判定に使う） */
   authorId: string;
+};
+
+export const glossary = {
+  draft: "著者が書いている途中。読者には見えない",
+  inReview: "編集者のレビューを待っている",
+  published: "読者に公開されている",
+  archived: "公開を終えて保管している。読者には見えない",
+  pinned: "トップページに固定されている",
 };
 
 type User = { id: string; role: "author" | "editor" | "admin" };
