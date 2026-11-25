@@ -1,8 +1,3 @@
-import { execFileSync } from "node:child_process";
-import { rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
-import { generateProject } from "./generate.ts";
-
 // 正規化モデル（--json の出力）のうち、差分に使う部分だけの型。古い形式（availability を 1 件ずつ並べたもの）も受け付ける。
 interface Model {
   readonly actors?: ReadonlyArray<{ readonly name: string }>;
@@ -13,6 +8,8 @@ interface Model {
   readonly availability: ReadonlyArray<FlatAvailability | CompactAvailability>;
   readonly findings: ReadonlyArray<Readonly<Record<string, unknown>>>;
   readonly surfaces?: ReadonlyArray<{ readonly state: string; readonly actor: string; readonly surface: unknown }>;
+  readonly scenarios?: ReadonlyArray<{ readonly name: string; readonly passed: boolean }>;
+  readonly questions?: ReadonlyArray<{ readonly ask: string }>;
 }
 
 interface FlatAvailability {
@@ -50,9 +47,15 @@ export interface ModelDiff {
   }>;
   readonly findings: { readonly added: ReadonlyArray<unknown>; readonly removed: ReadonlyArray<unknown> };
   readonly surfaces: ReadonlyArray<{ readonly state: string; readonly actor: string }>;
+  readonly scenarios: {
+    readonly added: ReadonlyArray<string>;
+    readonly removed: ReadonlyArray<string>;
+    readonly changed: ReadonlyArray<{ readonly name: string; readonly before: boolean; readonly after: boolean }>;
+  };
+  readonly questions: { readonly added: ReadonlyArray<string>; readonly removed: ReadonlyArray<string> };
 }
 
-const EMPTY: Model = { states: [], transitions: [], availability: [], findings: [], surfaces: [] };
+export const EMPTY_MODEL: Model = { states: [], transitions: [], availability: [], findings: [], surfaces: [] };
 
 // 状態 ID（s0, s1…）ではなくラベルで比べる理由: ID は幅優先探索で見つけた順に振られるので、
 // 状態が 1 つ増えるだけで後ろの ID がずれ、何も変わっていない状態まで「変わった」ことになるため。
@@ -108,23 +111,47 @@ export const diffModels = (beforeRaw: unknown, afterRaw: unknown): ModelDiff => 
     availability.push({ state, action, actor, input, before: old, after: cell });
   }
 
-  const findingKeys = (m: Model, l: (id: string | null) => string) =>
-    m.findings.map((f) => JSON.stringify(typeof f.state === "string" ? { ...f, state: l(f.state) } : f));
-  const fd = setDiff(findingKeys(before, lb), findingKeys(after, la));
+  // 最短の手順（path）を除いて突き合わせる理由: 違反そのものが同じでも、権限を変えると探索の順が変わり、
+  // 手順に出てくる人が入れ替わることがある。それを「違反が消えて別の違反が出た」と見せると誤解を招く。
+  const findingKeyOf = (f: Readonly<Record<string, unknown>>, l: (id: string | null) => string) => {
+    const { path: _path, ...rest } = f;
+    return JSON.stringify(typeof rest.state === "string" ? { ...rest, state: l(rest.state) } : rest);
+  };
+  const findingsOf = (m: Model, l: (id: string | null) => string) =>
+    new Map(m.findings.map((f) => [findingKeyOf(f, l), typeof f.state === "string" ? { ...f, state: l(f.state) } : f]));
+  const fb = findingsOf(before, lb);
+  const fa = findingsOf(after, la);
+  const fd = setDiff([...fb.keys()], [...fa.keys()]);
 
   const surfacesOf = (m: Model, l: (id: string | null) => string) =>
     new Map((m.surfaces ?? []).map((s) => [JSON.stringify([l(s.state), s.actor]), JSON.stringify(s.surface)]));
   const sb = surfacesOf(before, lb);
   const sa = surfacesOf(after, la);
   const surfaces: Array<ModelDiff["surfaces"][number]> = [];
+  const afterLabels = new Set(after.states.map((s) => s.label));
   for (const key of new Set([...sb.keys(), ...sa.keys()])) {
     if (sb.get(key) === sa.get(key)) continue;
     const [state, actor] = JSON.parse(key) as [string, string];
+    // 消えた状態の画面は出さない（状態ごと消えたことは「状態」の差分と図でわかる）。増えた状態の画面は、レビューで見たいので出す。
+    if (!afterLabels.has(state)) continue;
     surfaces.push({ state, actor });
   }
 
   const actionNames = (m: Model) => (m.actions ?? []).map((a) => (typeof a === "string" ? a : a.name));
+  const scenarioNames = (m: Model) => (m.scenarios ?? []).map((s) => s.name);
+  const passedOf = (m: Model, name: string) => m.scenarios?.find((s) => s.name === name)?.passed;
+  const sd = setDiff(scenarioNames(before), scenarioNames(after));
   return {
+    scenarios: {
+      ...sd,
+      changed: scenarioNames(after)
+        .filter((n) => scenarioNames(before).includes(n) && passedOf(before, n) !== passedOf(after, n))
+        .map((name) => ({ name, before: passedOf(before, name) ?? false, after: passedOf(after, name) ?? false })),
+    },
+    questions: setDiff(
+      (before.questions ?? []).map((q) => q.ask),
+      (after.questions ?? []).map((q) => q.ask),
+    ),
     actions: setDiff(actionNames(before), actionNames(after)),
     states: setDiff(
       before.states.map((s) => s.label),
@@ -132,26 +159,74 @@ export const diffModels = (beforeRaw: unknown, afterRaw: unknown): ModelDiff => 
     ),
     transitions: setDiff(transitionKeys(before, lb), transitionKeys(after, la)),
     availability,
-    findings: { added: fd.added.map((s) => JSON.parse(s) as unknown), removed: fd.removed.map((s) => JSON.parse(s) as unknown) },
+    findings: { added: fd.added.map((k) => fa.get(k) as unknown), removed: fd.removed.map((k) => fb.get(k) as unknown) },
     surfaces,
   };
 };
 
-const describeFinding = (f: unknown) => {
+const isStep = (v: unknown): v is { readonly action: string; readonly actor: string } =>
+  typeof v === "object" && v !== null && "action" in v && "actor" in v;
+
+export const describeFinding = (f: unknown): string => {
   const { kind, ...rest } = f as Record<string, unknown>;
   return `${String(kind)}: ${Object.entries(rest)
-    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
+    .map(([k, v]) =>
+      Array.isArray(v) && v.every(isStep)
+        ? `${k}=${v.map((s) => `${s.action}（${s.actor}）`).join(" → ")}`
+        : `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`,
+    )
     .join(", ")}`;
 };
 
-export const renderDiff = (d: ModelDiff): string => {
-  const count =
-    d.actions.added.length + d.actions.removed.length + d.states.added.length + d.states.removed.length +
-    d.transitions.added.length + d.transitions.removed.length + d.availability.length +
-    d.findings.added.length + d.findings.removed.length + d.surfaces.length;
-  if (count === 0) return "振る舞いの変化はありません。\n";
+type AvailabilityChange = ModelDiff["availability"][number];
 
-  const lines = ["## 振る舞いの変化", ""];
+export interface ReasonOnlyGroup {
+  readonly action: string;
+  readonly before: string;
+  readonly after: string;
+  readonly count: number;
+  readonly cases: ReadonlyArray<AvailabilityChange>;
+}
+
+const enabledOf = (cell: string) => cell.startsWith("✅");
+
+// できない理由の文言だけが変わったものを、操作 × 変更前 × 変更後でまとめる。権限の条件を 1 つ変えると、
+// 「できない」のままの組み合わせの理由がまとめて書き換わり、本当に変わった行（できる／できないの入れ替わり）が埋もれるため。
+export const groupAvailability = (changes: ReadonlyArray<AvailabilityChange>) => {
+  const flipped = changes.filter((a) => enabledOf(a.before) || enabledOf(a.after));
+  const groups = new Map<string, Array<AvailabilityChange>>();
+  for (const a of changes.filter((x) => !enabledOf(x.before) && !enabledOf(x.after))) {
+    const key = JSON.stringify([a.action, a.before, a.after]);
+    groups.set(key, [...(groups.get(key) ?? []), a]);
+  }
+  const reasonOnly: Array<ReasonOnlyGroup> = [...groups.values()].map((cases) => ({
+    action: cases[0]!.action,
+    before: cases[0]!.before,
+    after: cases[0]!.after,
+    count: cases.length,
+    cases,
+  }));
+  return { flipped, reasonOnly };
+};
+
+export const whoOf = (a: AvailabilityChange): string => (a.input === null ? a.actor : `${a.actor}（${a.input}）`);
+
+export const isEmptyDiff = (d: ModelDiff): boolean =>
+  d.actions.added.length + d.actions.removed.length + d.states.added.length + d.states.removed.length +
+    d.transitions.added.length + d.transitions.removed.length + d.availability.length +
+    d.findings.added.length + d.findings.removed.length + d.surfaces.length +
+    d.scenarios.added.length + d.scenarios.removed.length + d.scenarios.changed.length +
+    d.questions.added.length + d.questions.removed.length ===
+  0;
+
+const passed = (p: boolean) => (p ? "通る" : "止まる");
+
+// heading を外から切り替えられるようにしている理由: 1 つの spec の差分では「## 振る舞いの変化」を見出しにし、
+// プロジェクト全体の差分ではドメインオブジェクトの見出しの下に節だけを並べたいため。
+export const renderDiff = (d: ModelDiff, options: { readonly heading?: boolean } = {}): string => {
+  if (isEmptyDiff(d)) return "振る舞いの変化はありません。\n";
+
+  const lines = options.heading === false ? [] : ["## 振る舞いの変化", ""];
   const addRemove = <A>(title: string, diff: { readonly added: ReadonlyArray<A>; readonly removed: ReadonlyArray<A> }, show: (x: A) => string) => {
     if (diff.added.length + diff.removed.length === 0) return;
     lines.push(`### ${title}`, "", ...diff.added.map((x) => `- ＋ ${show(x)}`), ...diff.removed.map((x) => `- － ${show(x)}`), "");
@@ -159,48 +234,37 @@ export const renderDiff = (d: ModelDiff): string => {
   addRemove("操作", d.actions, String);
   addRemove("状態", d.states, String);
   addRemove("遷移", d.transitions, String);
-  if (d.availability.length > 0) {
+  const g = groupAvailability(d.availability);
+  if (g.flipped.length > 0) {
     lines.push("### できる／できないの変化", "", "| 状態 | 操作 | 登場人物 | 変更前 | 変更後 |", "|---|---|---|---|---|");
-    for (const a of d.availability) {
-      const who = a.input === null ? a.actor : `${a.actor}（${a.input}）`;
-      lines.push(`| ${a.state} | ${a.action} | ${who} | ${a.before} | ${a.after} |`);
-    }
+    for (const a of g.flipped) lines.push(`| ${a.state} | ${a.action} | ${whoOf(a)} | ${a.before} | ${a.after} |`);
     lines.push("");
+  }
+  if (g.reasonOnly.length > 0) {
+    lines.push("### できない理由の言い方だけが変わったもの", "", "| 操作 | 変更前 | 変更後 | 件数 |", "|---|---|---|---|");
+    for (const r of g.reasonOnly) lines.push(`| ${r.action} | ${r.before} | ${r.after} | ${r.count} |`);
+    lines.push("");
+  }
+  if (d.scenarios.added.length + d.scenarios.removed.length + d.scenarios.changed.length > 0) {
+    lines.push(
+      "### シナリオ",
+      "",
+      ...d.scenarios.added.map((n) => `- ＋ ${n}`),
+      ...d.scenarios.removed.map((n) => `- － ${n}`),
+      ...d.scenarios.changed.map((c) => `- ${c.name}: ${passed(c.before)} → ${passed(c.after)}`),
+      "",
+    );
+  }
+  if (d.questions.added.length + d.questions.removed.length > 0) {
+    lines.push(
+      "### 未決事項",
+      "",
+      ...d.questions.added.map((q) => `- ＋ ${q}`),
+      ...d.questions.removed.map((q) => `- － ${q}（解決したか、取り下げた）`),
+      "",
+    );
   }
   addRemove("検査結果", d.findings, describeFinding);
   if (d.surfaces.length > 0) lines.push("### 画面が変わったところ", "", ...d.surfaces.map((s) => `- ${s.state}（${s.actor}）`), "");
   return lines.join("\n");
-};
-
-const modelOf = async (path: string): Promise<Model> => {
-  const out = await generateProject([path], "json");
-  if (out.kind !== "text") throw new Error("1 つの spec からは 1 つの JSON が生成されるはず");
-  return JSON.parse(out.content) as Model;
-};
-
-export const diffSpec = async (specPath: string, base = "HEAD"): Promise<string> => {
-  const spec = resolve(specPath);
-  const root = execFileSync("git", ["-C", dirname(spec), "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-  let baseSource: string | undefined;
-  try {
-    baseSource = execFileSync("git", ["-C", root, "show", `${base}:${relative(root, spec)}`], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-  } catch {
-    baseSource = undefined; // base には spec がない（新しく作った spec）
-  }
-  let before = EMPTY;
-  if (baseSource !== undefined) {
-    // 元の spec と同じディレクトリに置く理由: spec が相対パスで import しているファイルを、
-    // 変更前の spec からも同じように解決できるようにするため。
-    const tmp = join(dirname(spec), `.${basename(spec).replace(/\.ts$/, "")}.base.ts`);
-    writeFileSync(tmp, baseSource);
-    try {
-      before = await modelOf(tmp);
-    } finally {
-      rmSync(tmp, { force: true });
-    }
-  }
-  return renderDiff(diffModels(before, await modelOf(spec)));
 };

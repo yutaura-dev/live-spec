@@ -16,7 +16,7 @@ live-spec は npm パッケージ `@yutaura/live-spec`（`npm i -D @yutaura/live
 | Markdown を見る | `npx live-spec specs/`（spec が 1 つなら標準出力、複数なら `--out <ディレクトリ>`） |
 | HTML を書き出す | `npx live-spec specs/ --html --out spec.html` |
 | ブラウザで見ながら書く | `npx live-spec specs/ --serve` |
-| 変更前と比べる | `npx live-spec diff <file.spec.ts> [--base <リビジョン>]` |
+| 変更前と比べる | `npx live-spec diff specs/ [--base <リビジョン>] [--head <リビジョン>] [--html --out <file>]` |
 
 （live-spec リポジトリ自身の中では `pnpm spec ...`）
 

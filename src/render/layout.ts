@@ -65,12 +65,14 @@ const ELK = ElkModule.default;
 
 export interface LayoutOptions {
   readonly nodeSize?: { readonly width: number; readonly height: number };
+  /** false にすると「どの状態からでも」にまとめない（差分の図で、消えた遷移まで見せるため） */
+  readonly collapse?: boolean;
 }
 
 export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise<Layout> => {
   const elk = new ELK();
   // 自分自身に戻る遷移は描かない。ほぼすべての状態にあると、図が線で埋まって読めなくなるため。
-  const transitions = collapseTransitions(graph).filter((t) => t.from !== t.to);
+  const transitions = (options.collapse === false ? graph.transitions : collapseTransitions(graph)).filter((t) => t.from !== t.to);
   const hasAny = transitions.some((t) => t.from === ANY);
   const nodeList = [
     ...(hasAny ? [{ id: ANY, label: ANY_LABEL, initial: false }] : []),

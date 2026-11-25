@@ -8,25 +8,29 @@ description: live-spec の spec（*.spec.ts）の変更を、コードの差分�
 spec の差分（TypeScript の diff）をそのまま読ませても、人には振る舞いの変化が分からない。`ensure` の 1 行の変更が「閲覧者が公開できるようになった」という重大な変化だったりする。この skill では、変更前と変更後の spec をそれぞれ live-spec で**実行**し、結果を比べて「振る舞いの変化」として報告する。
 
 ## 差分を取る
-
-`live-spec diff` を使う。変更前の spec（git のリビジョン時点）と作業ツリーの spec を、どちらも実行して比べる。
+`live-spec diff` を使う。変更前と変更後の spec を、どちらも実行して比べる。ディレクトリを渡せば、ドメインオブジェクトごとに「追加・削除・変更・変化なし」を判定する。
 
 ```sh
 # 作業ツリーの spec と HEAD を比べる
-npx live-spec diff specs/order.spec.ts
+npx live-spec diff specs/
 
-# PR のように、分岐元と比べる
-npx live-spec diff specs/order.spec.ts --base "$(git merge-base origin/main HEAD)"
+# PR のように、ブランチ同士を比べる（--head を省くと作業ツリー）
+npx live-spec diff specs/ --base origin/main --head HEAD
+
+# 人に見せるなら HTML（重ね合わせた状態遷移図と、画面の変更前・変更後が並ぶ）
+npx live-spec diff specs/ --base origin/main --html --out spec-diff.html
 ```
 
 出力には次が含まれる。状態はラベルで比べる（ID は探索順で振り直されるため）。
 
+- ドメインオブジェクトごとのまとめの表
+- 変更前と変更後を重ねた状態遷移図（増えた・消えた・通れる人が変わった遷移）
 - 操作・状態・遷移の増減
-- 同じ「状態 × 操作 × 登場人物（× 入力）」で、できる／できない、または理由が変わったもの
-- 検査結果の増減
+- できる／できないが入れ替わったもの。できない理由の言い方だけが変わったものは、別にまとめて件数を出す
+- シナリオ・未決事項・検査結果の増減（検査結果は、最短の手順だけが変わったものは差分にしない）
 - 画面が変わった状態と登場人物
 
-spec が複数あるときは、変わった spec ごとに実行する（`git diff --name-only <base> -- '*.spec.ts'` で一覧を出す）。
+spec が相対パスで import している別ファイル（共通の型など）は、変更前の側でも作業ツリーの版が使われる。そのファイルを変えた PR では、差分を割り引いて読む。
 
 ## 読み方
 

@@ -129,7 +129,8 @@ npx live-spec specs/ --out docs/spec/                   # ドメインオブジ�
 npx live-spec specs/ --serve                            # ブラウザで見ながら書く（保存すると自動で再読み込み）
 npx live-spec specs/order.spec.ts                      # spec が 1 つなら Markdown を標準出力に出す
 npx live-spec specs/ --json                            # 正規化モデル（差分レビュー用）
-npx live-spec diff specs/order.spec.ts [--base <rev>]  # 変更前と比べて、振る舞いの変化を出す
+npx live-spec diff specs/ --base main --head feature   # ブランチ間で、仕様の振る舞いの変化を出す（--head を省くと作業ツリー）
+npx live-spec diff specs/ --base main --html --out diff.html  # 重ね合わせた状態遷移図と、画面の変更前・変更後を並べた HTML
 ```
 
 ## spec の書き方

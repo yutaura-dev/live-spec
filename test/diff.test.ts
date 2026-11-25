@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { diffModels, diffSpec, renderDiff } from "../src/diff.ts";
+import { diffModels, renderDiff } from "../src/diff.ts";
+import { diffProject } from "../src/project-diff.ts";
+import { renderDiffMarkdown } from "../src/render/diff-markdown.ts";
 
 const model = (overrides: Record<string, unknown> = {}) => ({
   name: "doc",
@@ -143,7 +145,7 @@ describe("live-spec diff: CLI のサブコマンド", () => {
   });
 });
 
-describe("diffSpec: spec の git のリビジョン時点と作業ツリーを比べる", { timeout: 60_000 }, () => {
+describe("diffProject: spec を 1 つだけ指定して、git のリビジョンと作業ツリーを比べる", { timeout: 60_000 }, () => {
   it("base にない spec は、すべてが増えたものとして比べる", async () => {
     const { mkdtempSync, writeFileSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
@@ -154,7 +156,7 @@ describe("diffSpec: spec の git のリビジョン時点と作業ツリーを�
     execFileSync("git", ["-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "base"], { cwd: dir });
     writeFileSync(join(dir, "doc.spec.ts"), 'export const initial = { s: "a" };\nexport const actors = { p: {} };\nexport function go() { return { s: "b" }; }\n');
 
-    const md = await diffSpec(join(dir, "doc.spec.ts"), "HEAD");
+    const md = renderDiffMarkdown(await diffProject({ cwd: dir, paths: ["doc.spec.ts"], base: "HEAD" }));
 
     expect(md).toContain("＋ go");
     expect(md).toContain("＋ a -go-> b");

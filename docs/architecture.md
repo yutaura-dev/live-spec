@@ -96,7 +96,7 @@ ADR にするほどではないが、実装時に守りたい原則。根拠は 
 - `exports` は `dist/index.js`（`ensure` / `ui` / `api` / `cli`）、`bin` は `dist/cli.js`（`live-spec`）
 - tsc の `rewriteRelativeImportExtensions` は型定義の `./foo.ts` を書き換えないので、`scripts/rewrite-dts-extensions.mjs` で `.js` にそろえる
 - このリポジトリの `specs/` と `examples/` は `../src/index.ts` から読み込む（`"live-spec"` は `dist/` を指すので、ビルドしないと動かないため）
-- サブコマンド: `live-spec diff`（spec のリビジョン間の振る舞いの差分）、`live-spec skills install`（同梱の skill を `.claude/skills/` にコピー）
+- サブコマンド: `live-spec diff`（2 つのリビジョン、またはリビジョンと作業ツリーの spec をドメインオブジェクトごとに比べる。`src/project-diff.ts` が git から spec を取り出して実行し、`src/diff.ts` が正規化モデルを比べ、`src/render/diff-markdown.ts` / `diff-html.ts` が描く。図は `src/render/union.ts` で変更前と変更後を状態のラベルで重ねる）、`live-spec skills install`（同梱の skill を `.claude/skills/` にコピー）
 
 ## 外部依存
 

@@ -494,7 +494,7 @@ const jsonForScript = (data: unknown) =>
     .replace(/\u{2028}/gu, "\\u2028")
     .replace(/\u{2029}/gu, "\\u2029");
 
-const CSS = `
+export const CSS = `
 :root{--bg:#f6f5f1;--fg:#1c1c1e;--muted:#6e6d72;--line:#d9d6cd;--card:#fff;--node:#fff;--accent:#2b59e0;--accent-weak:#e5ebfc;--ok:#1d7f48;--warn:#b3501a;--chip:#efeee9}
 @media (prefers-color-scheme:dark){:root{--bg:#141416;--fg:#ececee;--muted:#9a99a0;--line:#34343a;--card:#1c1c20;--node:#1f1f24;--accent:#7f9dff;--accent-weak:#232b45;--ok:#5cc98b;--warn:#f0a46b;--chip:#2a2a30}}
 *{box-sizing:border-box}

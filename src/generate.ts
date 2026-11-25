@@ -38,16 +38,23 @@ export const expandSpecPaths = (paths: ReadonlyArray<string>): Array<string> =>
 // spec から import しているファイル（共通の型など）は読み直されない点に注意。
 let importVersion = 0;
 
-const loadObject = async (path: string): Promise<DomainObject> => {
+export interface LoadObjectOptions {
+  readonly name?: string;
+  readonly source?: string;
+}
+
+// 名前とソースを外から渡せるようにしている理由: 差分を取るとき、git から取り出した spec を一時ファイルに書いて
+// 読み込むので、ファイル名からではなく元の spec の名前で扱う必要があるため。
+export const loadObject = async (path: string, options: LoadObjectOptions = {}): Promise<DomainObject> => {
   const url = pathToFileURL(resolve(path));
   url.search = `?v=${++importVersion}`;
   const mod = (await import(url.href)) as Record<string, unknown>;
-  const spec = loadSpec(specNameOf(path), mod, { source: await readFile(path, "utf8") });
+  const spec = loadSpec(options.name ?? specNameOf(path), mod, { source: options.source ?? (await readFile(path, "utf8")) });
   return { spec, graph: explore(spec) };
 };
 
 export const generateProject = async (paths: ReadonlyArray<string>, format: OutputFormat, title?: string): Promise<Output> => {
-  const objects = resolveLinks(await Promise.all(paths.map(loadObject)));
+  const objects = resolveLinks(await Promise.all(paths.map((p) => loadObject(p))));
   const names = objects.map((o) => o.spec.name);
   const duplicated = names.find((n, i) => names.indexOf(n) !== i);
   if (duplicated !== undefined) throw new Error(`ドメインオブジェクトの名前が重複しています: ${duplicated}（spec のファイル名を変えてください）`);

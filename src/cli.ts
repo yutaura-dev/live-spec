@@ -2,8 +2,10 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { expandSpecPaths, generateProject, writeProjectOutput, type OutputFormat } from "./generate.ts";
-import { diffSpec } from "./diff.ts";
+import { expandSpecPaths, generateProject, writeOutput, writeProjectOutput, type OutputFormat } from "./generate.ts";
+import { diffProject } from "./project-diff.ts";
+import { renderDiffHtml } from "./render/diff-html.ts";
+import { renderDiffMarkdown } from "./render/diff-markdown.ts";
 import { startServer } from "./serve.ts";
 import { installSkills } from "./skills.ts";
 import { watchSpec } from "./watch.ts";
@@ -69,28 +71,52 @@ const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // 終了コードを返す関数にしている理由: 失敗したときの終わり方（メッセージと終了コード）をテストで確かめるため。
 // 監視を始めた場合は、プロセスを終わらせないので null を返す。
-const DIFF_USAGE = "usage: live-spec diff <file.spec.ts> [--base <リビジョン>]（既定の base は HEAD）";
+const DIFF_USAGE =
+  "usage: live-spec diff <file.spec.ts | dir>... [--base <リビジョン>]（既定は HEAD） [--head <リビジョン>]（省くと作業ツリー） [--html | --json] [--out <file>]";
 
 const runDiff = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number> => {
   let parsed;
   try {
-    parsed = parseArgs({ args: [...argv], allowPositionals: true, options: { base: { type: "string" } } });
+    parsed = parseArgs({
+      args: [...argv],
+      allowPositionals: true,
+      options: { base: { type: "string" }, head: { type: "string" }, html: { type: "boolean" }, json: { type: "boolean" }, out: { type: "string" } },
+    });
   } catch (e) {
     io.stderr(`${messageOf(e)}\n${DIFF_USAGE}\n`);
     return 2;
   }
-  const path = parsed.positionals[0];
-  if (path === undefined) {
-    io.stderr(`比べる spec ファイルを指定してください\n${DIFF_USAGE}\n`);
+  if (parsed.positionals.length === 0) {
+    io.stderr(`比べる spec ファイル（またはディレクトリ）を指定してください\n${DIFF_USAGE}\n`);
     return 2;
   }
+  if (parsed.values.html && parsed.values.json) {
+    io.stderr(`--html と --json は同時に指定できません\n${DIFF_USAGE}\n`);
+    return 2;
+  }
+  let result;
   try {
-    io.stdout(await diffSpec(path, parsed.values.base ?? "HEAD"));
-    return 0;
+    result = await diffProject({
+      paths: parsed.positionals,
+      base: parsed.values.base ?? "HEAD",
+      ...(parsed.values.head === undefined ? {} : { head: parsed.values.head }),
+    });
   } catch (e) {
     io.stderr(`差分を取れませんでした: ${messageOf(e)}\n`);
     return 1;
   }
+  const output = parsed.values.html
+    ? await renderDiffHtml(result)
+    : parsed.values.json
+      ? JSON.stringify(
+          { base: result.base, head: result.head, objects: result.objects.map((o) => ({ name: o.name, status: o.status, diff: o.diff })) },
+          null,
+          2,
+        )
+      : renderDiffMarkdown(result);
+  if (parsed.values.out === undefined) io.stdout(output.endsWith("\n") ? output : output + "\n");
+  else await writeOutput(parsed.values.out, output);
+  return 0;
 };
 
 const SKILLS_USAGE = "usage: live-spec skills install [--dir <path>]（既定は .claude/skills） [--force]";
