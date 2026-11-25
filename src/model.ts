@@ -39,6 +39,12 @@ export const Finding = Schema.Union([
   }),
   Schema.Struct({ kind: Schema.Literal("invalid-return"), action: Schema.String, actor: Schema.String, state: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("state-limit"), maxStates: Schema.Number }),
+  Schema.Struct({
+    kind: Schema.Literal("invariant-violation"),
+    invariant: Schema.String,
+    state: Schema.String,
+    path: Schema.Array(Schema.Struct({ action: Schema.String, actor: Schema.String })),
+  }),
 ]);
 export type Finding = typeof Finding.Type;
 

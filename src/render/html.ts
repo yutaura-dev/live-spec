@@ -10,6 +10,7 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
   const labelOf = (id: string) => graph.states.find((s) => s.id === id)?.label ?? id;
   const initial = graph.states.find((s) => s.initial);
   const terminal = new Set(graph.states.filter((s) => s.terminal).map((s) => s.id));
+  const violating = new Set(graph.findings.flatMap((f) => (f.kind === "invariant-violation" ? [f.state] : [])));
   const data = { states: summarizeStates(spec, graph) };
 
   return `<!doctype html>
@@ -41,7 +42,7 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
         <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
         <g transform="translate(24 0)">
         ${l.edges.map(edgeSvg).join("\n        ")}
-        ${l.nodes.map((n) => nodeSvg(n, n.id === initial?.id, terminal.has(n.id))).join("\n        ")}
+        ${l.nodes.map((n) => nodeSvg(n, n.id === initial?.id, terminal.has(n.id), violating.has(n.id))).join("\n        ")}
         </g>
       </svg>
     </div>
@@ -69,8 +70,8 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
 `;
 };
 
-const nodeSvg = (n: LaidOutNode, initial: boolean, terminal: boolean) => {
-  const cls = ["node", initial ? "initial" : "", terminal ? "terminal" : ""].filter(Boolean).join(" ");
+const nodeSvg = (n: LaidOutNode, initial: boolean, terminal: boolean, violation: boolean) => {
+  const cls = ["node", initial ? "initial" : "", terminal ? "terminal" : "", violation ? "violation" : ""].filter(Boolean).join(" ");
   const cy = n.y + n.height / 2;
   const start = initial
     ? `<circle class="start" cx="${n.x - 18}" cy="${cy}" r="5"/><path class="start-line" d="M${n.x - 13},${cy} L${n.x - 2},${cy}" marker-end="url(#arrow)"/>`
@@ -160,6 +161,9 @@ marker path{fill:var(--muted)}
 .node rect{fill:var(--node);stroke:var(--fg);stroke-width:1.4}
 .node rect.inner{fill:none;stroke-width:1}
 .node:hover rect,.node:focus-visible rect{stroke:var(--accent)}
+.node.violation rect{stroke:var(--warn);stroke-width:2;stroke-dasharray:5 3}
+.panel .tag.warn{background:var(--warn);color:var(--bg)}
+.panel .violation{color:var(--warn);font-size:13px;margin:10px 0 0}
 .start{fill:var(--fg)}.start-line{stroke:var(--fg);stroke-width:1.4}
 .edge{cursor:pointer}
 .edge path{fill:none;stroke:var(--muted);stroke-width:1.3}
@@ -235,6 +239,7 @@ const CLIENT = `
     panel.append(el("p", "eyebrow", "状態"), el("h2", null, s.label));
     if (s.initial) panel.append(el("span", "tag", "初期状態"));
     if (s.terminal) panel.append(el("span", "tag", "終端"));
+    s.violations.forEach(function (v) { panel.append(el("p", "violation", "⚠ 不変条件「" + v + "」を破っています")); });
     panel.append(el("h3", null, "できること（" + s.can.length + "）"));
     panel.append(list(s.can, function (c) {
       var li = el("li");

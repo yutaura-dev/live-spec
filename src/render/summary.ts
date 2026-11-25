@@ -18,6 +18,7 @@ export interface StateSummary {
   readonly terminal: boolean;
   readonly can: ReadonlyArray<{ readonly action: string; readonly actors: ReadonlyArray<string>; readonly to: string }>;
   readonly cannot: ReadonlyArray<{ readonly action: string; readonly reason: string }>;
+  readonly violations: ReadonlyArray<string>;
 }
 
 const ERROR_REASON = "エラー";
@@ -78,7 +79,8 @@ export const summarizeStates = (spec: Spec, graph: Graph): ReadonlyArray<StateSu
         cannot.push({ action, reason: whenReason(graph, s.id, action, capableOf(graph, action)) });
       }
     }
-    return { id: s.id, label: s.label, initial: s.initial, terminal: s.terminal, can, cannot };
+    const violations = graph.findings.flatMap((f) => (f.kind === "invariant-violation" && f.state === s.id ? [f.invariant] : []));
+    return { id: s.id, label: s.label, initial: s.initial, terminal: s.terminal, can, cannot, violations };
   });
 };
 

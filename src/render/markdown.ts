@@ -63,6 +63,10 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       return `操作 ${f.action} が ${labelOf(f.state)} で ${f.actor} が実行したときに例外を投げた: ${f.message}`;
     case "invalid-return":
       return `操作 ${f.action} が ${labelOf(f.state)} で ${f.actor} が実行したときにオブジェクトを返さなかった`;
+    case "invariant-violation": {
+      const path = f.path.length === 0 ? "初期状態" : f.path.map((p) => `${p.action} (${p.actor})`).join(" → ");
+      return `不変条件「${f.invariant}」を ${labelOf(f.state)} で破る（${path}）`;
+    }
     case "state-limit":
       return `状態が ${f.maxStates} 個を超えたので探索を打ち切った（値が増え続ける項目がないか確認する）`;
   }

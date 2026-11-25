@@ -2,18 +2,20 @@ import { analyze, type FieldValue } from "./static.ts";
 
 export type State = Readonly<Record<string, unknown>>;
 export type ActionFn = (state: never, actor: never) => unknown;
+export type InvariantFn = (state: never) => unknown;
 
 export interface Spec {
   readonly name: string;
   readonly initial: State;
   readonly actors: ReadonlyArray<readonly [name: string, actor: unknown]>;
   readonly actions: ReadonlyArray<readonly [name: string, fn: ActionFn]>;
+  readonly invariants: ReadonlyArray<readonly [name: string, fn: InvariantFn]>;
   readonly docs: Readonly<Record<string, string>>;
   readonly fields: Readonly<Record<string, ReadonlyArray<FieldValue>>>;
   readonly stateDoc: string | null;
 }
 
-const RESERVED = new Set(["initial", "actors"]);
+const RESERVED = new Set(["initial", "actors", "invariants"]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
   typeof u === "object" && u !== null && !Array.isArray(u);
@@ -35,6 +37,9 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
       Object.entries(mod).filter((e): e is [string, ActionFn] => !RESERVED.has(e[0]) && typeof e[1] === "function"),
       info?.order,
     ),
+    invariants: isRecord(mod.invariants)
+      ? Object.entries(mod.invariants).filter((e): e is [string, InvariantFn] => typeof e[1] === "function")
+      : [],
     docs: info?.docs ?? {},
     fields: info?.fields ?? {},
     stateDoc: info?.stateDoc ?? null,

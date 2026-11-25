@@ -17,6 +17,13 @@ describe("loadSpec: spec ファイルの export を仕様として読み取る",
     expect(spec.actions.map(([name]) => name)).toEqual(["submit", "publish", "pin", "archive"]);
   });
 
+  it("invariants の関数を不変条件として読み、操作には含めない", () => {
+    const spec = loadSpec("x", { initial: {}, actors: {}, invariants: { 常に真: () => true }, act: () => ({}) });
+
+    expect(spec.invariants.map(([name]) => name)).toEqual(["常に真"]);
+    expect(spec.actions.map(([name]) => name)).toEqual(["act"]);
+  });
+
   it("initial がなければエラーにする", () => {
     expect(() => loadSpec("broken", { actors: {} })).toThrow("initial");
   });

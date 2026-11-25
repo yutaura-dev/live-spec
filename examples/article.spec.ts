@@ -11,6 +11,10 @@ type User = { id: string; role: "author" | "editor" | "admin" };
 
 export const initial: Article = { status: "draft", pinned: false, authorId: "alice" };
 
+export const invariants = {
+  固定できるのは公開中の記事だけ: (a: Article) => !a.pinned || a.status === "published",
+};
+
 export const actors: Record<string, User> = {
   著者alice: { id: "alice", role: "author" },
   別の著者bob: { id: "bob", role: "author" },

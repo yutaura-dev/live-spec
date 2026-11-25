@@ -73,7 +73,7 @@ ADR にするほどではないが、実装時に守りたい原則。根拠は 
 | `src/ensure.ts` | spec ファイルが使う唯一の API（`ensure`、`NotAllowed`） |
 | `src/load.ts` | spec モジュールの export から、`initial`、`actors`、操作を読み取る |
 | `src/static.ts` | spec のソースを構文解析し（`@babel/parser`）、export の順、JSDoc の説明文、`initial` の型が取りうる有限の値を得る |
-| `src/explore.ts` | 「状態 × 操作 × 登場人物」を実行して幅優先で探索し、遷移、できる・できない、検査結果を計算する |
+| `src/explore.ts` | 「状態 × 操作 × 登場人物」を実行して幅優先で探索し、遷移、できる・できない、検査結果（不変条件の違反と最短手順を含む）を計算する |
 | `src/model.ts` | 正規化モデル（Effect Schema）。差分と JSON 出力の基準 |
 | `src/render/summary.ts` | 操作ごと・状態ごとの要約を作る。「誰が」と「いつ」の理由を実行結果から分ける |
 | `src/render/markdown.ts` | Mermaid の状態遷移図と操作ごとの節を含む Markdown の仕様書を生成する |

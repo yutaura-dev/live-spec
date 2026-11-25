@@ -26,12 +26,24 @@ const run = (fn: Spec["actions"][number][1], state: State, actor: unknown): Outc
   }
 };
 
+// 例外を違反として扱う理由: 不変条件の関数が想定外の状態で落ちること自体が、
+// その状態が書き手の想定を外れている（＝不変条件を満たすと言えない）ことを示すため。
+const invariantHolds = (holds: Spec["invariants"][number][1], values: State): boolean => {
+  try {
+    return Boolean((holds as (s: unknown) => unknown)(structuredClone(values)));
+  } catch {
+    return false;
+  }
+};
+
 export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   const maxStates = options.maxStates ?? DEFAULT_MAX_STATES;
   const ids = new Map<string, string>();
   const valuesById = new Map<string, State>();
   const queue: Array<string> = [];
-  const register = (values: State): string | undefined => {
+  const parents = new Map<string, { from: string; action: string; actor: string }>();
+  const violations: Array<{ invariant: string; state: string }> = [];
+  const register = (values: State, via?: { from: string; action: string; actor: string }): string | undefined => {
     const key = JSON.stringify(values);
     const known = ids.get(key);
     if (known !== undefined) return known;
@@ -40,7 +52,17 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
     ids.set(key, id);
     valuesById.set(id, values);
     queue.push(id);
+    if (via !== undefined) parents.set(id, via);
+    for (const [invariant, holds] of spec.invariants) {
+      if (!invariantHolds(holds, values)) violations.push({ invariant, state: id });
+    }
     return id;
+  };
+  // 幅優先探索で最初に見つけた親をたどるので、得られる手順は初期状態からの最短手順になる。
+  const pathTo = (id: string) => {
+    const steps: Array<{ action: string; actor: string }> = [];
+    for (let p = parents.get(id); p !== undefined; p = parents.get(p.from)) steps.unshift({ action: p.action, actor: p.actor });
+    return steps;
   };
 
   const transitions = new Map<string, { from: string; to: string; action: string; actors: Array<string> }>();
@@ -64,7 +86,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
           availability.push({ state: from, action, actor, enabled: false, to: null, reason });
           continue;
         }
-        const to = register(outcome.next);
+        const to = register(outcome.next, { from, action, actor });
         if (to === undefined) {
           findings.push({ kind: "state-limit", maxStates });
           break explore;
@@ -88,6 +110,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
     terminal: processed.has(id) && !availability.some((a) => a.state === id && a.enabled),
   }));
 
+  for (const v of violations) findings.push({ kind: "invariant-violation", ...v, path: pathTo(v.state) });
   for (const [field, values] of Object.entries(spec.fields)) {
     for (const value of values) {
       if (!states.some((s) => s.values[field] === value)) findings.push({ kind: "unreachable-value", field, value });
