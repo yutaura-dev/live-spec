@@ -79,7 +79,9 @@ ADR にするほどではないが、実装時に守りたい原則。根拠は 
 | `src/render/markdown.ts` | Mermaid の状態遷移図と操作ごとの節を含む Markdown の仕様書を生成する |
 | `src/render/layout.ts` | ELK（`elkjs`）で状態遷移図の配置を計算する |
 | `src/render/html.ts` | 1 ファイルで完結する HTML の仕様書を生成する（SVG の図、状態ごとのパネル、操作カード） |
-| `src/cli.ts` | `pnpm spec <file.spec.ts> [--html \| --json]` |
+| `src/generate.ts` | spec ファイルを読み込んで（ESM のキャッシュを避けて毎回読み直す）、指定の形式で仕様書を生成する |
+| `src/watch.ts` | spec ファイルのあるディレクトリを監視し、保存のたびに生成し直す。失敗したら HTML ではエラーページを書く |
+| `src/cli.ts` | `pnpm spec <file.spec.ts> [--html \| --json] [--out <file>] [--watch]` |
 
 例は `examples/article.spec.ts` にある。
 

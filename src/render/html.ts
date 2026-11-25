@@ -70,6 +70,29 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
 `;
 };
 
+export const renderErrorHtml = (name: string, error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error);
+  return `<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(name)} — 生成エラー</title>
+<style>${CSS}
+.error{margin:40px;max-width:72ch}.error pre{white-space:pre-wrap;background:var(--card);border:1px solid var(--warn);border-radius:12px;padding:16px;color:var(--warn)}</style>
+</head>
+<body>
+<main class="error">
+  <p class="eyebrow">仕様書を生成できませんでした</p>
+  <h1>${esc(name)}</h1>
+  <pre>${esc(message)}</pre>
+  <p class="hint">spec ファイルを直して保存すると、自動で生成し直します。生成し直したら、このページを再読み込みしてください。</p>
+</main>
+</body>
+</html>
+`;
+};
+
 const nodeSvg = (n: LaidOutNode, initial: boolean, terminal: boolean, violation: boolean) => {
   const cls = ["node", initial ? "initial" : "", terminal ? "terminal" : "", violation ? "violation" : ""].filter(Boolean).join(" ");
   const cy = n.y + n.height / 2;

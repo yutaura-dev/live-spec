@@ -58,7 +58,8 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 
 - `pnpm test` / `pnpm typecheck`: 両方通ることを完了の条件にする
 - `pnpm spec examples/article.spec.ts > out/article.md`: Markdown の仕様書を生成する（`out/` は gitignore 対象）
-- `pnpm spec examples/article.spec.ts --html > out/article.html`: HTML の仕様書を生成する
+- `pnpm spec examples/article.spec.ts --html --out out/article.html`: HTML の仕様書を生成する
+- `pnpm spec examples/article.spec.ts --html --out out/article.html --watch`: spec を保存するたびに生成し直す（ブラウザは手動で再読み込み）
 
 ## 主要な設計判断（要点のみ）
 
