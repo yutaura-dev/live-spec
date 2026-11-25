@@ -155,13 +155,18 @@ const checkSurfaces = (
   const result: Array<Graph["surfaces"][number]> = [];
   for (const state of states) {
     for (const [actor, actorValue] of spec.actors) {
-      let node: SurfaceNode;
+      let node: SurfaceNode | null | undefined;
       try {
-        node = (surface as (s: unknown, a: unknown) => SurfaceNode)(structuredClone(valuesById.get(state)!), structuredClone(actorValue));
+        node = (surface as (s: unknown, a: unknown) => SurfaceNode | null | undefined)(
+          structuredClone(valuesById.get(state)!),
+          structuredClone(actorValue),
+        );
       } catch (e) {
         findings.push({ kind: "surface-error", state, actor, message: e instanceof Error ? e.message : String(e) });
         continue;
       }
+      // null は「この人に見える画面はない」（API を呼ばないワーカーなど）。記録も検査もしない。
+      if (node === null || node === undefined) continue;
       result.push({ state, actor, surface: node });
       const allowed = new Set(availability.filter((a) => a.state === state && a.actor === actor && a.enabled).map((a) => a.action));
       const buttons = buttonsOf(node).filter((b) => b.action !== undefined);
@@ -169,6 +174,9 @@ const checkSurfaces = (
       for (const action of shown) {
         if (!allowed.has(action)) findings.push({ kind: "surface-action-not-allowed", state, actor, action });
       }
+      // ボタンの欠落を確かめるのは UI の画面（ui.screen）だけ。API の応答や CLI の出力には
+      // ボタンという概念がないので、操作に対応する要素がなくても欠落とは言えない。
+      if (node.kind !== "screen") continue;
       for (const action of allowed) {
         if (!shown.has(action)) findings.push({ kind: "surface-action-missing", state, actor, action });
       }

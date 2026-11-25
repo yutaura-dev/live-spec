@@ -64,6 +64,23 @@ describe("explore: 状態 × 登場人物ごとにサーフェスを計算する
     expect(explore(s).findings).toContainEqual({ kind: "surface-action-missing", state: draft, actor: "editor", action: "publish" });
   });
 
+  it("API や CLI の出力（ui.screen 以外）には、ボタンがないことを検査しない", () => {
+    const s = loadSpec("x", { ...Fixture, surface: () => api.response(200, { ok: true }) });
+
+    expect(explore(s).findings.filter((f) => f.kind === "surface-action-missing")).toEqual([]);
+  });
+
+  it("surface が null を返した登場人物には、画面がないものとして記録も検査もしない", () => {
+    const s = loadSpec("x", {
+      ...Fixture,
+      surface: (_doc: unknown, user: { role: string }) => (user.role === "viewer" ? null : ui.screen("記事")),
+    });
+    const g = explore(s);
+
+    expect(g.surfaces.some((x) => x.actor === "viewer")).toBe(false);
+    expect(g.findings.filter((f) => f.kind.startsWith("surface-") && "actor" in f && f.actor === "viewer")).toEqual([]);
+  });
+
   it("surface 関数が例外を投げたら検出する", () => {
     const s = loadSpec("x", {
       ...Fixture,

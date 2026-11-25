@@ -12,7 +12,7 @@ live-spec では、人は markdown を読みません。図と画面と一覧を
 
 ## 例
 
-[examples/minimal.spec.ts](examples/minimal.spec.ts) の全文です。登場人物を増やし、不変条件や入力の例、詳しい画面を加えた版が [examples/article.spec.ts](examples/article.spec.ts) にあります。
+[examples/minimal.spec.ts](examples/minimal.spec.ts) の全文です。登場人物を増やし、不変条件や入力の例、詳しい画面を加えた版が [examples/article.spec.ts](examples/article.spec.ts) にあります。API の例は [examples/job-api.spec.ts](examples/job-api.spec.ts) です（ワーカーを登場人物として扱い、`GET /jobs/{id}` の応答を状態ごとに示します）。
 
 ```ts
 import { ensure, ui } from "../src/index.ts";
@@ -112,7 +112,7 @@ spec ファイルは素の TypeScript です。export の名前で役割が決�
 | 上記以外の関数 | | 操作。`(状態, 登場人物, ...入力) => 次の状態`。できないときは `ensure(条件, "理由")` で止める |
 | `invariants` | | 不変条件。`{ 説明: (状態) => boolean }` |
 | `inputs` | | 3 つ目以降の引数の例。`{ 操作名: { 例の名前: [引数...] } }` |
-| `surface` | | 画面。`(状態, 登場人物) => ui.screen(...)`。ボタンには操作の関数を渡す |
+| `surface` | | 画面。`(状態, 登場人物) => ui.screen(...)`。ボタンには操作の関数を渡す。API なら `api.response(...)`、CLI なら `cli.output(...)` を返す。見える画面がない人には `null` |
 
 型と関数の JSDoc は、仕様書の見出しと説明に使われます。
 

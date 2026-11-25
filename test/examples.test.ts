@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { explore } from "../src/explore.ts";
 import { loadSpec } from "../src/load.ts";
+import * as JobApi from "../examples/job-api.spec.ts";
 import * as Minimal from "../examples/minimal.spec.ts";
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
@@ -9,6 +10,12 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), "u
 describe("examples: README に載せている例", () => {
   it("minimal.spec.ts は検査で問題が出ない", () => {
     const spec = loadSpec("minimal", Minimal, { source: source("../examples/minimal.spec.ts") });
+
+    expect(explore(spec).findings).toEqual([]);
+  });
+
+  it("job-api.spec.ts（API の例）は検査で問題が出ない", () => {
+    const spec = loadSpec("job-api", JobApi, { source: source("../examples/job-api.spec.ts") });
 
     expect(explore(spec).findings).toEqual([]);
   });

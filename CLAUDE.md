@@ -21,7 +21,8 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 | 操作 (action) | `(状態, 登場人物) => 次の状態` の関数。できないときは `ensure(条件, "理由")` で止める |
 | 不変条件 (invariant) | `export const invariants = { 説明: (state) => boolean }`。到達したすべての状態で成り立つべき条件。破ると、初期状態からの最短手順つきで検出される |
 | 入力の例 (inputs) | `export const inputs = { 操作名: { 例の名前: [3 つ目以降の引数...] } }`。3 つ以上の引数をとる操作に、探索で使う引数の例を与える |
-| サーフェス (surface) | `export function surface(state, actor)`。その状態でその人に見える画面を `ui.*`（API なら `api.*`、CLI なら `cli.*`）で返す。ボタンには操作の関数そのものを渡す（`ui.button("公開する", publish)`） |
+| サーフェス (surface) | `export function surface(state, actor)`。その状態でその人に見える画面を `ui.*`（API なら `api.*`、CLI なら `cli.*`）で返す。ボタンには操作の関数そのものを渡す（`ui.button("公開する", publish)`）。見える画面がない人には `null` を返す |
+| システムの登場人物 | ワーカーやバッチのように、クライアントではなくシステムが起こす遷移は、そのシステムを `actors` に入れて表す（`examples/job-api.spec.ts`） |
 | 登場人物 (actor) | 探索に使う具体的な人物。ロールに加えて「本人かどうか」も表す（`著者alice` / `別の著者bob`） |
 | 状態 (state) / 遷移 (transition) | 手で書かない。初期状態から操作を実行して計算する |
 | サーフェス (surface) | 状態ごとの「外から見た姿」。UI ならワイヤーフレーム、API ならリクエストとレスポンスの例、CLI ならターミナルの出力、データ基盤ならテーブルのサンプルやスキーマ |
