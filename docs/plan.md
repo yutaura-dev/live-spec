@@ -33,7 +33,7 @@ Phase 0 で正本のフォーマット（TS DSL、[ADR-0004](decisions/0004-spec
 - [x] 状態と項目の説明（用語集）、根拠の表示
 - [x] ルールの判断表（判断の関数と入力の例から表を作り、期待との違いを検出）
 - [x] npm パッケージ化（skill 同梱、`live-spec diff` / `live-spec skills install`）
-- [x] npm への公開（`live-spec`、MIT）
+- [x] npm への公開（`@yutaura/live-spec` 0.1.0、MIT。`live-spec` は既存の `livespec` と紛らわしいとして npm に拒否された）
 - [ ] 遷移の不変条件（`(before, after) => boolean`）。「終わったジョブは状態が変わらない」のような、遷移の前後を比べる性質は今の状態の不変条件では書けない
 
 ## MVP 定義
