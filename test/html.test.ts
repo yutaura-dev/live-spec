@@ -27,6 +27,10 @@ describe("renderHtml: 1 ファイルで完結する HTML の仕様書", () => {
     expect(html).toContain('location.hash');
   });
 
+  it("状態を選ぶと URL の hash に反映し、再読み込みしても選択が保たれるようにする", () => {
+    expect(html).toContain("history.replaceState");
+  });
+
   it("外部のファイルやスクリプトを読み込まない", () => {
     expect(html).not.toMatch(/(?:src|href)="(?:https?:)?\/\//);
   });

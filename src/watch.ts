@@ -5,8 +5,9 @@ import { renderErrorHtml } from "./render/html.ts";
 
 export interface WatchOptions {
   readonly path: string;
-  readonly out: string;
   readonly format: OutputFormat;
+  readonly out: string | null;
+  readonly onBuilt?: (output: string) => void;
 }
 
 // 保存後に少し待ってから生成する理由: エディタは 1 回の保存で複数の変更イベントを出すことが多く、
@@ -18,16 +19,22 @@ export const watchSpec = (options: WatchOptions, log: (message: string) => void 
   let timer: ReturnType<typeof setTimeout> | undefined;
   let queue = Promise.resolve();
 
+  const deliver = async (output: string) => {
+    if (options.out !== null) await writeOutput(options.out, output);
+    options.onBuilt?.(output);
+  };
+
   const rebuild = () => {
     queue = queue.then(async () => {
       const started = performance.now();
       try {
-        await writeOutput(options.out, await generate(path, options.format));
-        log(`✓ ${options.out} を生成しました（${Math.round(performance.now() - started)}ms）`);
+        await deliver(await generate(path, options.format));
+        const ms = Math.round(performance.now() - started);
+        log(options.out === null ? `✓ 生成しました（${ms}ms）` : `✓ ${options.out} を生成しました（${ms}ms）`);
       } catch (e) {
         log(`✗ 生成に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
         // 失敗しても監視は続ける。書きかけの spec が一時的に壊れているのはよくあることなので。
-        if (options.format === "html") await writeOutput(options.out, renderErrorHtml(specNameOf(path), e));
+        if (options.format === "html") await deliver(renderErrorHtml(specNameOf(path), e));
       }
     });
   };

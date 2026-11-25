@@ -33,11 +33,31 @@ describe("parseCliArgs: コマンドライン引数を解釈する", () => {
       format: "html",
       out: "out/a.html",
       watch: true,
+      serve: false,
+      port: 4747,
     });
   });
 
   it("出力先がなければ標準出力に書く（out は null）", () => {
-    expect(parseCliArgs(["a.spec.ts"])).toEqual({ path: "a.spec.ts", format: "markdown", out: null, watch: false });
+    expect(parseCliArgs(["a.spec.ts"])).toEqual({
+      path: "a.spec.ts",
+      format: "markdown",
+      out: null,
+      watch: false,
+      serve: false,
+      port: 4747,
+    });
+  });
+
+  it("--serve は HTML を監視しながら配信する（--out は不要）", () => {
+    expect(parseCliArgs(["a.spec.ts", "--serve", "--port", "5000"])).toEqual({
+      path: "a.spec.ts",
+      format: "html",
+      out: null,
+      watch: true,
+      serve: true,
+      port: 5000,
+    });
   });
 
   it("--watch には --out が必要", () => {

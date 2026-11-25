@@ -238,7 +238,10 @@ const CLIENT = `
   }
   function dimAll() { all(".node,.edge").forEach(function (n) { n.classList.add("is-dim"); }); }
   function undim(n) { if (n) n.classList.remove("is-dim"); }
-  function reset() { clear(); panel.replaceChildren(); panel.hidden = true; }
+  function reset() {
+    clear(); panel.replaceChildren(); panel.hidden = true;
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+  }
 
   function list(items, render) {
     var ul = el("ul");
@@ -251,6 +254,8 @@ const CLIENT = `
     var s = data.states.find(function (x) { return x.id === id; });
     if (!s) return;
     clear(); dimAll();
+    // 選択を URL の hash に残す理由: --serve で自動再読み込みしたあとも、同じ状態を見続けられるようにするため。
+    history.replaceState(null, "", "#state-" + encodeURIComponent(id));
     var node = document.querySelector(".node" + attr("data-state", id));
     node.classList.add("is-selected"); undim(node);
     all(".edge" + attr("data-from", id)).forEach(function (e) {
