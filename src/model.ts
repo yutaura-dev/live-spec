@@ -70,6 +70,22 @@ export const Finding = Schema.Union([
 ]);
 export type Finding = typeof Finding.Type;
 
+// ensure を 1 つ外して探索し直した結果。caught: 外すと何か（不変条件・シナリオ・画面・実行時エラー）が気づく。
+// unguarded: 振る舞いは変わるのに何も気づかない（その条件の意図が、ほかのどこにも書かれていない）。
+// no-effect: 外しても振る舞いが変わらない（ほかの条件と重なっている）。
+export const EnsureCheck = Schema.Struct({
+  action: Schema.String,
+  reason: Schema.String,
+  line: Schema.NullOr(Schema.Number),
+  verdict: Schema.Literals(["caught", "unguarded", "no-effect"]),
+  caughtBy: Schema.Array(Schema.String),
+  effects: Schema.Array(
+    Schema.Struct({ state: Schema.String, action: Schema.String, actor: Schema.String, input: Schema.NullOr(Schema.String), after: Schema.String }),
+  ),
+  newStates: Schema.Array(Schema.String),
+});
+export type EnsureCheck = typeof EnsureCheck.Type;
+
 export const Graph = Schema.Struct({
   states: Schema.Array(ExploredState),
   transitions: Schema.Array(Transition),
@@ -96,6 +112,7 @@ export const Graph = Schema.Struct({
       states: Schema.Array(Schema.String),
     }),
   ),
+  ensures: Schema.optionalKey(Schema.Array(EnsureCheck)),
   scenarios: Schema.Array(
     Schema.Struct({
       name: Schema.String,
@@ -109,6 +126,7 @@ export const Graph = Schema.Struct({
           to: Schema.NullOr(Schema.String),
           ok: Schema.Boolean,
           reason: Schema.NullOr(Schema.String),
+          denied: Schema.Boolean,
         }),
       ),
     }),

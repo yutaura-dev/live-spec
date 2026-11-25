@@ -93,6 +93,10 @@ export const scenarios = {
     { do: submit, by: "著者alice" },
     { do: publish, by: "編集者eve", expect: { status: "published" } },
   ],
+  理由を書かずには差し戻せない: [
+    { do: submit, by: "著者alice" },
+    { do: reject, by: "編集者eve", input: "理由が空", denied: "差し戻し理由が必要" },
+  ],
   差し戻されて書き直す: [
     { do: submit, by: "著者alice" },
     { do: reject, by: "編集者eve", input: "理由を書いた" },

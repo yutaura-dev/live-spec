@@ -10,6 +10,12 @@ export interface StaticInfo {
   readonly stateDoc: string | null;
   readonly fieldDocs: Readonly<Record<string, string>>;
   readonly evidence: Readonly<Record<string, ReadonlyArray<string>>>;
+  readonly ensures: Readonly<Record<string, ReadonlyArray<EnsureCall>>>;
+}
+
+export interface EnsureCall {
+  readonly reason: string;
+  readonly line: number;
 }
 
 const EVIDENCE = /^\s*根拠[:：]\s*(.+?)\s*$/;
@@ -23,6 +29,7 @@ export const analyze = (source: string): StaticInfo => {
   const body = file.program.body;
   const comments = file.comments ?? [];
   const evidence: Record<string, Array<string>> = {};
+  const ensures: Record<string, ReadonlyArray<EnsureCall>> = {};
   const order: Array<string> = [];
   const docs: Record<string, string> = {};
   const types = new Map<string, { members: ReadonlyArray<t.TSTypeElement>; doc: string | null }>();
@@ -52,6 +59,8 @@ export const analyze = (source: string): StaticInfo => {
           return m === null ? [] : [m[1]!];
         });
       if (found.length > 0) evidence[name] = found;
+      const calls = ensureCallsIn(decl);
+      if (calls.length > 0) ensures[name] = calls;
     }
   }
 
@@ -63,7 +72,35 @@ export const analyze = (source: string): StaticInfo => {
     stateDoc: stateType?.doc ?? null,
     fieldDocs: stateType === undefined ? {} : fieldDocsOf(stateType.members),
     evidence,
+    ensures,
   };
+};
+
+// 理由が文字列リテラル（または式を含まないテンプレート）の ensure だけを集める。
+// 理由を式で組み立てている ensure は、どの理由のときに外せばよいかを実行前に決められないため。
+const ensureCallsIn = (root: t.Node): Array<EnsureCall> => {
+  const calls: Array<EnsureCall> = [];
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (typeof node !== "object" || node === null || !("type" in node)) return;
+    const n = node as t.Node;
+    if (n.type === "CallExpression" && n.callee.type === "Identifier" && n.callee.name === "ensure") {
+      const arg = n.arguments[1];
+      const reason =
+        arg?.type === "StringLiteral"
+          ? arg.value
+          : arg?.type === "TemplateLiteral" && arg.expressions.length === 0
+            ? arg.quasis.map((q) => q.value.cooked ?? "").join("")
+            : null;
+      if (reason !== null && n.loc != null) calls.push({ reason, line: n.loc.start.line });
+    }
+    for (const [key, value] of Object.entries(n)) {
+      if (key === "loc" || key.endsWith("Comments")) continue;
+      visit(value);
+    }
+  };
+  visit(root);
+  return calls;
 };
 
 const valueNamesOf = (decl: t.Node): ReadonlyArray<readonly [name: string, typeName: string | null]> => {

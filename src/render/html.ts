@@ -1,3 +1,5 @@
+import type { EnsureCheck } from "../model.ts";
+import { describeEnsure, UNGUARDED_LEAD, UNGUARDED_TITLE, unguardedEnsures } from "./ensures.ts";
 import type { Spec } from "../load.ts";
 import type { Graph } from "../model.ts";
 import type { SurfaceNode } from "../surface.ts";
@@ -207,7 +209,9 @@ const renderPage = async (
           .map((st) => {
             const shown = st.to === null ? undefined : graph.surfaces.find((x) => x.state === st.to && x.actor === st.actor);
             return `<li class="${st.ok ? "" : "failed"}"><p class="step">${esc(describeStep(spec, st))}</p>${
-              st.ok
+              st.ok && st.denied
+                ? `<p class="flow">断られる（${esc(st.reason ?? "")}）</p>`
+                : st.ok
                 ? `<p class="flow">${esc(labelOf(st.from ?? ""))} → ${esc(labelOf(st.to ?? ""))}</p>`
                 : `<p class="reason">❌ ${esc(st.reason ?? "")}</p>`
             }${shown === undefined ? "" : `<div class="frame"><div class="frame-inner">${surfaceToHtml(shown.surface as SurfaceNode, notAllowed(st.to!, [st.actor]))}</div></div>`}</li>`;
@@ -269,6 +273,17 @@ const renderPage = async (
       .join("")}</ol>
   </section>`
   }
+  ${
+    unguardedEnsures(graph.ensures).length === 0
+      ? ""
+      : `<section class="questions unguarded" aria-label="${UNGUARDED_TITLE}">
+    <h2>${UNGUARDED_TITLE}</h2>
+    <p class="note">${UNGUARDED_LEAD}</p>
+    <ol>${unguardedEnsures(graph.ensures)
+      .map((e) => `<li><code>${esc(e.action)}</code> の<span class="ask">${esc(describeEnsure(e).replace(/^⚠ /, ""))}</span></li>`)
+      .join("")}</ol>
+  </section>`
+  }
   <section class="board" aria-label="状態遷移図" data-mode="states">
     <p class="hint">状態をクリックすると、その状態でできること・できないことを表示します。矢印のラベルや操作カードをクリックすると、その操作の遷移を強調します。Esc で解除。</p>
     ${
@@ -294,7 +309,7 @@ const renderPage = async (
   <section class="actions">
     <h2>操作</h2>
     <div class="cards">
-      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), spec.evidence[a.name] ?? [])).join("\n      ")}
+      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), spec.evidence[a.name] ?? [], (graph.ensures ?? []).filter((e) => e.action === a.name))).join("\n      ")}
     </div>
   </section>
   ${
@@ -442,6 +457,7 @@ const actionCard = (
   asks: ReadonlyArray<string>,
   links: ReadonlyArray<ProjectLink>,
   evidence: ReadonlyArray<string>,
+  ensures: ReadonlyArray<EnsureCheck>,
 ) => {
   const others =
     a.othersReasons.length === 0 ? "" : `<span class="muted">ほかの人は「${a.othersReasons.map(esc).join("」「")}」</span>`;
@@ -480,6 +496,11 @@ const actionCard = (
                   .join("")}</dd>`
           }
           ${links.length === 0 ? "" : `<dt>つながり</dt><dd>${links.map((l) => `<span class="flow">→ ${objectLink(l.to)}${l.action === null ? "" : ` の ${esc(l.action)}`}</span>`).join("")}<span class="muted">${esc(links.map((l) => l.label).join(" / "))}</span></dd>`}
+          ${
+            ensures.length === 0
+              ? ""
+              : `<dt>条件の効き目</dt><dd><ul>${ensures.map((e) => `<li class="ensure ${e.verdict}">${esc(describeEnsure(e))}</li>`).join("")}</ul></dd>`
+          }
           ${asks.length === 0 ? "" : `<dt>未決</dt><dd><ul>${asks.map((q) => `<li class="ask">${esc(q)}</li>`).join("")}</ul></dd>`}
         </dl>
       </article>`;
@@ -603,6 +624,7 @@ marker path{fill:var(--muted)}
 .questions .ask{font-weight:600}
 .questions .target{color:var(--muted);font-size:13px;margin-left:4px}
 .questions .note{display:block;color:var(--muted);font-size:13px}
+.ensure{font-size:12.5px;margin:2px 0;color:var(--muted)}.ensure.unguarded{color:var(--warn);font-weight:600;font-size:13px}
 .q-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--warn);color:var(--bg);vertical-align:middle}
 .card .ask{color:var(--warn);font-size:13px}
 .q-mark circle{fill:var(--warn)}

@@ -75,6 +75,7 @@ ADR にするほどではないが、実装時に守りたい原則。根拠は 
 | `src/static.ts` | spec のソースを構文解析し（`@babel/parser`）、export の順、JSDoc の説明文、`initial` の型が取りうる有限の値を得る |
 | `src/surface.ts` | サーフェスを組み立てる `ui` / `api` / `cli`（spec ファイルが使う API） |
 | `src/explore.ts` | 「状態 × 操作 × 登場人物」を実行して幅優先で探索し、遷移、できる・できない、検査結果（不変条件の違反と最短手順を含む）を計算する |
+| `src/mutation.ts` | `ensure` を 1 つずつ外して（`explore` の `bypassEnsure`）探索し直し、元のモデルとの差分（`diffModels`）から、条件の効き目（気づく／気づくものがない／効いていない）を判定する。外す対象は静的解析で読んだ `ensure` の理由 |
 | `src/model.ts` | 正規化モデル（Effect Schema）。差分と JSON 出力の基準。availability は「状態 × 操作」ごとに結果でまとめ、全員なら `"*"`、登場人物ごとに全入力なら `"*"` と書く（入力の例が多い spec で 1MB を超えないように） |
 | `src/render/summary.ts` | 操作ごと・状態ごとの要約を作る。「誰が」と「いつ」の理由を実行結果から分ける |
 | `src/render/markdown.ts` | Mermaid の状態遷移図と操作ごとの節を含む Markdown の仕様書を生成する |

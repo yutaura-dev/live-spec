@@ -1,4 +1,4 @@
-import { analyze, type FieldValue } from "./static.ts";
+import { analyze, type EnsureCall, type FieldValue } from "./static.ts";
 
 export type State = Readonly<Record<string, unknown>>;
 export type ActionFn = (state: never, actor: never) => unknown;
@@ -28,6 +28,8 @@ export interface ScenarioStep {
   readonly by: string;
   readonly input?: string;
   readonly expect?: Readonly<Record<string, unknown>>;
+  /** この手順は断られるはず。文字列なら、その理由で断られるはず */
+  readonly denied?: string | true;
 }
 
 export interface Spec {
@@ -45,6 +47,8 @@ export interface Spec {
   readonly docs: Readonly<Record<string, string>>;
   readonly fieldDocs: Readonly<Record<string, string>>;
   readonly evidence: Readonly<Record<string, ReadonlyArray<string>>>;
+  /** 操作ごとの ensure（静的解析で読んだもの。ソースがなければ空） */
+  readonly ensures: Readonly<Record<string, ReadonlyArray<EnsureCall>>>;
   readonly glossary: Readonly<Record<string, string>>;
   readonly fields: Readonly<Record<string, ReadonlyArray<FieldValue>>>;
   readonly stateDoc: string | null;
@@ -105,6 +109,7 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
     docs: info?.docs ?? {},
     fieldDocs: info?.fieldDocs ?? {},
     evidence: info?.evidence ?? {},
+    ensures: info?.ensures ?? {},
     glossary: isRecord(mod.glossary)
       ? Object.fromEntries(Object.entries(mod.glossary).filter((e): e is [string, string] => typeof e[1] === "string"))
       : {},

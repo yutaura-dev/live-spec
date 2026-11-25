@@ -23,7 +23,8 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 | 入力の例 (inputs) | `export const inputs = { 操作名: { 例の名前: [3 つ目以降の引数...] } }`。3 つ以上の引数をとる操作に、探索で使う引数の例を与える |
 | サーフェス (surface) | `export function surface(state, actor)`。その状態でその人に見える画面を `ui.*`（API なら `api.*`、CLI なら `cli.*`）で返す。ボタンには操作の関数そのものを渡す（`ui.button("公開する", publish)`）。見える画面がない人には `null` を返す |
 | システムの登場人物 | ワーカーやバッチのように、クライアントではなくシステムが起こす遷移は、そのシステムを `actors` に入れて表す（`examples/job-api.spec.ts`） |
-| シナリオ (scenario) | `export const scenarios`。業務の流れを名前付きの手順で書く。受け入れテストとして実行される |
+| シナリオ (scenario) | `export const scenarios`。業務の流れを名前付きの手順で書く。受け入れテストとして実行される。`denied: "理由"` を付けた手順は「断られるはず」 |
+| 条件の効き目 (ensure mutation) | `ensure` を 1 つずつ外して探索し直し、不変条件・シナリオ・画面のボタンのどれかが気づくかを見る。気づくものがない条件は、意図がほかに書かれていない（漏れや書き間違いの候補） |
 | 未決事項 (question) | `export const questions`。人の判断が必要な点。推測で埋めず、ここに書く |
 | つながり (link) | `export const links`。ほかのドメインオブジェクトの操作を引き起こす関係。相手は名前の文字列で書く |
 | ルール (decision) | `export const decisions`。判断の関数と入力の例から「条件 × 結果」の表を作る。送料・割引のような境界のある業務ルールに使う |

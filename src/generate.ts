@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { explore } from "./explore.ts";
+import { checkEnsures } from "./mutation.ts";
 import { loadSpec } from "./load.ts";
 import { normalize } from "./model.ts";
 import { renderErrorHtml, renderProjectHtml, type DomainObject } from "./render/html.ts";
@@ -50,7 +51,8 @@ export const loadObject = async (path: string, options: LoadObjectOptions = {}):
   url.search = `?v=${++importVersion}`;
   const mod = (await import(url.href)) as Record<string, unknown>;
   const spec = loadSpec(options.name ?? specNameOf(path), mod, { source: options.source ?? (await readFile(path, "utf8")) });
-  return { spec, graph: explore(spec) };
+  const graph = explore(spec);
+  return { spec, graph: { ...graph, ensures: checkEnsures(spec, graph) } };
 };
 
 export const generateProject = async (paths: ReadonlyArray<string>, format: OutputFormat, title?: string): Promise<Output> => {

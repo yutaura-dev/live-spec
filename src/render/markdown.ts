@@ -1,3 +1,5 @@
+import type { EnsureCheck } from "../model.ts";
+import { describeEnsure, UNGUARDED_LEAD, UNGUARDED_TITLE, unguardedEnsures } from "./ensures.ts";
 import type { Spec } from "../load.ts";
 import type { Finding, Graph } from "../model.ts";
 import { ANY, ANY_LABEL, collapseTransitions } from "./collapse.ts";
@@ -65,6 +67,16 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
           ]),
           "",
         ]),
+    ...(unguardedEnsures(graph.ensures).length === 0
+      ? []
+      : [
+          `## ${UNGUARDED_TITLE}`,
+          "",
+          UNGUARDED_LEAD,
+          "",
+          ...unguardedEnsures(graph.ensures).map((e) => `- \`${e.action}\` の${describeEnsure(e).replace(/^⚠ /, "")}`),
+          "",
+        ]),
     "## 状態遷移図",
     "",
     "```mermaid",
@@ -86,6 +98,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
       ...actionSection(a),
       ...((spec.evidence[a.name] ?? []).length === 0 ? [] : [`- **根拠**: ${spec.evidence[a.name]!.map(formatEvidence).join("、")}`]),
       ...graph.questions.filter((q) => q.action === a.name).map((q) => `- **未決**: ${q.ask}`),
+      ...ensureLines((graph.ensures ?? []).filter((e) => e.action === a.name)),
       "",
     ]),
     ...(graph.links.length + incoming.length === 0
@@ -106,6 +119,9 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     "",
   ].join("\n");
 };
+
+const ensureLines = (ensures: ReadonlyArray<EnsureCheck>): Array<string> =>
+  ensures.length === 0 ? [] : ["- **条件の効き目**:", ...ensures.map((e) => `  - ${describeEnsure(e)}`)];
 
 const actionSection = (a: ActionSummary): Array<string> => {
   const heading = a.summary === null ? `### \`${a.name}\`` : `### ${a.summary}（\`${a.name}\`）`;
@@ -219,7 +235,9 @@ const scenarioSection = (spec: Spec, s: Graph["scenarios"][number], labelOf: (id
   `### ${s.passed ? "✅" : "❌"} ${s.name}`,
   "",
   ...s.steps.map((step, i) =>
-    step.ok
+    step.ok && step.denied
+      ? `${i + 1}. ${describeStep(spec, step)}: 断られる（${step.reason}）`
+      : step.ok
       ? `${i + 1}. ${describeStep(spec, step)}: ${labelOf(step.from ?? "")} → ${labelOf(step.to ?? "")}`
       : `${i + 1}. ❌ ${describeStep(spec, step)}: ${step.reason}`,
   ),

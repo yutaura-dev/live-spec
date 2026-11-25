@@ -1,10 +1,12 @@
-import { isNotAllowed } from "./ensure.ts";
+import { isNotAllowed, withEnsureBypassed } from "./ensure.ts";
 import type { Spec, State } from "./load.ts";
 import { canonical, type Finding, type Graph } from "./model.ts";
 import { buttonsOf, type SurfaceNode } from "./surface.ts";
 
 export interface ExploreOptions {
   readonly maxStates?: number;
+  /** この操作の、この理由の ensure を外して探索する（ensure のミューテーション） */
+  readonly bypassEnsure?: { readonly action: string; readonly reason: string };
 }
 
 const DEFAULT_MAX_STATES = 500;
@@ -15,7 +17,14 @@ type Outcome =
   | { readonly kind: "error"; readonly message: string }
   | { readonly kind: "invalid-return" };
 
-const run = (fn: Spec["actions"][number][1], state: State, actor: unknown, args: ReadonlyArray<unknown>): Outcome => {
+const run = (
+  fn: Spec["actions"][number][1],
+  state: State,
+  actor: unknown,
+  args: ReadonlyArray<unknown>,
+  bypassReason: string | null,
+): Outcome => {
+  if (bypassReason !== null) return withEnsureBypassed(bypassReason, () => run(fn, state, actor, args, null));
   try {
     // structuredClone を渡す理由: 関数が引数を破壊的に変更しても、探索済みの状態が壊れないようにするため。
     const next = (fn as (s: unknown, a: unknown, ...rest: Array<unknown>) => unknown)(
@@ -41,8 +50,11 @@ const invariantHolds = (holds: Spec["invariants"][number][1], values: State): bo
   }
 };
 
+type BypassFor = (action: string) => string | null;
+
 export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   const maxStates = options.maxStates ?? DEFAULT_MAX_STATES;
+  const bypassFor: BypassFor = (action) => (options.bypassEnsure?.action === action ? options.bypassEnsure.reason : null);
   const ids = new Map<string, string>();
   const valuesById = new Map<string, State>();
   const queue: Array<string> = [];
@@ -90,7 +102,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
     for (const [action, fn] of runnable) {
       for (const [actor, actorValue] of spec.actors) {
         for (const [input, args] of spec.inputs[action] ?? NO_INPUT) {
-          const outcome = run(fn, values, actorValue, args);
+          const outcome = run(fn, values, actorValue, args, bypassFor(action));
           if (outcome.kind !== "ok") {
             if (outcome.kind === "error") findings.push({ kind: "action-error", action, actor, state: from, message: outcome.message });
             if (outcome.kind === "invalid-return") findings.push({ kind: "invalid-return", action, actor, state: from });
@@ -139,7 +151,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
 
   const surfaces = spec.surface === null ? [] : checkSurfaces(spec.surface, spec, [...processed], valuesById, availability, findings);
 
-  const scenarios = runScenarios(spec, (values) => ids.get(JSON.stringify(values)) ?? null, findings);
+  const scenarios = runScenarios(spec, (values) => ids.get(JSON.stringify(values)) ?? null, findings, bypassFor);
   const questions = spec.questions.map((q) => {
     const about = q.about;
     const action = typeof about === "function" ? about.name : null;
@@ -178,14 +190,19 @@ const show = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 
 // シナリオは探索とは別に、初期状態から手順どおりに実行する。探索は「到達できるか」を確かめるが、
 // シナリオは「この業務の流れが、この順番で通るか」を名指しで確かめる（受け入れテストの役割）。
-const runScenarios = (spec: Spec, idOf: (values: State) => string | null, findings: Array<Finding>): Graph["scenarios"] =>
+const runScenarios = (
+  spec: Spec,
+  idOf: (values: State) => string | null,
+  findings: Array<Finding>,
+  bypassFor: BypassFor,
+): Graph["scenarios"] =>
   spec.scenarios.map(([name, steps]) => {
     let values = canonical(spec.initial) as State;
     const records: Array<Graph["scenarios"][number]["steps"][number]> = [];
     for (const [i, step] of steps.entries()) {
       const action = step.do.name;
       const fail = (reason: string) => {
-        records.push({ action, actor: step.by, input: step.input ?? null, from: idOf(values), to: null, ok: false, reason });
+        records.push({ action, actor: step.by, input: step.input ?? null, from: idOf(values), to: null, ok: false, reason, denied: step.denied !== undefined });
         findings.push({ kind: "scenario-failed", scenario: name, step: i + 1, reason });
       };
       const actor = spec.actors.find(([n]) => n === step.by);
@@ -207,7 +224,24 @@ const runScenarios = (spec: Spec, idOf: (values: State) => string | null, findin
         fail("この操作には入力の例（input）を指定する");
         break;
       }
-      const outcome = run(step.do, values, actor[1], args);
+      const outcome = run(step.do, values, actor[1], args, bypassFor(action));
+      if (step.denied !== undefined) {
+        if (outcome.kind === "ok") {
+          fail("断られるはずが、実行できた");
+          break;
+        }
+        if (outcome.kind !== "not-allowed") {
+          fail(outcome.kind === "error" ? `例外: ${outcome.message}` : "オブジェクトを返さなかった");
+          break;
+        }
+        if (typeof step.denied === "string" && outcome.reason !== step.denied) {
+          fail(`断られる理由が違う: 期待「${step.denied}」、実際「${outcome.reason}」`);
+          break;
+        }
+        const here = idOf(values);
+        records.push({ action, actor: step.by, input: step.input ?? null, from: here, to: here, ok: true, reason: outcome.reason, denied: true });
+        continue;
+      }
       if (outcome.kind !== "ok") {
         fail(outcome.kind === "not-allowed" ? outcome.reason : outcome.kind === "error" ? `例外: ${outcome.message}` : "オブジェクトを返さなかった");
         break;
@@ -218,7 +252,7 @@ const runScenarios = (spec: Spec, idOf: (values: State) => string | null, findin
         fail(`期待: ${k} = ${show(v)}、実際: ${k} = ${show(outcome.next[k])}`);
         break;
       }
-      records.push({ action, actor: step.by, input: step.input ?? null, from: idOf(values), to: idOf(outcome.next), ok: true, reason: null });
+      records.push({ action, actor: step.by, input: step.input ?? null, from: idOf(values), to: idOf(outcome.next), ok: true, reason: null, denied: false });
       values = outcome.next;
     }
     return { name, passed: records.length === steps.length && records.every((r) => r.ok), steps: records };
