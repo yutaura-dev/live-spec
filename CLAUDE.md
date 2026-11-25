@@ -17,7 +17,7 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 |------|------|
 | 生きた仕様書 (living spec) | 実行でき、状態遷移を図で見られ、ワイヤーフレームがある仕様書 |
 | 正本 (source of truth) | AI が書く TypeScript DSL（`*.spec.ts`）。評価して得られる正規化モデルから、図・ワイヤーフレーム・テスト・markdown をすべて生成する |
-| spec ファイル | `*.spec.ts`。素の TS で、`initial`（初期状態）、`actors`（登場人物）、操作の関数を export する。`invariants`（不変条件）は任意 |
+| spec ファイル | `*.spec.ts`。1 ファイルが 1 つのドメインオブジェクト。素の TS で、`initial`（初期状態）、`actors`（登場人物）、操作の関数を export する。`invariants`（不変条件）は任意 |
 | 操作 (action) | `(状態, 登場人物) => 次の状態` の関数。できないときは `ensure(条件, "理由")` で止める |
 | 不変条件 (invariant) | `export const invariants = { 説明: (state) => boolean }`。到達したすべての状態で成り立つべき条件。破ると、初期状態からの最短手順つきで検出される |
 | 入力の例 (inputs) | `export const inputs = { 操作名: { 例の名前: [3 つ目以降の引数...] } }`。3 つ以上の引数をとる操作に、探索で使う引数の例を与える |
@@ -65,6 +65,7 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 - `pnpm spec examples/article.spec.ts --html --out out/article.html`: HTML の仕様書を生成する
 - `pnpm spec examples/article.spec.ts --html --out out/article.html --watch`: spec を保存するたびに生成し直す
 - `pnpm spec examples/article.spec.ts --serve`: http://127.0.0.1:4747/ で配信し、spec を保存するとブラウザが自動で再読み込みする
+- `pnpm spec specs/ --serve`: このリポジトリ自身の仕様（ドメインオブジェクト 4 つ）を見る。実装を変えたら `specs/` も直す（`test/examples.test.ts` が検査結果を確かめる）
 
 ## 主要な設計判断（要点のみ）
 

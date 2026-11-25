@@ -56,7 +56,7 @@ describe("renderHtml: wireflow 表示", { timeout: 30_000 }, () => {
 
     expect(html).toContain('data-actor="editor"');
     expect(html).toContain('data-actor="viewer"');
-    expect(html).toContain('id="viewpoint"');
+    expect(html).toContain('class="viewpoint-select"');
   });
 
   it("surface がない spec では wireflow を出さない", async () => {

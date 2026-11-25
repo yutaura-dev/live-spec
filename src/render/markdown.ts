@@ -1,6 +1,21 @@
 import type { Spec } from "../load.ts";
 import type { Finding, Graph } from "../model.ts";
-import { summarizeActions, type ActionSummary } from "./summary.ts";
+import { formatTransition, presentBlocked, summarizeActions, type ActionSummary } from "./summary.ts";
+
+export const renderIndexMarkdown = (objects: ReadonlyArray<{ readonly spec: Spec; readonly graph: Graph }>, title: string): string =>
+  [
+    `# ${title}`,
+    "",
+    `ドメインオブジェクト ${objects.length} 個の仕様書です。`,
+    "",
+    "| ドメインオブジェクト | 説明 | 状態 | 操作 | 検査 |",
+    "|---|---|---|---|---|",
+    ...objects.map(
+      ({ spec, graph }) =>
+        `| [${spec.name}](${spec.name}.md) | ${spec.stateDoc ?? ""} | ${graph.states.length} | ${spec.actions.length} | ${graph.findings.length === 0 ? "OK" : `⚠ ${graph.findings.length}`} |`,
+    ),
+    "",
+  ].join("\n");
 
 export const renderMarkdown = (spec: Spec, graph: Graph): string => {
   const labelOf = (id: string) => graph.states.find((s) => s.id === id)?.label ?? id;
@@ -14,7 +29,8 @@ export const renderMarkdown = (spec: Spec, graph: Graph): string => {
     "stateDiagram-v2",
     ...graph.states.map((s) => `  state "${s.label}" as ${s.id}`),
     ...graph.states.filter((s) => s.initial).map((s) => `  [*] --> ${s.id}`),
-    ...graph.transitions.map((t) => `  ${t.from} --> ${t.to}: ${t.action} (${t.actors.join(", ")})`),
+    // 自分自身に戻る遷移は図に描かない（線が図を埋めるため）。操作の節の「できるとき」には残る。
+    ...graph.transitions.filter((t) => t.from !== t.to).map((t) => `  ${t.from} --> ${t.to}: ${t.action} (${t.actors.join(", ")})`),
     ...graph.states.filter((s) => s.terminal).map((s) => `  ${s.id} --> [*]`),
     "```",
     "",
@@ -33,7 +49,7 @@ const actionSection = (a: ActionSummary): Array<string> => {
   if (a.capable.length === 0) return [heading, "", "- **できる人**: なし（どの状態でも誰も実行できない）"];
   const who =
     a.othersReasons.length === 0 ? a.capable.join(", ") : `${a.capable.join(", ")}（ほかの人は「${a.othersReasons.join("」「")}」）`;
-  const groups = a.blocked.map((b) => `${b.states.join(", ")}（${b.reason}）`);
+  const groups = presentBlocked(a.blocked).map((b) => `${b.states === null ? "それ以外のすべての状態" : b.states.join(", ")}（${b.reason}）`);
   const whenNot =
     groups.length === 0
       ? "- **できないとき**: なし"
@@ -45,11 +61,20 @@ const actionSection = (a: ActionSummary): Array<string> => {
     heading,
     "",
     `- **できる人**: ${who}`,
-    `- **できるとき**: ${a.when.map((w) => `${w.from} → ${w.to}`).join(" / ")}`,
+    `- **できるとき**: ${a.when.map(formatTransition).join(" / ")}`,
     whenNot,
-    ...(a.inputReasons.length === 0
+    ...(a.inputOutcomes.length === 0
       ? []
-      : [`- **できない入力**: ${a.inputReasons.map((r) => `${r.input}（${r.reason}）`).join("、")}`]),
+      : [
+          [
+            "- **入力ごとの結果**:",
+            ...a.inputOutcomes.map((o) =>
+              o.transitions.length > 0
+                ? `  - ${o.input}: ${o.transitions.map(formatTransition).join(" / ")}`
+                : `  - ${o.input}: ❌ ${o.reasons.join("、")}`,
+            ),
+          ].join("\n"),
+        ]),
     ...(effect === "" ? [] : [`- **結果**: ${effect}`]),
   ];
 };

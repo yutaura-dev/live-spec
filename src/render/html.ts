@@ -4,13 +4,87 @@ import type { SurfaceNode } from "../surface.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
 import { describeFinding, formatEffect } from "./markdown.ts";
-import { summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
+import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
 import { surfaceToHtml } from "./wireframe.ts";
 
 const WIREFLOW_NODE = { width: 260, height: 220 };
 const THUMB_SCALE = 0.6;
 
-export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
+export interface DomainObject {
+  readonly spec: Spec;
+  readonly graph: Graph;
+}
+
+export interface ProjectOptions {
+  readonly title: string;
+}
+
+export const renderHtml = (spec: Spec, graph: Graph): Promise<string> => renderProjectHtml([{ spec, graph }], { title: spec.name });
+
+// ドメインオブジェクトごとにページを分け、1 つの HTML にまとめる理由: 1 つの図に複数のオブジェクトの
+// 関心を詰め込むと、状態が組み合わせで増えて読めなくなる。オブジェクトごとのページなら図は小さく保てるうえ、
+// ファイルは 1 つなので、そのまま共有できる。ページの切り替えは URL の hash（#/<名前>）で行う。
+export const renderProjectHtml = async (objects: ReadonlyArray<DomainObject>, options: ProjectOptions): Promise<string> => {
+  const pages = await Promise.all(objects.map((o, i) => renderPage(o, i)));
+  const multiple = objects.length > 1;
+  const data = {
+    single: multiple ? null : objects[0]!.spec.name,
+    pages: Object.fromEntries(pages.map((p) => [p.name, p.data])),
+  };
+  return `<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(options.title)} — 仕様書</title>
+<style>${CSS}</style>
+</head>
+<body>
+${
+  multiple
+    ? `<header class="site">
+  <a class="site-title" href="#/">${esc(options.title)}</a>
+  <nav class="tabs" aria-label="ドメインオブジェクト">${objects
+    .map((o) => `<a href="#/${encodeURIComponent(o.spec.name)}" data-tab="${esc(o.spec.name)}">${esc(o.spec.name)}</a>`)
+    .join("")}</nav>
+</header>
+${overviewPage(objects, options)}`
+    : ""
+}
+${pages.map((p) => p.html).join("\n")}
+<aside class="panel" id="panel" aria-live="polite" hidden></aside>
+${pages.flatMap((p) => p.templates).join("\n")}
+<script type="application/json" id="live-spec-data">${jsonForScript(data)}</script>
+<script>${CLIENT}</script>
+</body>
+</html>
+`;
+};
+
+const overviewPage = (objects: ReadonlyArray<DomainObject>, options: ProjectOptions) => `<section class="page" data-page="" hidden>
+<header class="top">
+  <div>
+    <p class="eyebrow">仕様書</p>
+    <h1>${esc(options.title)}</h1>
+    <p class="lead">ドメインオブジェクト ${objects.length} 個</p>
+  </div>
+</header>
+<main>
+  <div class="cards">
+    ${objects
+      .map(
+        ({ spec, graph }) => `<a class="card object-card" href="#/${encodeURIComponent(spec.name)}">
+      <h3>${esc(spec.name)}</h3>
+      ${spec.stateDoc === null ? "" : `<p class="object-doc">${esc(spec.stateDoc)}</p>`}
+      <dl class="object-stats"><div><dt>状態</dt><dd>${graph.states.length}</dd></div><div><dt>操作</dt><dd>${spec.actions.length}</dd></div><div><dt>検査</dt><dd class="${graph.findings.length === 0 ? "ok" : "warn"}">${graph.findings.length === 0 ? "OK" : graph.findings.length}</dd></div></dl>
+    </a>`,
+      )
+      .join("\n    ")}
+  </div>
+</main>
+</section>`;
+
+const renderPage = async ({ spec, graph }: DomainObject, index: number) => {
   const l = await layout(graph);
   const actions = summarizeActions(spec, graph);
   const labelOf = (id: string) => graph.states.find((s) => s.id === id)?.label ?? id;
@@ -22,14 +96,17 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
       f.kind === "surface-action-not-allowed" && f.state === state && actors.includes(f.actor) ? [f.action] : [],
     );
   const states = summarizeStates(spec, graph);
+  // id にページの番号を入れる理由: 状態の ID（s0, s1…）はドメインオブジェクトごとに振られるので、
+  // 1 つの HTML に複数のページを入れると、テンプレートや図の矢印の id が衝突する。
+  const templateId = (state: string, i: number) => `sf-${index}-${state}-${i}`;
   // パネルの画面はサーバ側で描いた HTML を <template> に置き、クライアントは複製するだけにする。
   const templates = states.flatMap((s) =>
     s.surfaces.map(
-      (g, i) => `<template id="sf-${esc(s.id)}-${i}">${surfaceToHtml(g.surface as SurfaceNode, notAllowed(s.id, g.actors))}</template>`,
+      (g, i) => `<template id="${esc(templateId(s.id, i))}">${surfaceToHtml(g.surface as SurfaceNode, notAllowed(s.id, g.actors))}</template>`,
     ),
   );
   const data = {
-    states: states.map((s) => ({ ...s, surfaces: s.surfaces.map((g, i) => ({ actors: g.actors, template: `sf-${s.id}-${i}` })) })),
+    states: states.map((s) => ({ ...s, surfaces: s.surfaces.map((g, i) => ({ actors: g.actors, template: templateId(s.id, i) })) })),
   };
   const actorNames = spec.actors.map(([name]) => name);
   const thumbsOf = (state: string) =>
@@ -37,25 +114,19 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
       const found = graph.surfaces.find((x) => x.state === state && x.actor === actor);
       const html =
         found === undefined
-          ? '<p class="wf-text">（画面を作れませんでした）</p>'
+          ? '<p class="wf-text">（画面がありません）</p>'
           : surfaceToHtml(found.surface as SurfaceNode, notAllowed(state, [actor]));
       return [actor, html] as const;
     });
   const wl = graph.surfaces.length > 0 ? await layout(graph, { nodeSize: WIREFLOW_NODE }) : null;
   const flags = (id: string) => ({ initial: id === initial?.id, terminal: terminal.has(id), violation: violating.has(id) });
+  const arrow = `arrow-${index}`;
+  const arrowWf = `arrow-wf-${index}`;
 
-  return `<!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(spec.name)} — 仕様書</title>
-<style>${CSS}</style>
-</head>
-<body>
+  const html = `<section class="page" data-page="${esc(spec.name)}" hidden>
 <header class="top">
   <div>
-    <p class="eyebrow">仕様書</p>
+    <p class="eyebrow">ドメインオブジェクト</p>
     <h1>${esc(spec.name)}</h1>
     ${spec.stateDoc === null ? "" : `<p class="lead">${esc(spec.stateDoc)}</p>`}
   </div>
@@ -73,20 +144,19 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
         ? ""
         : `<div class="toolbar">
       <div class="modes" role="group" aria-label="図の表示"><button type="button" data-mode="states" aria-pressed="true">状態遷移図</button><button type="button" data-mode="wireflow" aria-pressed="false">画面つき</button></div>
-      <label class="viewpoint">視点 <select id="viewpoint">${actorNames.map((a) => `<option value="${esc(a)}">${esc(a)}</option>`).join("")}</select></label>
+      <label class="viewpoint">視点 <select class="viewpoint-select">${actorNames.map((a) => `<option value="${esc(a)}">${esc(a)}</option>`).join("")}</select></label>
     </div>`
     }
     <div class="diagram diagram-states">
-      ${diagramSvg(spec.name, l, "arrow", (n) => nodeSvg(n, flags(n.id)))}
+      ${diagramSvg(spec.name, l, arrow, (n) => nodeSvg(n, flags(n.id), arrow))}
     </div>
     ${
       wl === null
         ? ""
         : `<div class="diagram diagram-wireflow">
-      ${diagramSvg(spec.name, wl, "arrow-wf", (n) => wireflowNodeSvg(n, flags(n.id), thumbsOf(n.id), actorNames[0]))}
+      ${diagramSvg(spec.name, wl, arrowWf, (n) => wireflowNodeSvg(n, flags(n.id), thumbsOf(n.id), actorNames[0], arrowWf))}
     </div>`
     }
-    <aside class="panel" id="panel" aria-live="polite" hidden></aside>
   </section>
   <section class="actions">
     <h2>操作</h2>
@@ -103,12 +173,8 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
     }
   </section>
 </main>
-${templates.join("\n")}
-<script type="application/json" id="live-spec-data">${jsonForScript(data)}</script>
-<script>${CLIENT}</script>
-</body>
-</html>
-`;
+</section>`;
+  return { name: spec.name, html, templates, data };
 };
 
 export const renderErrorHtml = (name: string, error: unknown): string => {
@@ -158,14 +224,20 @@ const startMarker = (n: LaidOutNode, cy: number, markerId: string) =>
 const terminalRect = (n: LaidOutNode) =>
   `<rect class="inner" x="${n.x + 3}" y="${n.y + 3}" width="${n.width - 6}" height="${n.height - 6}" rx="7"/>`;
 
-const nodeSvg = (n: LaidOutNode, f: NodeFlags) => {
+const nodeSvg = (n: LaidOutNode, f: NodeFlags, markerId: string) => {
   const cy = n.y + n.height / 2;
-  return `${f.initial ? startMarker(n, cy, "arrow") : ""}<g class="${nodeClass(f)}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terminal ? terminalRect(n) : ""}<text x="${n.x + n.width / 2}" y="${cy}">${esc(n.label)}</text></g>`;
+  return `${f.initial ? startMarker(n, cy, markerId) : ""}<g class="${nodeClass(f)}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terminal ? terminalRect(n) : ""}<text x="${n.x + n.width / 2}" y="${cy}">${esc(n.label)}</text></g>`;
 };
 
 // サムネイルを SVG の foreignObject に入れる理由: パネルと同じ HTML のワイヤーフレームを、
 // 縮小してそのまま図の中に置けるため。見る人ごとに用意し、視点の切り替えで表示を変える。
-const wireflowNodeSvg = (n: LaidOutNode, f: NodeFlags, thumbs: ReadonlyArray<readonly [string, string]>, visible: string | undefined) => {
+const wireflowNodeSvg = (
+  n: LaidOutNode,
+  f: NodeFlags,
+  thumbs: ReadonlyArray<readonly [string, string]>,
+  visible: string | undefined,
+  markerId: string,
+) => {
   const inner = n.width - 16;
   const thumbHtml = thumbs
     .map(
@@ -173,7 +245,7 @@ const wireflowNodeSvg = (n: LaidOutNode, f: NodeFlags, thumbs: ReadonlyArray<rea
         `<div class="thumb" data-actor="${esc(actor)}"${actor === visible ? "" : " hidden"}><div class="thumb-inner" style="width:${inner / THUMB_SCALE}px">${html}</div></div>`,
     )
     .join("");
-  return `${f.initial ? startMarker(n, n.y + n.height / 2, "arrow-wf") : ""}<g class="${nodeClass(f, "wf-node")}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terminal ? terminalRect(n) : ""}<text class="wf-node-label" x="${n.x + 12}" y="${n.y + 16}">${esc(n.label)}</text><foreignObject x="${n.x + 8}" y="${n.y + 30}" width="${inner}" height="${n.height - 38}"><div class="thumb-frame">${thumbHtml}</div></foreignObject></g>`;
+  return `${f.initial ? startMarker(n, n.y + n.height / 2, markerId) : ""}<g class="${nodeClass(f, "wf-node")}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terminal ? terminalRect(n) : ""}<text class="wf-node-label" x="${n.x + 12}" y="${n.y + 16}">${esc(n.label)}</text><foreignObject x="${n.x + 8}" y="${n.y + 30}" width="${inner}" height="${n.height - 38}"><div class="thumb-frame">${thumbHtml}</div></foreignObject></g>`;
 };
 
 const edgeSvg = (e: LaidOutEdge, markerId: string) => {
@@ -192,9 +264,12 @@ const actionCard = (a: ActionSummary) => {
   const when =
     a.when.length === 0
       ? '<span class="muted">なし</span>'
-      : a.when.map((w) => `<span class="flow">${esc(w.from)} → ${esc(w.to)}</span>`).join("");
-  const blocked = a.blocked.map(
-    (b) => `<li><span class="reason">${esc(b.reason)}</span> ${b.states.map((s) => `<span class="state">${esc(s)}</span>`).join("")}</li>`,
+      : a.when.map((w) => `<span class="flow">${esc(formatTransition(w))}</span>`).join("");
+  const blocked = presentBlocked(a.blocked).map(
+    (b) =>
+      `<li><span class="reason">${esc(b.reason)}</span> ${
+        b.states === null ? '<span class="state rest">それ以外のすべての状態</span>' : b.states.map((s) => `<span class="state">${esc(s)}</span>`).join("")
+      }</li>`,
   );
   const whenNot = blocked.length === 0 ? '<span class="muted">なし</span>' : `<ul>${blocked.join("")}</ul>`;
   const effect = formatEffect(a);
@@ -204,7 +279,7 @@ const actionCard = (a: ActionSummary) => {
           <dt>できる人</dt><dd>${who}</dd>
           <dt>できるとき</dt><dd>${when}</dd>
           <dt>できないとき</dt><dd>${whenNot}</dd>
-          ${a.inputReasons.length === 0 ? "" : `<dt>できない入力</dt><dd><ul>${a.inputReasons.map((r) => `<li><span class="reason">${esc(r.reason)}</span> <span class="state">${esc(r.input)}</span></li>`).join("")}</ul></dd>`}
+          ${a.inputOutcomes.length === 0 ? "" : `<dt>入力ごとの結果</dt><dd><ul>${a.inputOutcomes.map((o) => `<li><span class="reason">${esc(o.input)}</span> ${o.transitions.length > 0 ? o.transitions.map((t) => `<span class="flow">${esc(formatTransition(t))}</span>`).join("") : `<span class="state">❌ ${esc(o.reasons.join("、"))}</span>`}</li>`).join("")}</ul></dd>`}
           ${effect === "" ? "" : `<dt>結果</dt><dd>${esc(effect)}</dd>`}
         </dl>
       </article>`;
@@ -248,6 +323,19 @@ h2{font-size:18px;margin:40px 0 16px}
 .panel .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;background:var(--chip);margin-right:6px}
 .panel button{margin-top:16px;font:inherit;font-size:13px;background:none;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
 .hint{font-size:12px;color:var(--muted)}
+.site{position:sticky;top:0;z-index:5;display:flex;gap:24px;align-items:center;padding:10px 40px;background:var(--bg);border-bottom:1px solid var(--line)}
+.site-title{font-weight:700;color:var(--fg);text-decoration:none}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs a{color:var(--muted);text-decoration:none;padding:4px 12px;border-radius:8px;font-size:14px}
+.tabs a:hover{color:var(--fg)}
+.tabs a[aria-current="page"]{background:var(--accent-weak);color:var(--accent);font-weight:600}
+.page[hidden]{display:none}
+.object-card{display:block;color:var(--fg);text-decoration:none}
+.object-card h3{font-size:18px}
+.object-doc{color:var(--muted);margin:0 0 12px}
+.card .object-stats{display:flex;gap:20px;margin:0}
+.object-stats dt{font-size:12px;color:var(--muted)}.object-stats dd{margin:0;font-weight:600;font-size:18px}
+.object-stats .ok{color:var(--ok)}.object-stats .warn{color:var(--warn)}
 .toolbar{display:flex;gap:16px;align-items:center;margin:0 0 10px;font-size:13px}
 .modes{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .modes button{font:inherit;font-size:13px;background:none;border:0;color:var(--muted);padding:4px 12px;cursor:pointer}
@@ -308,6 +396,7 @@ marker path{fill:var(--muted)}
 .card li+li{margin-top:6px}
 .chip,.state,.flow{display:inline-block;font-size:12.5px;border-radius:6px;padding:0 7px;margin:0 4px 4px 0;background:var(--chip)}
 .flow{background:var(--accent-weak)}
+.state.rest{background:none;border:1px dashed var(--line)}
 .reason{font-weight:600;margin-right:4px}
 .muted{color:var(--muted);font-size:13px;display:block}
 .findings ul{padding-left:20px}.findings li{color:var(--warn)}
@@ -322,6 +411,7 @@ const CLIENT = `
 (function () {
   var data = JSON.parse(document.getElementById("live-spec-data").textContent);
   var panel = document.getElementById("panel");
+  var current = null;
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -330,17 +420,21 @@ const CLIENT = `
     return e;
   }
   function all(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+  // 表示中のページの中だけを探す。状態の ID はドメインオブジェクトごとに s0 から振られるので、
+  // ページをまたいで探すと別のオブジェクトの状態まで選んでしまう。
+  function within(sel) { return current ? Array.prototype.slice.call(current.el.querySelectorAll(sel)) : []; }
   function attr(name, value) { return "[" + name + '="' + CSS.escape(value) + '"]'; }
+  function hashOf(name, state) { return "#/" + encodeURIComponent(name) + (state ? "/" + encodeURIComponent(state) : ""); }
   function clear() {
     all(".is-selected,.is-active,.is-dim").forEach(function (n) { n.classList.remove("is-selected", "is-active", "is-dim"); });
   }
-  function dimAll() { all(".node,.edge").forEach(function (n) { n.classList.add("is-dim"); }); }
+  function dimAll() { within(".node,.edge").forEach(function (n) { n.classList.add("is-dim"); }); }
   function undim(n) { if (n) n.classList.remove("is-dim"); }
-  // 状態遷移図と wireflow の両方に同じ状態のノードがあるので、常に全部を対象にする。
-  function nodes(id) { return all(".node" + attr("data-state", id)); }
+  function nodes(id) { return within(".node" + attr("data-state", id)); }
+  function closePanel() { clear(); panel.replaceChildren(); panel.hidden = true; }
   function reset() {
-    clear(); panel.replaceChildren(); panel.hidden = true;
-    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    closePanel();
+    if (current && current.name) history.replaceState(null, "", hashOf(current.name));
   }
 
   function list(items, render) {
@@ -351,20 +445,21 @@ const CLIENT = `
   }
 
   function selectState(id) {
-    var s = data.states.find(function (x) { return x.id === id; });
+    var page = current && data.pages[current.name];
+    var s = page && page.states.find(function (x) { return x.id === id; });
     if (!s) return;
     clear(); dimAll();
-    // 選択を URL の hash に残す理由: --serve で自動再読み込みしたあとも、同じ状態を見続けられるようにするため。
-    history.replaceState(null, "", "#state-" + encodeURIComponent(id));
+    // 選択を URL の hash に残す理由: リンクで共有でき、--serve で自動再読み込みしたあとも同じ状態を見続けられるため。
+    history.replaceState(null, "", hashOf(current.name, id));
     nodes(id).forEach(function (n) { n.classList.add("is-selected"); undim(n); });
-    all(".edge" + attr("data-from", id)).forEach(function (e) {
+    within(".edge" + attr("data-from", id)).forEach(function (e) {
       e.classList.add("is-active"); undim(e);
       nodes(e.dataset.to).forEach(undim);
     });
 
     panel.replaceChildren();
     panel.hidden = false;
-    panel.append(el("p", "eyebrow", "状態"), el("h2", null, s.label));
+    panel.append(el("p", "eyebrow", current.name + " の状態"), el("h2", null, s.label));
     if (s.initial) panel.append(el("span", "tag", "初期状態"));
     if (s.terminal) panel.append(el("span", "tag", "終端"));
     s.violations.forEach(function (v) { panel.append(el("p", "violation", "⚠ 不変条件「" + v + "」を破っています")); });
@@ -396,24 +491,42 @@ const CLIENT = `
 
   function selectAction(name) {
     reset(); dimAll();
-    all(".edge" + attr("data-action", name)).forEach(function (e) {
+    within(".edge" + attr("data-action", name)).forEach(function (e) {
       e.classList.add("is-active"); undim(e);
       nodes(e.dataset.from).forEach(undim);
       nodes(e.dataset.to).forEach(undim);
     });
-    all(".card" + attr("data-action", name)).forEach(function (c) { c.classList.add("is-selected"); });
+    within(".card" + attr("data-action", name)).forEach(function (c) { c.classList.add("is-selected"); });
   }
 
-  var board = document.querySelector(".board");
   function setMode(mode) {
+    var board = current && current.el.querySelector(".board");
+    if (!board) return;
     board.dataset.mode = mode;
-    all(".modes button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.mode === mode)); });
+    within(".modes button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.mode === mode)); });
   }
-  var viewpoint = document.getElementById("viewpoint");
-  if (viewpoint) {
-    viewpoint.addEventListener("change", function () {
-      all(".thumb").forEach(function (t) { t.hidden = t.dataset.actor !== viewpoint.value; });
+
+  function show(name) {
+    var page = document.querySelector(".page" + attr("data-page", name));
+    if (!page) return false;
+    all(".page").forEach(function (p) { p.hidden = p !== page; });
+    all(".tabs a").forEach(function (a) {
+      if (a.dataset.tab === name) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
+    var changed = !current || current.name !== name;
+    current = { name: name, el: page };
+    if (changed) window.scrollTo(0, 0);
+    return true;
+  }
+
+  // ページは URL の hash で表す（#/ が一覧、#/<名前> がドメインオブジェクト、#/<名前>/<状態> が状態の選択）。
+  // ブラウザの戻る・進むでページを行き来でき、リンクでそのまま共有できる。
+  function route() {
+    var parts = location.hash.replace(/^#\\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+    var name = parts[0] || data.single || "";
+    closePanel();
+    if (!show(name)) show(data.single || "");
+    if (parts[1] && current && current.name) selectState(parts[1]);
   }
 
   function activate(target) {
@@ -422,19 +535,23 @@ const CLIENT = `
     if (target.closest("[data-clear]")) return reset();
     var node = target.closest(".node");
     if (node) return selectState(node.dataset.state);
-    var action = target.closest(".edge,.card");
+    var action = target.closest(".edge,.card[data-action]");
     if (action) return selectAction(action.dataset.action);
   }
 
   document.addEventListener("click", function (ev) { activate(ev.target); });
-  var match = /^#state-(.+)$/.exec(location.hash);
-  if (match) selectState(decodeURIComponent(match[1]));
+  document.addEventListener("change", function (ev) {
+    if (!ev.target.classList || !ev.target.classList.contains("viewpoint-select")) return;
+    within(".thumb").forEach(function (t) { t.hidden = t.dataset.actor !== ev.target.value; });
+  });
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") return reset();
-    if ((ev.key === "Enter" || ev.key === " ") && ev.target.closest && ev.target.closest(".node,.card")) {
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target.closest && ev.target.closest(".node,.card[data-action]")) {
       ev.preventDefault();
       activate(ev.target);
     }
   });
+  window.addEventListener("hashchange", route);
+  route();
 })();
 `;

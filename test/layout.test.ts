@@ -14,10 +14,10 @@ describe("layout: 状態遷移図の配置を計算する", { timeout: 30_000 },
     for (const n of l.nodes) expect(n.width).toBeGreaterThan(0);
   });
 
-  it("すべての遷移に、2 点以上の経路とラベルの位置を与える", async () => {
+  it("自分自身に戻る遷移を除くすべての遷移に、2 点以上の経路とラベルの位置を与える", async () => {
     const l = await layout(graph);
 
-    expect(l.edges).toHaveLength(graph.transitions.length);
+    expect(l.edges).toHaveLength(graph.transitions.filter((t) => t.from !== t.to).length);
     for (const e of l.edges) expect(e.points.length).toBeGreaterThanOrEqual(2);
   });
 

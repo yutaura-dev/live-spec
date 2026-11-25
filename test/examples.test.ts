@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { expandSpecPaths, generateProject } from "../src/cli.ts";
 import { explore } from "../src/explore.ts";
 import { loadSpec } from "../src/load.ts";
 import * as JobApi from "../examples/job-api.spec.ts";
@@ -18,6 +19,18 @@ describe("examples: README に載せている例", () => {
     const spec = loadSpec("job-api", JobApi, { source: source("../examples/job-api.spec.ts") });
 
     expect(explore(spec).findings).toEqual([]);
+  });
+
+  it("このリポジトリ自身の仕様（specs/）は、どのドメインオブジェクトも検査で問題が出ない", async () => {
+    const out = await generateProject(expandSpecPaths([new URL("../specs", import.meta.url).pathname]), "json");
+
+    const models = out.kind === "text" ? (JSON.parse(out.content) as { objects: Array<{ name: string; findings: unknown[] }> }).objects : [];
+    expect(models.map((m) => [m.name, m.findings])).toEqual([
+      ["browser-tab", []],
+      ["cli-invocation", []],
+      ["local-server", []],
+      ["watch-session", []],
+    ]);
   });
 
   it("README には minimal.spec.ts と同じコードを載せている", () => {

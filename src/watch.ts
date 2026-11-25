@@ -1,12 +1,13 @@
 import { watch, type FSWatcher } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import { generate, specNameOf, writeOutput, type OutputFormat } from "./generate.ts";
+import { expandSpecPaths, generateProject, specNameOf, writeProjectOutput, type OutputFormat } from "./generate.ts";
 import { renderErrorHtml } from "./render/html.ts";
 
 export interface WatchOptions {
-  readonly path: string;
+  readonly paths: ReadonlyArray<string>;
   readonly format: OutputFormat;
   readonly out: string | null;
+  readonly title?: string | null;
   readonly onBuilt?: (output: string) => void;
 }
 
@@ -14,39 +15,46 @@ export interface WatchOptions {
 // そのたびに生成すると書きかけの内容を読んだり、同じ生成を何度も走らせたりするため。
 const DEBOUNCE_MS = 80;
 
-export const watchSpec = (options: WatchOptions, log: (message: string) => void = console.error): FSWatcher => {
-  const path = resolve(options.path);
+export const watchSpec = (options: WatchOptions, log: (message: string) => void = console.error): ReadonlyArray<FSWatcher> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let queue = Promise.resolve();
-
-  const deliver = async (output: string) => {
-    if (options.out !== null) await writeOutput(options.out, output);
-    options.onBuilt?.(output);
-  };
 
   const rebuild = () => {
     queue = queue.then(async () => {
       const started = performance.now();
+      // 生成のたびにディレクトリを展開し直す理由: 監視中に spec ファイルが増えても、次の保存で拾えるようにするため。
+      const paths = expandSpecPaths(options.paths);
       try {
-        await deliver(await generate(path, options.format));
+        const output = await generateProject(paths, options.format, options.title ?? undefined);
+        if (options.out !== null) await writeProjectOutput(options.out, output);
+        if (output.kind === "text") options.onBuilt?.(output.content);
         const ms = Math.round(performance.now() - started);
         log(options.out === null ? `✓ 生成しました（${ms}ms）` : `✓ ${options.out} を生成しました（${ms}ms）`);
       } catch (e) {
         log(`✗ 生成に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
         // 失敗しても監視は続ける。書きかけの spec が一時的に壊れているのはよくあることなので。
-        if (options.format === "html") await deliver(renderErrorHtml(specNameOf(path), e));
+        if (options.format === "html") {
+          const page = renderErrorHtml(paths.length === 1 ? specNameOf(paths[0]!) : "仕様書", e);
+          if (options.out !== null) await writeProjectOutput(options.out, { kind: "text", content: page });
+          options.onBuilt?.(page);
+        }
       }
     });
   };
 
   // ファイルではなくディレクトリを監視する理由: 多くのエディタは「別ファイルに書いてから名前を差し替える」
   // 方式で保存するので、ファイル自体を監視すると最初の保存で追跡が切れる。
-  const watcher = watch(dirname(path), (_event, filename) => {
-    if (filename !== basename(path)) return;
-    clearTimeout(timer);
-    timer = setTimeout(rebuild, DEBOUNCE_MS);
-  });
-  log(`${options.path} を監視しています（Ctrl+C で終了）`);
+  const dirs = [...new Set(expandSpecPaths(options.paths).map((p) => dirname(resolve(p))).concat(
+    options.paths.filter((p) => !p.endsWith(".ts")).map((p) => resolve(p)),
+  ))];
+  const watchers = dirs.map((dir) =>
+    watch(dir, { recursive: true }, (_event, filename) => {
+      if (filename === null || !basename(filename).endsWith(".spec.ts")) return;
+      clearTimeout(timer);
+      timer = setTimeout(rebuild, DEBOUNCE_MS);
+    }),
+  );
+  log(`${options.paths.join(", ")} を監視しています（Ctrl+C で終了）`);
   rebuild();
-  return watcher;
+  return watchers;
 };

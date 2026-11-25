@@ -11,10 +11,13 @@ export interface SpecServer {
 
 // 再読み込みのスクリプトを生成時ではなく配信時に差し込む理由: --out で書き出すファイルは
 // サーバなしで開いても動く単体の HTML のままにしておきたいため。
-export const injectReload = (html: string): string =>
+// ページに版数を埋め込み、通知の接続がつながったときにサーバの版数と比べる理由:
+// ページを読み込んでから接続がつながるまでの間に生成し直されると、その時点で接続がないので
+// reload の通知を受け取れない。接続時に版数を確かめれば、その間の更新も取りこぼさない。
+export const injectReload = (html: string, version: number): string =>
   html.replace(
     "</body>",
-    `<script>new EventSource("${EVENTS_PATH}").onmessage = function () { location.reload(); };</script>\n</body>`,
+    `<script>(function () { var version = ${version}; new EventSource("${EVENTS_PATH}").onmessage = function (e) { if (e.data === "reload" || (e.data.indexOf("version ") === 0 && e.data !== "version " + version)) location.reload(); }; })();</script>\n</body>`,
   );
 
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost"]);
@@ -22,6 +25,7 @@ const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost"]);
 export const startServer = (port: number): Promise<SpecServer> =>
   new Promise((resolve, reject) => {
     let html = "<!doctype html><html><body><p>仕様書を生成しています…</p></body></html>";
+    let version = 0;
     const clients = new Set<ServerResponse>();
 
     const server = createServer((req, res) => {
@@ -34,12 +38,12 @@ export const startServer = (port: number): Promise<SpecServer> =>
       }
       if (req.url === "/") {
         res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-        res.end(injectReload(html));
+        res.end(injectReload(html, version));
         return;
       }
       if (req.url === EVENTS_PATH) {
         res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
-        res.write(": connected\n\n");
+        res.write(`: connected\n\ndata: version ${version}\n\n`);
         clients.add(res);
         req.on("close", () => clients.delete(res));
         return;
@@ -54,6 +58,7 @@ export const startServer = (port: number): Promise<SpecServer> =>
         url: `http://127.0.0.1:${actual}/`,
         update(next) {
           html = next;
+          version += 1;
           for (const client of clients) client.write("data: reload\n\n");
         },
         close() {

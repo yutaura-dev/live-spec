@@ -25,6 +25,9 @@ Phase 0 で正本のフォーマット（TS DSL、[ADR-0004](decisions/0004-spec
 - [x] 3 つ以上の引数をとる操作への入力の例（`inputs`）
 - [x] サーフェス（状態 × 登場人物ごとの画面）と、ボタンと操作の食い違いの検出
 - [x] API の例（`examples/job-api.spec.ts`）で、UI 以外も同じ方式で書けることを確認
+- [x] skill 一式（`.claude/skills/`: live-spec-authoring / live-spec-from-code / live-spec-review）と、live-spec-from-code の評価（skill あり 100%、なし 78%）
+- [x] 評価で見つかった課題の修正: 入力ごとの結果の表示、正規化モデルの圧縮（1.4MB → 152KB）、`--serve` の更新の取りこぼし、ポート使用中・生成失敗時の終わり方、引数の組み合わせのエラー
+- [x] ドメインオブジェクトごとのページ（HTML のタブと hash でのページ切り替え、Markdown のファイル分割）と、このリポジトリ自身の仕様（`specs/` の 4 オブジェクト）
 - [ ] Markdown でのサーフェスの表示
 - [ ] 遷移の不変条件（`(before, after) => boolean`）。「終わったジョブは状態が変わらない」のような、遷移の前後を比べる性質は今の状態の不変条件では書けない
 

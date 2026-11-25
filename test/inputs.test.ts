@@ -48,7 +48,24 @@ describe("inputs: 仕様書での表示", () => {
     expect(reject.inputReasons).toEqual([{ input: "理由なし", reason: "差し戻し理由が必要" }]);
   });
 
-  it("Markdown の操作の節に、できない入力を書く", () => {
-    expect(renderMarkdown(spec, graph)).toContain("- **できない入力**: 理由なし（差し戻し理由が必要）");
+  it("入力ごとに、どの状態からどの状態へ移るか、またはなぜできないかをまとめる", () => {
+    const reject = summarizeActions(spec, graph).find((a) => a.name === "reject")!;
+
+    expect(reject.inputOutcomes).toEqual([
+      { input: "理由あり", transitions: [{ from: "inReview", to: "draft" }], reasons: [] },
+      { input: "理由なし", transitions: [], reasons: ["差し戻し理由が必要"] },
+    ]);
+  });
+
+  it("Markdown の操作の節に、入力ごとの結果を書く", () => {
+    expect(renderMarkdown(spec, graph)).toContain(
+      "- **入力ごとの結果**:\n  - 理由あり: inReview → draft\n  - 理由なし: ❌ 差し戻し理由が必要",
+    );
+  });
+
+  it("入力をとらない操作には、入力ごとの結果を書かない", () => {
+    const publish = summarizeActions(spec, graph).find((a) => a.name === "publish")!;
+
+    expect(publish.inputOutcomes).toEqual([]);
   });
 });

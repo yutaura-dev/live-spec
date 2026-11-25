@@ -78,13 +78,21 @@ const finiteValuesOf = (type: t.TSType): ReadonlyArray<FieldValue> | null => {
   return values.every((v): v is string => v !== null) ? values : null;
 };
 
+// 最初の段落（空行まで）を説明文にする理由: 1 行目だけを取ると、複数行にわたる文が途中で切れてしまうため。
 const summaryOf = (comments: ReadonlyArray<t.Comment> | null | undefined): string | null => {
   const jsdoc = comments?.findLast((c) => c.type === "CommentBlock" && c.value.startsWith("*"));
   if (jsdoc === undefined) return null;
-  const first = jsdoc.value
+  const lines = jsdoc.value
     .slice(1)
     .split("\n")
-    .map((line) => line.replace(/^\s*\*?\s?/, "").trim())
-    .find((line) => line !== "");
-  return first ?? null;
+    .map((line) => line.replace(/^\s*\*?\s?/, "").trim());
+  const start = lines.findIndex((line) => line !== "");
+  if (start === -1) return null;
+  const end = lines.indexOf("", start);
+  return (end === -1 ? lines.slice(start) : lines.slice(start, end)).reduce((text, line) =>
+    isCjk(text.at(-1)) || isCjk(line[0]) ? text + line : `${text} ${line}`,
+  );
 };
+
+// 日本語の行は空白を入れずにつなぎ、英語の行は空白を入れてつなぐ。
+const isCjk = (ch: string | undefined) => ch !== undefined && (ch.codePointAt(0) ?? 0) > 0x2e7f;

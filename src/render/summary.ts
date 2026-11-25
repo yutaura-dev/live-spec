@@ -10,6 +10,11 @@ export interface ActionSummary {
   readonly blocked: ReadonlyArray<{ readonly reason: string; readonly states: ReadonlyArray<string> }>;
   readonly effect: ReadonlyArray<{ readonly field: string; readonly values: ReadonlyArray<string> }>;
   readonly inputReasons: ReadonlyArray<{ readonly input: string; readonly reason: string }>;
+  readonly inputOutcomes: ReadonlyArray<{
+    readonly input: string;
+    readonly transitions: ReadonlyArray<{ readonly from: string; readonly to: string }>;
+    readonly reasons: ReadonlyArray<string>;
+  }>;
 }
 
 export interface StateSummary {
@@ -63,6 +68,7 @@ export const summarizeActions = (spec: Spec, graph: Graph): ReadonlyArray<Action
       blocked: [...blocked.entries()].map(([reason, states]) => ({ reason, states })),
       effect: effectOf(graph, name),
       inputReasons: inputReasonsOf(entries),
+      inputOutcomes: inputOutcomesOf(spec, name, entries, labelOf),
     };
   });
 };
@@ -108,6 +114,43 @@ const inputReasonsOf = (entries: Graph["availability"]): ActionSummary["inputRea
     (r) => `${r.input}|${r.reason}`,
   );
 };
+
+// 入力ごとに「どこからどこへ移るか」を出す理由: CLI の引数のように入力で結果が大きく変わる操作では、
+// 「できない入力」だけでは、正しい入力でどうなるかが仕様書から読めないため。
+const inputOutcomesOf = (
+  spec: Spec,
+  action: string,
+  entries: Graph["availability"],
+  labelOf: (id: string) => string,
+): ActionSummary["inputOutcomes"] =>
+  (spec.inputs[action] ?? []).map(([input]) => {
+    const mine = entries.filter((a) => a.input === input);
+    const transitions = uniqueBy(
+      mine.filter((a) => a.enabled).map((a) => ({ from: labelOf(a.state), to: labelOf(a.to!) })),
+      (t) => `${t.from}→${t.to}`,
+    );
+    if (transitions.length > 0) return { input, transitions, reasons: [] };
+    // 一度も通らなかった入力は、入力が原因の理由（同じ状態・同じ人なら別の入力で通った）を優先して示す。
+    const byInput = inputReasonsOf(entries).filter((r) => r.input === input).map((r) => r.reason);
+    const reasons = byInput.length > 0 ? byInput : unique(mine.map((a) => a.reason ?? ERROR_REASON));
+    return { input, transitions, reasons };
+  });
+
+const REST_THRESHOLD = 3;
+
+// 一番多いまとまりを「それ以外」とまとめる理由: できないときの状態は、たいてい「できるとき」の補集合で、
+// すべて並べると状態名の壁になり、何が条件なのかが読めなくなるため。少ないときはそのまま並べる。
+export const presentBlocked = (
+  blocked: ActionSummary["blocked"],
+): ReadonlyArray<{ readonly reason: string; readonly states: ReadonlyArray<string> | null }> => {
+  if (blocked.length === 0) return [];
+  const largest = blocked.reduce((a, b) => (b.states.length > a.states.length ? b : a));
+  if (largest.states.length < REST_THRESHOLD) return blocked;
+  return [...blocked.filter((b) => b !== largest), { reason: largest.reason, states: null }];
+};
+
+export const formatTransition = (t: { readonly from: string; readonly to: string }) =>
+  t.from === t.to ? `${t.from}（変わらない）` : `${t.from} → ${t.to}`;
 
 const effectOf = (graph: Graph, action: string): ActionSummary["effect"] => {
   const changed = new Map<string, Set<string>>();

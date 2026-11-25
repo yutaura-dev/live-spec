@@ -68,6 +68,8 @@ export interface LayoutOptions {
 
 export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise<Layout> => {
   const elk = new ELK();
+  // 自分自身に戻る遷移は描かない。ほぼすべての状態にあると、図が線で埋まって読めなくなるため。
+  const transitions = graph.transitions.filter((t) => t.from !== t.to);
   const input: ElkNode = {
     id: "root",
     layoutOptions: LAYOUT_OPTIONS,
@@ -77,7 +79,7 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
       height: options.nodeSize?.height ?? NODE_HEIGHT,
       ...(s.initial ? { layoutOptions: { "elk.layered.layering.layerConstraint": "FIRST" } } : {}),
     })),
-    edges: graph.transitions.map((t, i) => ({
+    edges: transitions.map((t, i) => ({
       id: `e${i}`,
       sources: [t.from],
       targets: [t.to],
@@ -90,7 +92,7 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
     const n = result.children!.find((c) => c.id === s.id)!;
     return { id: s.id, label: s.label, x: n.x!, y: n.y!, width: n.width!, height: n.height! };
   });
-  const edges = graph.transitions.map((t, i) => {
+  const edges = transitions.map((t, i) => {
     const e = result.edges!.find((x) => x.id === `e${i}`)!;
     const section = e.sections![0]!;
     const label = e.labels![0]!;

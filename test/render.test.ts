@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { explore } from "../src/explore.ts";
+import { ensure } from "../src/index.ts";
+import { loadSpec } from "../src/load.ts";
 import { renderMarkdown } from "../src/render/markdown.ts";
 import { loadArticle } from "./fixtures/load-article.ts";
 
@@ -21,7 +23,27 @@ describe("renderMarkdown: 見出し", () => {
   });
 });
 
+const loopSpec = () =>
+  loadSpec("loop", {
+    initial: { status: "a" },
+    actors: { p: {} },
+    touch: (d: { status: string }) => {
+      ensure(d.status === "a", "a のときだけ");
+      return d;
+    },
+    go: (d: { status: string }) => {
+      ensure(d.status === "a", "a のときだけ");
+      return { status: "b" };
+    },
+  });
+
 describe("renderMarkdown: 状態遷移図", () => {
+  it("自分自身に戻る遷移は図に描かない（線が図を埋めて読めなくなるので）", () => {
+    const s = loopSpec();
+
+    expect(renderMarkdown(s, explore(s))).not.toContain("s0 --> s0");
+  });
+
   it("Mermaid の状態遷移図に、操作名と実行できた登場人物を載せる", () => {
     expect(doc).toContain("s0 --> s1: submit (alice)");
     expect(doc).toContain("s1 --> s2: publish (editor, admin)");
@@ -42,13 +64,26 @@ describe("renderMarkdown: 操作ごとの節", () => {
   });
 
   it("できないときは、担当者が止められた理由で状態をまとめる", () => {
-    expect(section("publish")).toContain("- **できないとき**: draft, published, published · pinned, archived（レビュー中のときだけ）");
+    expect(section("publish")).toContain("- **できないとき**: それ以外のすべての状態（レビュー中のときだけ）");
   });
 
-  it("できない理由が状態によって違うときは、理由ごとに行を分ける", () => {
+  it("できない理由が状態によって違うときは、理由ごとに行を分け、一番多いまとまりを『それ以外』にする", () => {
     expect(section("pin")).toContain(
-      "- **できないとき**:\n  - draft, inReview, archived（公開中のときだけ）\n  - published · pinned（まだ固定していないときだけ）",
+      "- **できないとき**:\n  - published · pinned（まだ固定していないときだけ）\n  - それ以外のすべての状態（公開中のときだけ）",
     );
+  });
+
+  it("できないときの状態が少ないなら、『それ以外』にまとめずに並べる", () => {
+    expect(section("submit")).toContain("- **できないとき**: それ以外のすべての状態（下書きのときだけ）");
+    const small = loopSpec();
+    const doc2 = renderMarkdown(small, explore(small));
+    expect(doc2).toContain("- **できないとき**: b（a のときだけ）");
+  });
+
+  it("自分自身に戻る遷移は、できるときの一覧で『変わらない』と書く", () => {
+    const s = loopSpec();
+
+    expect(renderMarkdown(s, explore(s))).toContain("- **できるとき**: a（変わらない）");
   });
 
   it("結果は、遷移の前後で変わった項目で示す", () => {

@@ -74,12 +74,12 @@ pnpm spec examples/minimal.spec.ts --serve   # http://127.0.0.1:4747/ をブラ�
 ## できること
 
 - **状態遷移図を計算する**: 状態は手で列挙しません。初期状態から「状態 × 操作 × 登場人物」をすべて実行し、到達できる状態と遷移を求めます。書いた人が想定していなかった状態の組み合わせも図に現れます
-- **できない理由を 3 つの軸に分ける**: `ensure` を並べるだけで、それが「誰が」「いつ」「何を入力したら」のどれの条件なのかを、実行結果から振り分けます
+- **できない理由を 3 つの軸に分ける**: `ensure` を並べるだけで、それが「誰が」「いつ」「何を入力したら」のどれの条件なのかを、実行結果から振り分けます。入力をとる操作では、入力ごとにどの状態へ移るか（またはなぜできないか）も示します
 - **不変条件を検査する**: 破る状態が見つかったら、初期状態からそこに至る最短の手順を示します
 - **画面（サーフェス）を描く**: 状態と見る人ごとの画面をワイヤーフレームで描きます。API の応答や CLI の出力も書けます。押しても実行できないボタンや、実行できるのにボタンがない操作も検出します
 - **wireflow 表示**: 状態遷移図のノードを画面のサムネイルにして、視点（誰に見えるか）を切り替えられます
 - **ほかの検査**: 誰も実行できない操作、型には書いてあるのに到達しない値、`ensure` 以外の例外（仕様のバグ）
-- **出力**: 1 ファイルで完結する HTML、Markdown、差分レビュー用の JSON
+- **出力**: ドメインオブジェクトごとのページ（`#/<名前>`）を持つ 1 ファイルの HTML、ドメインオブジェクトごとの Markdown、差分レビュー用の JSON
 - **AI と並走する**: `--serve` を付けると、spec を保存するたびにブラウザが自動で再読み込みします
 
 ## セットアップ
@@ -94,14 +94,19 @@ pnpm install
 ## 使い方
 
 ```sh
+pnpm spec specs/ --html --out out/spec.html            # ドメインオブジェクトごとのページを持つ 1 つの HTML
+pnpm spec specs/ --out out/spec/                        # ドメインオブジェクトごとの Markdown と一覧の README.md
+pnpm spec specs/ --serve                                # ブラウザで見ながら書く
 pnpm spec <file.spec.ts>                               # Markdown を標準出力に出す
 pnpm spec <file.spec.ts> --html --out out/spec.html    # HTML を書き出す
 pnpm spec <file.spec.ts> --json                        # 正規化モデル（差分レビュー用）
 pnpm spec <file.spec.ts> --html --out out/spec.html --watch   # 保存のたびに書き出し直す
-pnpm spec <file.spec.ts> --serve [--port 4747]         # ブラウザで見ながら書く
+pnpm spec <file.spec.ts> --serve [--port 4747]         # ブラウザで見ながら書く（--port は --serve と一緒に）
 ```
 
 ## spec の書き方
+
+**1 つの spec ファイルが 1 つのドメインオブジェクト**です（記事、注文、ジョブ、サーバ、ブラウザのタブ…）。プロジェクトの仕様は `specs/` のようなディレクトリに並べます。1 つの spec の状態が 10 個を超えるようなら、関心の違うものを混ぜていないかを疑い、分けてください。このリポジトリ自身の仕様も [specs/](specs/) にあります。
 
 spec ファイルは素の TypeScript です。export の名前で役割が決まります。
 
@@ -131,6 +136,16 @@ spec ファイルは素の TypeScript です。export の名前で役割が決�
 ## ステータス
 
 Phase 1（MVP）を進めています。進捗は [docs/plan.md](docs/plan.md) を参照してください。
+
+## AI と一緒に使う（Claude Code の skill）
+
+このリポジトリで Claude Code を使うと、次の skill が使えます（`.claude/skills/`）。
+
+- **live-spec-authoring**: spec の書き方の規約と、検査結果の直し方
+- **live-spec-from-code**: 既存のリポジトリのコードから spec を書き起こす。根拠（ファイルと行）を残し、分からないことは質問として返す
+- **live-spec-review**: spec の変更を、振る舞いの変化（誰が何をできるようになったか など）として要約する
+
+別のリポジトリで spec を書くときは、そのリポジトリで `pnpm add -D link:<live-spec のパス>` を実行すると、`import { ensure } from "live-spec"` と `pnpm exec live-spec` が使えます。
 
 ## ドキュメント
 

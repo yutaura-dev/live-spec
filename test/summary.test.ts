@@ -21,6 +21,7 @@ describe("summarizeActions: 操作ごとの要約", () => {
       blocked: [{ reason: "レビュー中のときだけ", states: ["draft", "published", "published · pinned", "archived"] }],
       effect: [{ field: "status", values: ["published"] }],
       inputReasons: [],
+      inputOutcomes: [],
     });
   });
 });

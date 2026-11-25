@@ -78,8 +78,50 @@ describe("startServer: 仕様書をブラウザに配信するローカルサー
   });
 });
 
+describe("startServer: 読み込みから通知の接続までの間の更新を取りこぼさない", () => {
+  const firstEvent = (url: string) =>
+    new Promise<string>((resolve) => {
+      const req = request(url, (res) => {
+        let buf = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk: string) => {
+          buf += chunk;
+          const m = /data: ([^\n]*)\n\n/.exec(buf);
+          if (m) {
+            req.destroy();
+            resolve(m[1]!);
+          }
+        });
+      });
+      req.end();
+    });
+
+  it("配信するページに、その内容の版数を埋め込む", async () => {
+    server = await startServer(0);
+    server.update("<html><body>v1</body></html>");
+
+    expect((await get(server.url)).body).toContain("var version = 1;");
+  });
+
+  it("通知の接続がつながったら、今の版数を送る", async () => {
+    server = await startServer(0);
+    server.update("<html><body>v1</body></html>");
+    await get(server.url);
+    server.update("<html><body>v2</body></html>");
+
+    expect(await firstEvent(new URL(EVENTS_PATH, server.url).href)).toBe("version 2");
+  });
+});
+
 describe("injectReload: 再読み込み用のスクリプトを差し込む", () => {
   it("</body> の直前に差し込む", () => {
-    expect(injectReload("<html><body>x</body></html>")).toMatch(/x<script>[\s\S]*<\/script>\n<\/body>/);
+    expect(injectReload("<html><body>x</body></html>", 3)).toMatch(/x<script>[\s\S]*<\/script>\n<\/body>/);
+  });
+
+  it("受け取った版数がページの版数と違えば再読み込みする", () => {
+    const script = injectReload("<html><body>x</body></html>", 3);
+
+    expect(script).toContain("var version = 3;");
+    expect(script).toContain('"version " + version');
   });
 });
