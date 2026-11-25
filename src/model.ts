@@ -41,6 +41,14 @@ export const Finding = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("invalid-return"), action: Schema.String, actor: Schema.String, state: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("state-limit"), maxStates: Schema.Number }),
   Schema.Struct({ kind: Schema.Literal("missing-inputs"), action: Schema.String }),
+  Schema.Struct({
+    kind: Schema.Literal("surface-action-not-allowed"),
+    state: Schema.String,
+    actor: Schema.String,
+    action: Schema.String,
+  }),
+  Schema.Struct({ kind: Schema.Literal("surface-action-missing"), state: Schema.String, actor: Schema.String, action: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("surface-error"), state: Schema.String, actor: Schema.String, message: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("unknown-inputs"), action: Schema.String }),
   Schema.Struct({
     kind: Schema.Literal("invariant-violation"),
@@ -56,6 +64,7 @@ export const Graph = Schema.Struct({
   transitions: Schema.Array(Transition),
   availability: Schema.Array(Availability),
   findings: Schema.Array(Finding),
+  surfaces: Schema.Array(Schema.Struct({ state: Schema.String, actor: Schema.String, surface: Schema.Unknown })),
 });
 export type Graph = typeof Graph.Type;
 

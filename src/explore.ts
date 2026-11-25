@@ -1,6 +1,7 @@
 import { isNotAllowed } from "./ensure.ts";
 import type { Spec, State } from "./load.ts";
 import { canonical, type Finding, type Graph } from "./model.ts";
+import { buttonsOf, type SurfaceNode } from "./surface.ts";
 
 export interface ExploreOptions {
   readonly maxStates?: number;
@@ -136,7 +137,44 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
     if (!availability.some((a) => a.action === action && a.enabled)) findings.push({ kind: "never-enabled-action", action });
   }
 
-  return { states, transitions: [...transitions.values()], availability, findings };
+  const surfaces = spec.surface === null ? [] : checkSurfaces(spec.surface, spec, [...processed], valuesById, availability, findings);
+
+  return { states, transitions: [...transitions.values()], availability, findings, surfaces };
+};
+
+// 画面のボタンと探索の結果を突き合わせる。画面と状態遷移が同じ spec から作られているので、
+// 「押しても実行できないボタン」「実行できるのに画面から辿れない操作」を機械的に見つけられる。
+const checkSurfaces = (
+  surface: NonNullable<Spec["surface"]>,
+  spec: Spec,
+  states: ReadonlyArray<string>,
+  valuesById: ReadonlyMap<string, State>,
+  availability: Graph["availability"],
+  findings: Array<Finding>,
+): Graph["surfaces"] => {
+  const result: Array<Graph["surfaces"][number]> = [];
+  for (const state of states) {
+    for (const [actor, actorValue] of spec.actors) {
+      let node: SurfaceNode;
+      try {
+        node = (surface as (s: unknown, a: unknown) => SurfaceNode)(structuredClone(valuesById.get(state)!), structuredClone(actorValue));
+      } catch (e) {
+        findings.push({ kind: "surface-error", state, actor, message: e instanceof Error ? e.message : String(e) });
+        continue;
+      }
+      result.push({ state, actor, surface: node });
+      const allowed = new Set(availability.filter((a) => a.state === state && a.actor === actor && a.enabled).map((a) => a.action));
+      const buttons = buttonsOf(node).filter((b) => b.action !== undefined);
+      const shown = new Set(buttons.filter((b) => b.disabled !== true).map((b) => b.action!));
+      for (const action of shown) {
+        if (!allowed.has(action)) findings.push({ kind: "surface-action-not-allowed", state, actor, action });
+      }
+      for (const action of allowed) {
+        if (!shown.has(action)) findings.push({ kind: "surface-action-missing", state, actor, action });
+      }
+    }
+  }
+  return result;
 };
 
 // ラベルに「状態によって値が変わる項目」だけを使う理由: authorId のように

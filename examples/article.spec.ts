@@ -1,4 +1,4 @@
-import { ensure } from "../src/index.ts";
+import { ensure, ui } from "../src/index.ts";
 
 /** ブログ記事。著者が書き、編集者がレビューして公開する。 */
 export type Article = {
@@ -75,4 +75,26 @@ export function archive(article: Article, user: User): Article {
   ensure(user.role === "admin", "管理者だけ");
   ensure(article.status === "published", "公開中のときだけ");
   return { ...article, status: "archived", pinned: false };
+}
+
+/** 記事の詳細画面。見る人の役割と記事の状態によって、出るボタンが変わる。 */
+export function surface(article: Article, user: User) {
+  const isAuthor = user.id === article.authorId;
+  const { status } = article;
+  return ui.screen(
+    "記事の詳細",
+    ui.section("状態", ui.badge(status), article.pinned && ui.badge("トップに固定中")),
+    ui.field("タイトル", "はじめての live-spec"),
+    ui.text("本文がここに入ります。"),
+    ui.section(
+      "操作",
+      isAuthor && status === "draft" && ui.button("編集する", edit),
+      isAuthor && status === "draft" && ui.button("レビューに出す", submit),
+      user.role === "editor" && status === "inReview" && ui.button("差し戻す", reject),
+      (user.role === "editor" || user.role === "admin") && status === "inReview" && ui.button("公開する", publish),
+      user.role === "editor" && status === "published" && !article.pinned && ui.button("トップに固定する", pin),
+      user.role === "admin" && status === "published" && ui.button("公開を取り下げる", unpublish),
+      user.role === "admin" && status === "published" && ui.button("アーカイブする", archive),
+    ),
+  );
 }

@@ -11,7 +11,10 @@ export const renderHtml = async (spec: Spec, graph: Graph): Promise<string> => {
   const initial = graph.states.find((s) => s.initial);
   const terminal = new Set(graph.states.filter((s) => s.terminal).map((s) => s.id));
   const violating = new Set(graph.findings.flatMap((f) => (f.kind === "invariant-violation" ? [f.state] : [])));
-  const data = { states: summarizeStates(spec, graph) };
+  const data = {
+    states: summarizeStates(spec, graph),
+    notAllowed: graph.findings.flatMap((f) => (f.kind === "surface-action-not-allowed" ? [{ state: f.state, actor: f.actor, action: f.action }] : [])),
+  };
 
   return `<!doctype html>
 <html lang="ja">
@@ -168,7 +171,7 @@ h2{font-size:18px;margin:40px 0 16px}
 .board .hint{margin:0 0 10px}
 .diagram{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:auto;padding:8px}
 .diagram svg{display:block;max-width:100%;height:auto;margin:0 auto}
-.panel{position:fixed;top:16px;right:16px;width:340px;max-height:calc(100vh - 32px);overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.25);z-index:10}
+.panel{position:fixed;top:16px;right:16px;width:400px;max-height:calc(100vh - 32px);overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.25);z-index:10}
 .panel[hidden]{display:none}
 .panel h2{margin:0 0 12px;font-size:20px}
 .panel h3{font-size:13px;color:var(--muted);margin:18px 0 6px;font-weight:600}
@@ -179,6 +182,25 @@ h2{font-size:18px;margin:40px 0 16px}
 .panel .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;background:var(--chip);margin-right:6px}
 .panel button{margin-top:16px;font:inherit;font-size:13px;background:none;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:4px 12px;cursor:pointer}
 .hint{font-size:12px;color:var(--muted)}
+.wf-group{margin:10px 0 16px}
+.wf-screen{border:1.5px solid var(--fg);border-radius:8px;background:var(--node);font-size:13px;overflow:hidden}
+.wf-title{border-bottom:1.5px solid var(--fg);padding:6px 10px;font-weight:600;display:flex;gap:6px;align-items:center}
+.wf-title::before{content:"";width:28px;height:6px;border-radius:3px;background:repeating-linear-gradient(90deg,var(--muted) 0 6px,transparent 6px 11px)}
+.wf-body{padding:10px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.wf-section{border:1px dashed var(--muted);border-radius:6px;padding:8px;align-self:stretch;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.wf-section > .wf-label{font-size:11.5px;color:var(--muted)}
+.wf-heading{font-weight:600;font-size:14px}
+.wf-text{margin:0}
+.wf-field{display:flex;flex-direction:column;gap:2px;align-self:stretch;font-size:11.5px;color:var(--muted)}
+.wf-input{border:1.2px solid var(--muted);border-radius:4px;min-height:24px;padding:2px 6px;color:var(--fg);font-size:12.5px}
+.wf-button{border:1.5px solid var(--fg);border-radius:6px;padding:2px 12px;font-size:12.5px;font-weight:600}
+.wf-button.is-disabled{opacity:.4;border-style:dashed}
+.wf-button.is-invalid{border-color:var(--warn);color:var(--warn)}
+.wf-button.is-invalid::after{content:" ⚠"}
+.wf-badge{border:1px solid var(--muted);border-radius:999px;padding:0 8px;font-size:11px;color:var(--muted)}
+.wf-list{margin:0;padding-left:18px;align-self:stretch}
+.wf-code{margin:0;align-self:stretch;background:var(--chip);border-radius:6px;padding:8px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}
+.wf-code[data-language="terminal"]{background:#111;color:#e6e6e6}
 svg text{font-size:13px;fill:var(--fg);text-anchor:middle;dominant-baseline:central}
 marker path{fill:var(--muted)}
 .node{cursor:pointer;outline:none}
@@ -250,6 +272,48 @@ const CLIENT = `
     return ul;
   }
 
+  // ワイヤーフレームも textContent で組み立てる（文言は spec 由来の文字列なので）。
+  function renderSurface(node, invalid) {
+    var children = function (parent, list) { list.forEach(function (c) { parent.append(renderSurface(c, invalid)); }); return parent; };
+    switch (node.kind) {
+      case "screen": {
+        var screen = el("div", "wf-screen");
+        screen.append(el("div", "wf-title", node.title), children(el("div", "wf-body"), node.children));
+        return screen;
+      }
+      case "section": {
+        var section = el("div", "wf-section");
+        section.append(el("span", "wf-label", node.title));
+        return children(section, node.children);
+      }
+      case "heading": return el("div", "wf-heading", node.text);
+      case "text": return el("p", "wf-text", node.text);
+      case "field": {
+        var field = el("label", "wf-field", node.label);
+        field.append(el("div", "wf-input", node.value));
+        return field;
+      }
+      case "button": {
+        var cls = "wf-button" + (node.disabled ? " is-disabled" : "") + (!node.disabled && invalid.indexOf(node.action) >= 0 ? " is-invalid" : "");
+        var button = el("span", cls, node.label);
+        if (cls.indexOf("is-invalid") >= 0) button.title = "このボタンを押しても " + node.action + " は実行できません";
+        return button;
+      }
+      case "badge": return el("span", "wf-badge", node.text);
+      case "list": {
+        var ul = el("ul", "wf-list");
+        node.items.forEach(function (item) { var li = el("li"); li.append(renderSurface(item, invalid)); ul.append(li); });
+        return ul;
+      }
+      case "code": {
+        var pre = el("pre", "wf-code", node.text);
+        pre.setAttribute("data-language", node.language);
+        return pre;
+      }
+      default: return el("span", "sub", "（未対応の要素: " + String(node.kind) + "）");
+    }
+  }
+
   function selectState(id) {
     var s = data.states.find(function (x) { return x.id === id; });
     if (!s) return;
@@ -269,6 +333,17 @@ const CLIENT = `
     if (s.initial) panel.append(el("span", "tag", "初期状態"));
     if (s.terminal) panel.append(el("span", "tag", "終端"));
     s.violations.forEach(function (v) { panel.append(el("p", "violation", "⚠ 不変条件「" + v + "」を破っています")); });
+    if (s.surfaces.length > 0) {
+      panel.append(el("h3", null, "見える画面"));
+      s.surfaces.forEach(function (g) {
+        var group = el("div", "wf-group");
+        group.append(el("span", "sub", g.actors.join(", ") + " が見る画面"));
+        var invalid = data.notAllowed.filter(function (n) { return n.state === s.id && g.actors.indexOf(n.actor) >= 0; })
+          .map(function (n) { return n.action; });
+        group.append(renderSurface(g.surface, invalid));
+        panel.append(group);
+      });
+    }
     panel.append(el("h3", null, "できること（" + s.can.length + "）"));
     panel.append(list(s.can, function (c) {
       var li = el("li");

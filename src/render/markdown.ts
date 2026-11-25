@@ -74,6 +74,12 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       return `操作 ${f.action} は 3 つ目以降の引数をとるが、inputs に例がないので実行していない`;
     case "unknown-inputs":
       return `inputs に書かれた ${f.action} という操作は存在しない`;
+    case "surface-action-not-allowed":
+      return `${labelOf(f.state)} で ${f.actor} に ${f.action} のボタンが見えているが、実行できない`;
+    case "surface-action-missing":
+      return `${labelOf(f.state)} で ${f.actor} は ${f.action} を実行できるが、画面にボタンがない`;
+    case "surface-error":
+      return `${labelOf(f.state)} で ${f.actor} の画面を作るときに例外を投げた: ${f.message}`;
     case "state-limit":
       return `状態が ${f.maxStates} 個を超えたので探索を打ち切った（値が増え続ける項目がないか確認する）`;
   }

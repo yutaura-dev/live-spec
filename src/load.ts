@@ -3,6 +3,7 @@ import { analyze, type FieldValue } from "./static.ts";
 export type State = Readonly<Record<string, unknown>>;
 export type ActionFn = (state: never, actor: never) => unknown;
 export type InvariantFn = (state: never) => unknown;
+export type SurfaceFn = (state: never, actor: never) => unknown;
 
 export interface Spec {
   readonly name: string;
@@ -11,12 +12,13 @@ export interface Spec {
   readonly actions: ReadonlyArray<readonly [name: string, fn: ActionFn]>;
   readonly invariants: ReadonlyArray<readonly [name: string, fn: InvariantFn]>;
   readonly inputs: Readonly<Record<string, ReadonlyArray<readonly [label: string, args: ReadonlyArray<unknown>]>>>;
+  readonly surface: SurfaceFn | null;
   readonly docs: Readonly<Record<string, string>>;
   readonly fields: Readonly<Record<string, ReadonlyArray<FieldValue>>>;
   readonly stateDoc: string | null;
 }
 
-const RESERVED = new Set(["initial", "actors", "invariants", "inputs"]);
+const RESERVED = new Set(["initial", "actors", "invariants", "inputs", "surface"]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
   typeof u === "object" && u !== null && !Array.isArray(u);
@@ -42,6 +44,7 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
       ? Object.entries(mod.invariants).filter((e): e is [string, InvariantFn] => typeof e[1] === "function")
       : [],
     inputs: inputsOf(mod.inputs),
+    surface: typeof mod.surface === "function" ? (mod.surface as SurfaceFn) : null,
     docs: info?.docs ?? {},
     fields: info?.fields ?? {},
     stateDoc: info?.stateDoc ?? null,

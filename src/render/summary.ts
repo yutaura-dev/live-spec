@@ -20,6 +20,7 @@ export interface StateSummary {
   readonly can: ReadonlyArray<{ readonly action: string; readonly actors: ReadonlyArray<string>; readonly to: string }>;
   readonly cannot: ReadonlyArray<{ readonly action: string; readonly reason: string }>;
   readonly violations: ReadonlyArray<string>;
+  readonly surfaces: ReadonlyArray<{ readonly actors: ReadonlyArray<string>; readonly surface: unknown }>;
 }
 
 const ERROR_REASON = "エラー";
@@ -82,7 +83,14 @@ export const summarizeStates = (spec: Spec, graph: Graph): ReadonlyArray<StateSu
       }
     }
     const violations = graph.findings.flatMap((f) => (f.kind === "invariant-violation" && f.state === s.id ? [f.invariant] : []));
-    return { id: s.id, label: s.label, initial: s.initial, terminal: s.terminal, can, cannot, violations };
+    const groups = new Map<string, { actors: Array<string>; surface: unknown }>();
+    for (const sf of graph.surfaces.filter((x) => x.state === s.id)) {
+      const key = JSON.stringify(sf.surface);
+      const g = groups.get(key) ?? { actors: [], surface: sf.surface };
+      g.actors.push(sf.actor);
+      groups.set(key, g);
+    }
+    return { id: s.id, label: s.label, initial: s.initial, terminal: s.terminal, can, cannot, violations, surfaces: [...groups.values()] };
   });
 };
 
