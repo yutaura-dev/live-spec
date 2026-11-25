@@ -17,14 +17,14 @@ type Outcome =
   | { readonly kind: "error"; readonly message: string }
   | { readonly kind: "invalid-return" };
 
-const run = (
+export const runAction = (
   fn: Spec["actions"][number][1],
   state: State,
   actor: unknown,
   args: ReadonlyArray<unknown>,
   bypassReason: string | null,
 ): Outcome => {
-  if (bypassReason !== null) return withEnsureBypassed(bypassReason, () => run(fn, state, actor, args, null));
+  if (bypassReason !== null) return withEnsureBypassed(bypassReason, () => runAction(fn, state, actor, args, null));
   try {
     // structuredClone を渡す理由: 関数が引数を破壊的に変更しても、探索済みの状態が壊れないようにするため。
     const next = (fn as (s: unknown, a: unknown, ...rest: Array<unknown>) => unknown)(
@@ -102,7 +102,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
     for (const [action, fn] of runnable) {
       for (const [actor, actorValue] of spec.actors) {
         for (const [input, args] of spec.inputs[action] ?? NO_INPUT) {
-          const outcome = run(fn, values, actorValue, args, bypassFor(action));
+          const outcome = runAction(fn, values, actorValue, args, bypassFor(action));
           if (outcome.kind !== "ok") {
             if (outcome.kind === "error") findings.push({ kind: "action-error", action, actor, state: from, message: outcome.message });
             if (outcome.kind === "invalid-return") findings.push({ kind: "invalid-return", action, actor, state: from });
@@ -224,7 +224,7 @@ const runScenarios = (
         fail("この操作には入力の例（input）を指定する");
         break;
       }
-      const outcome = run(step.do, values, actor[1], args, bypassFor(action));
+      const outcome = runAction(step.do, values, actor[1], args, bypassFor(action));
       if (step.denied !== undefined) {
         if (outcome.kind === "ok") {
           fail("断られるはずが、実行できた");
