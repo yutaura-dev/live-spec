@@ -67,7 +67,7 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 
 - `pnpm test` / `pnpm typecheck`: 両方通ることを完了の条件にする
 - `pnpm build` / `pnpm pack`: 配布物（`dist/` と `.claude/skills/*/SKILL.md`）を作る。配布の形を変えたら、tarball を別のディレクトリに入れて CLI と型チェックを確かめる
-- `.claude/skills/` は配布物に含まれる（`live-spec skills install` で利用者のリポジトリにコピーされる）。skill の文面は「npm で入れて使う」前提で書く
+- `.claude/skills/` が skill の原本。ビルドで配布物の `skills/` にコピーされ、skills-npm・`live-spec skills install`・Claude Code の plugin のどれからでも入る。skill の文面は「npm で入れて使う」前提で書く
 - README の例は `examples/minimal.spec.ts` と同じ内容でなければならない（`test/examples.test.ts` が検査する）。例を変えたら README も直す
 - `pnpm spec examples/article.spec.ts > out/article.md`: Markdown の仕様書を生成する（`out/` は gitignore 対象）
 - `pnpm spec examples/article.spec.ts --html --out out/article.html`: HTML の仕様書を生成する

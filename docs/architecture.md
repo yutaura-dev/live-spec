@@ -91,7 +91,8 @@ ADR にするほどではないが、実装時に守りたい原則。根拠は 
 
 ## 配布
 
-- npm パッケージ。`dist/`（tsc で出力した JS と型定義）と、`.claude/skills/*/SKILL.md` を含める
+- npm パッケージ。`dist/`（tsc で出力した JS と型定義）、`skills/<名前>/SKILL.md`、`.claude-plugin/plugin.json` を含める
+- skill は配布物のルートの `skills/` に置く。skills-npm / skills CLI（`experimental_sync`）がこの場所を探して利用者の `.claude/skills` に自動でリンクし、Claude Code の plugin の構成（`skills/` と `.claude-plugin/plugin.json`）にもなるため。原本は `.claude/skills/` で、ビルドのときに `scripts/copy-skills.mjs` がコピーし、`plugin.json` を `package.json` の版数から作る
 - `exports` は `dist/index.js`（`ensure` / `ui` / `api` / `cli`）、`bin` は `dist/cli.js`（`live-spec`）
 - tsc の `rewriteRelativeImportExtensions` は型定義の `./foo.ts` を書き換えないので、`scripts/rewrite-dts-extensions.mjs` で `.js` にそろえる
 - このリポジトリの `specs/` と `examples/` は `../src/index.ts` から読み込む（`"live-spec"` は `dist/` を指すので、ビルドしないと動かないため）

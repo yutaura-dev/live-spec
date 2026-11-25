@@ -92,9 +92,28 @@ Node.js 22.18 以上が必要です（spec ファイルの TypeScript をその�
 
 ### Claude Code の skill を入れる
 
+live-spec のパッケージには、3 つの skill が `skills/<名前>/SKILL.md` として入っています。入れ方は 3 通りあります。
+
+**1. pnpm install / npm install のたびに自動で入れる（推奨）**
+
+[skills-npm](https://github.com/antfu/skills-npm)（または `skills` CLI の `experimental_sync`）を使うと、依存パッケージに入っている skill が `.claude/skills/` などに自動でリンクされます。live-spec を更新すれば skill も一緒に更新されます。
+
 ```sh
-npx live-spec skills install    # .claude/skills/ に 3 つの skill を置く（既にあるものは上書きしない。--force で上書き）
+npm i -D skills-npm
+npx skills-npm setup      # package.json の prepare に組み込み、最初の同期をする
 ```
+
+**2. live-spec のコマンドでコピーする**
+
+```sh
+npx live-spec skills install    # .claude/skills/ にコピー（既にあるものは上書きしない。--force で上書き）
+```
+
+**3. Claude Code の plugin として入れる**
+
+パッケージは Claude Code の plugin の構成（`.claude-plugin/plugin.json` と `skills/`）にもなっているので、marketplace の npm source から入れられます。
+
+入る skill:
 
 - **live-spec-authoring**: spec の書き方の規約と、検査結果の直し方
 - **live-spec-from-code**: 既存のコードから spec を書き起こす。根拠（ファイルと行）を残し、分からないことは質問として返す

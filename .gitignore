@@ -9,6 +9,8 @@ node_modules/
 # generated
 /out/
 /dist/
+/skills/
+/.claude-plugin/
 *.tgz
 
 # env files

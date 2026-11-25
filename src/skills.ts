@@ -2,9 +2,10 @@ import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// 同梱の skill をパッケージのルートの .claude/skills から読む理由: このリポジトリで開発に使っている skill を
-// そのまま配布物に入れ、原本を 1 か所に保つため（src/ からも dist/ からも 1 つ上がルート）。
-const SKILLS_DIR = fileURLToPath(new URL("../.claude/skills/", import.meta.url));
+// 配布物では skills/（skills-npm などの慣習の置き場所。ビルドで .claude/skills からコピーする）、
+// このリポジトリで直接動かすときは原本の .claude/skills から読む。src/ からも dist/ からも 1 つ上がルート。
+const candidates = ["../skills/", "../.claude/skills/"].map((p) => fileURLToPath(new URL(p, import.meta.url)));
+const SKILLS_DIR = candidates.find((dir) => existsSync(dir)) ?? candidates[1]!;
 
 export const bundledSkills = (): Array<string> =>
   readdirSync(SKILLS_DIR, { withFileTypes: true })

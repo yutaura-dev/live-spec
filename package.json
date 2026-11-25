@@ -22,7 +22,8 @@
   },
   "files": [
     "dist",
-    ".claude/skills/*/SKILL.md",
+    "skills/*/SKILL.md",
+    ".claude-plugin/plugin.json",
     "README.md"
   ],
   "engines": {
@@ -32,7 +33,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/rewrite-dts-extensions.mjs dist",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/rewrite-dts-extensions.mjs dist && node scripts/copy-skills.mjs skills",
     "prepack": "pnpm build",
     "spec": "node src/cli.ts"
   },
