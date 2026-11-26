@@ -76,7 +76,7 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 - `pnpm spec examples/article.spec.ts --html --out out/article.html`: HTML の仕様書を生成する
 - `pnpm spec examples/article.spec.ts --html --out out/article.html --watch`: spec を保存するたびに生成し直す
 - `pnpm spec examples/article.spec.ts --serve`: http://127.0.0.1:4747/ で配信し、spec を保存するとブラウザが自動で再読み込みする
-- `pnpm spec specs/ --serve`: このリポジトリ自身の仕様（ドメインオブジェクト 4 つ）を見る。実装を変えたら `specs/` も直す（`test/examples.test.ts` が検査結果を確かめる）
+- `pnpm spec specs/ --serve`: このリポジトリ自身の仕様（ドメインオブジェクト 4 つ）を見る。振る舞いを変えるときは、実装より先に `specs/` を直し、生成した仕様書のレビューを経てから実装する。実装に合わせて `specs/` を書き換えない（`test/examples.test.ts` が検査結果を確かめる）
 
 ## 主要な設計判断（要点のみ）
 
