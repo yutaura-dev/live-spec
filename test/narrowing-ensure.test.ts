@@ -42,7 +42,7 @@ describe("型を絞るための ensure", { timeout: 30_000 }, () => {
     const md = renderMarkdown(spec, graph);
 
     expect(md).toContain("「人だけ」— 通るのは");
-    expect(md).toContain("外しても振る舞いが変わらない（後の条件のために型を絞る条件）");
-    expect(md).not.toContain("「人だけ」— 通るのは 画面の人, 機械の人 のとき。外しても振る舞いが変わらない（ほかの条件と重なっている）");
+    expect(md).toContain("この条件が無くても振る舞いは変わらない（後の条件のために型を絞る条件）");
+    expect(md).not.toContain("「人だけ」— 通るのは 画面の人, 機械の人 のとき。この条件が無くても振る舞いは変わらない（ほかの条件と重なっている）");
   });
 });

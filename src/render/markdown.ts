@@ -243,7 +243,7 @@ const scenarioSection = (spec: Spec, s: Graph["scenarios"][number], labelOf: (id
   "",
   ...s.steps.map((step, i) =>
     step.ok && step.denied
-      ? `${i + 1}. ${describeStep(spec, step)}: 断られる（${step.reason}）`
+      ? `${i + 1}. ${describeStep(spec, step)}: この操作はできない（${step.reason}）`
       : step.ok
       ? `${i + 1}. ${describeStep(spec, step)}: ${labelOf(step.from ?? "")} → ${labelOf(step.to ?? "")}`
       : `${i + 1}. ❌ ${describeStep(spec, step)}: ${step.reason}`,

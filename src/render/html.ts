@@ -1,5 +1,5 @@
 import type { EnsureCheck } from "../model.ts";
-import { describeEnsure } from "./ensures.ts";
+import { ensureParts } from "./ensures.ts";
 import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
 import type { Spec } from "../load.ts";
 import type { Graph } from "../model.ts";
@@ -211,7 +211,7 @@ const renderPage = async (
             const shown = st.to === null ? undefined : graph.surfaces.find((x) => x.state === st.to && x.actor === st.actor);
             return `<li class="${st.ok ? "" : "failed"}"><p class="step">${esc(describeStep(spec, st))}</p>${
               st.ok && st.denied
-                ? `<p class="flow">断られる（${esc(st.reason ?? "")}）</p>`
+                ? `<p class="flow">この操作はできない（${esc(st.reason ?? "")}）</p>`
                 : st.ok
                 ? `<p class="flow">${esc(labelOf(st.from ?? ""))} → ${esc(labelOf(st.to ?? ""))}</p>`
                 : `<p class="reason">❌ ${esc(st.reason ?? "")}</p>`
@@ -520,7 +520,12 @@ const actionCard = (
               : `<dt>条件</dt><dd><ul>${ensures
                   .map((e) => {
                     const acknowledged = reviewed[unguardedId(e)] !== undefined;
-                    return `<li class="ensure ${e.verdict}${acknowledged ? " acknowledged" : ""}">${esc(describeEnsure(e, acknowledged))}</li>`;
+                    const p = ensureParts(e, acknowledged);
+                    // 確かめるもののない条件だけ開いて見せ、ほかは畳む。全部開くと、カードが検査の説明で埋まるため。
+                    const body = p.warn
+                      ? `⚠ ${esc(p.head)}。${esc(p.effect)}`
+                      : `${esc(p.head)}。<details class="ensure-effect"><summary>この条件が無いと</summary>${esc(p.effect)}</details>`;
+                    return `<li class="ensure ${e.verdict}${acknowledged ? " acknowledged" : ""}">${body}</li>`;
                   })
                   .join("")}</ul></dd>`
           }
@@ -647,7 +652,7 @@ marker path{fill:var(--muted)}
 .questions .ask{font-weight:600}
 .questions .target{color:var(--muted);font-size:13px;margin-left:4px}
 .questions .note{display:block;color:var(--muted);font-size:13px}
-.questions.review.done{border-color:var(--line)}.questions.review.done h2{color:var(--muted)}.ensure.unguarded.acknowledged{color:var(--muted);font-weight:400;font-size:12.5px}
+.questions.review.done{border-color:var(--line)}.questions.review.done h2{color:var(--muted)}.ensure-effect{display:inline}.ensure-effect summary{display:inline;cursor:pointer;color:var(--muted);font-size:12.5px}.ensure-effect[open]{display:block}.ensure.unguarded.acknowledged{color:var(--muted);font-weight:400;font-size:12.5px}
 .review-id{font-size:11.5px;color:var(--muted);margin-left:4px}.acknowledged{margin:8px 0 4px;font-size:13px}.acknowledged summary{cursor:pointer;color:var(--muted)}
 .ensure{font-size:12.5px;margin:2px 0;color:var(--muted)}.ensure.unguarded{color:var(--warn);font-weight:600;font-size:13px}
 .q-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--warn);color:var(--bg);vertical-align:middle}

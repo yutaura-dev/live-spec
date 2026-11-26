@@ -51,7 +51,7 @@ describe("確かめてほしい点: 漏れの候補と、意図がほかに書�
     const md = renderMarkdown(spec, graph);
 
     expect(md).toContain("- **条件**:");
-    expect(md).toContain("  - ⚠ 「編集者だけ」— 通るのは 編集者eve のとき。外すと、");
+    expect(md).toContain("  - ⚠ 「編集者だけ」— 通るのは 編集者eve のとき。この条件が無いと、");
     expect(md).toContain("  - ⚠ 「下書きのときだけ」— 通るのは status が draft のとき。");
   });
 
@@ -70,8 +70,8 @@ describe("確かめてほしい点: 漏れの候補と、意図がほかに書�
 
     const md = renderMarkdown(spec, graph);
 
-    expect(md).toContain("  - 「編集者だけ」— 通るのは 編集者eve のとき。外すと、");
-    expect(md).toContain("気づくものがない（確認済み）");
+    expect(md).toContain("  - 「編集者だけ」— 通るのは 編集者eve のとき。この条件が無いと、");
+    expect(md).toContain("それを確かめている不変条件・シナリオ・画面がない（確認済み）");
     expect(md).not.toContain("⚠ 「編集者だけ」");
   });
 
