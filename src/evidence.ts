@@ -111,21 +111,36 @@ const recordedHash = (lock: Record<string, string>, spec: Spec, action: string, 
 interface ResolvedLocation extends Location {
   readonly action: string;
   readonly evidence: string;
+  /** spec のソースの中で、根拠の文の直前に書かれている文字列（行番号を書き換えるときに、根拠の文を探すのに使う） */
+  readonly prefix: string;
   readonly file: string | undefined;
 }
 
+export const QUESTION_EVIDENCE = "未決事項";
+
+// note は自由な文なので、根拠のコメントと違って先頭を場所とみなさず、「path.ext:行」の形のものだけを拾う。
+// 行番号のないファイル名は、文の中で触れているだけのことが多いので拾わない。
+const locationsInNote = (text: string): Array<Location> =>
+  [...text.matchAll(/[\w./-]+\.[A-Za-z][\w]*:(\d+)(?:-(\d+))?/g)].map((m) => ({
+    path: m[0].slice(0, m[0].indexOf(":")),
+    start: Number(m[1]),
+    end: m[2] === undefined ? null : Number(m[2]),
+    last: Number(m[2] ?? m[1]),
+    raw: m[0],
+  }));
+
 const resolvedLocations = (spec: Spec, specPath: string): Array<ResolvedLocation> => {
   const roots = rootsFor(spec, specPath);
-  return Object.entries(spec.evidence).flatMap(([action, items]) =>
-    items.flatMap((evidence) =>
-      evidenceLocations(evidence).map((loc) => ({
-        ...loc,
-        action,
-        evidence,
-        file: roots.map((root) => join(root, loc.path)).find((p) => existsSync(p)),
-      })),
-    ),
+  const fileOf = (path: string) => roots.map((root) => join(root, path)).find((p) => existsSync(p));
+  const fromActions = Object.entries(spec.evidence).flatMap(([action, items]) =>
+    items.flatMap((evidence) => evidenceLocations(evidence).map((loc) => ({ ...loc, action, evidence, prefix: "根拠: ", file: fileOf(loc.path) }))),
   );
+  const fromNotes = spec.questions.flatMap((q) =>
+    q.note === undefined
+      ? []
+      : locationsInNote(q.note).map((loc) => ({ ...loc, action: QUESTION_EVIDENCE, evidence: q.note!, prefix: "", file: fileOf(loc.path) })),
+  );
+  return [...fromActions, ...fromNotes];
 };
 
 export interface CheckEvidenceOptions {
@@ -182,13 +197,16 @@ export const updateEvidenceLock = (spec: Spec, specPath: string): EvidenceUpdate
     const current = loc.last <= lines.length ? blockHash(lines, loc.start, loc.end ?? loc.start) : null;
     if (old !== undefined && old !== current) {
       const to = findMoved(lines, old, loc.start, length);
-      if (to !== null) {
+      // spec のソースに根拠の文がそのまま見つからない（エスケープした文字列など）ときは、行番号を書き換えられないので、
+      // 新しい位置で記録しない。記録すると、spec の行番号と lock がずれたままになるため。
+      const written = `${loc.prefix}${loc.evidence}`;
+      if (to !== null && source.includes(written)) {
         start = to;
         moved++;
         const end = loc.end === null ? null : to + length - 1;
         const raw = loc.raw.startsWith(":") ? `:${rangeText(to, end)}` : `${loc.path}:${rangeText(to, end)}`;
-        const text = rewrites.get(loc.evidence) ?? loc.evidence;
-        rewrites.set(loc.evidence, text.replace(loc.raw, raw));
+        const text = rewrites.get(written) ?? written;
+        rewrites.set(written, text.replace(loc.raw, raw));
       } else {
         changed++;
       }
@@ -198,7 +216,7 @@ export const updateEvidenceLock = (spec: Spec, specPath: string): EvidenceUpdate
     entries[lockKey(spec, loc.action, loc.path, start, end)] = blockHash(lines, start, start + length - 1);
     recorded++;
   }
-  for (const [before, after] of rewrites) source = source.split(`根拠: ${before}`).join(`根拠: ${after}`);
+  for (const [before, after] of rewrites) source = source.split(before).join(after);
   if (rewrites.size > 0) writeFileSync(specPath, source);
   writeLock(lockPath, entries);
   return { lockPath, recorded, moved, changed };

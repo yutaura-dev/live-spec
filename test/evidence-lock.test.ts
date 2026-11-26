@@ -130,4 +130,40 @@ describe("根拠の lock: 根拠の範囲のコードが変わったことを知
 
     expect(await lockFindings(p.spec)).toEqual([]);
   });
+
+  describe("未決事項の note に書いた path:line も照合する", () => {
+    const withNote = (note: string) => (p: ReturnType<typeof project>) =>
+      writeFileSync(p.spec, `${readFileSync(p.spec, "utf8")}export const questions = [{ ask: "上限は何回か？", note: ${JSON.stringify(note)} }];\n`);
+    const evidenceFindings = async (spec: string) => (await loadObject(spec)).graph.findings.filter((f) => f.kind.startsWith("evidence-"));
+
+    it("note の中の場所が、ファイルの行数を超えていれば検査結果に出す", async () => {
+      const p = project();
+      withNote("src/job.ts:40 で上限を見ている")(p);
+
+      expect(await evidenceFindings(p.spec)).toEqual([
+        { kind: "evidence-out-of-range", action: "未決事項", evidence: "src/job.ts:40 で上限を見ている", lines: 5 },
+      ]);
+    });
+
+    it("場所を含まない note は照合しない", async () => {
+      const p = project();
+      withNote("今は上限がない。job.ts を読んでも分からない")(p);
+
+      expect(await evidenceFindings(p.spec)).toEqual([]);
+    });
+
+    it("lock があれば、note の場所も行のずれを見つけ、evidence --update が note の行番号を書き換える", async () => {
+      const p = project();
+      withNote("上限は src/job.ts:3 で見ている")(p);
+      await runCli(["evidence", "--update", p.spec], io().io);
+      expect(readFileSync(p.lock, "utf8")).toContain('"go 未決事項 src/job.ts:3"');
+
+      writeFileSync(p.code, `// 追加した行\n${CODE}`);
+      expect(await lockFindings(p.spec)).toContainEqual({ kind: "evidence-moved", action: "未決事項", evidence: "上限は src/job.ts:3 で見ている", location: "src/job.ts:3", moved: "4" });
+
+      await runCli(["evidence", "--update", p.spec], io().io);
+      expect(readFileSync(p.spec, "utf8")).toContain('note: "上限は src/job.ts:4 で見ている"');
+      expect(await lockFindings(p.spec)).toEqual([]);
+    });
+  });
 });
