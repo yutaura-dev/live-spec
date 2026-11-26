@@ -15,7 +15,7 @@ const effectOf = (e: EnsureCheck, acknowledged: boolean): string => {
     case "unguarded":
       return `外すと、${effectText(e)}。気づくものがない${acknowledged ? "（確認済み）" : ""}`;
     case "no-effect":
-      return "外しても振る舞いが変わらない（ほかの条件と重なっている）";
+      return e.narrowing ? "外しても振る舞いが変わらない（後の条件のために型を絞る条件）" : "外しても振る舞いが変わらない（ほかの条件と重なっている）";
   }
 };
 

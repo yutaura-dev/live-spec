@@ -16,6 +16,8 @@ export interface StaticInfo {
 export interface EnsureCall {
   readonly reason: string;
   readonly line: number;
+  /** 後ろの条件のために型を絞る ensure（判別の項目を比べ、後ろで同じ値の別の項目を読む） */
+  readonly narrowing?: true;
 }
 
 const EVIDENCE = /^\s*根拠[:：]\s*(.+?)\s*$/;
@@ -92,7 +94,9 @@ const ensureCallsIn = (root: t.Node): Array<EnsureCall> => {
           : arg?.type === "TemplateLiteral" && arg.expressions.length === 0
             ? arg.quasis.map((q) => q.value.cooked ?? "").join("")
             : null;
-      if (reason !== null && n.loc != null) calls.push({ reason, line: n.loc.start.line });
+      if (reason !== null && n.loc != null) {
+        calls.push({ reason, line: n.loc.start.line, ...(narrowsType(root, n) ? { narrowing: true as const } : {}) });
+      }
     }
     for (const [key, value] of Object.entries(n)) {
       if (key === "loc" || key.endsWith("Comments")) continue;
@@ -101,6 +105,42 @@ const ensureCallsIn = (root: t.Node): Array<EnsureCall> => {
   };
   visit(root);
   return calls;
+};
+
+// 判別 union の登場人物（{ kind: "human"; via: … } | { kind: "worker" }）では、via を読むために先に kind で型を絞る。
+// この ensure は外しても振る舞いが変わらないことが多いが、消すと型が通らないので「重なり」とは別に扱う。
+// 型チェッカーを使わず構文で見分けるので、比べた値と同じ名前の値の、別の項目を後ろで読んでいるかだけを見る。
+const narrowsType = (root: t.Node, call: t.CallExpression): boolean => {
+  const cond = call.arguments[0];
+  if (cond?.type !== "BinaryExpression" || (cond.operator !== "===" && cond.operator !== "!==")) return false;
+  const member = cond.right.type === "StringLiteral" ? cond.left : cond.left.type === "StringLiteral" ? cond.right : null;
+  if (member?.type !== "MemberExpression" || member.object.type !== "Identifier" || member.property.type !== "Identifier") return false;
+  const object = member.object.name;
+  const discriminant = member.property.name;
+  let found = false;
+  const visit = (node: unknown): void => {
+    if (found) return;
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (typeof node !== "object" || node === null || !("type" in node)) return;
+    const n = node as t.Node;
+    if (
+      n.type === "MemberExpression" &&
+      n.start! > call.end! &&
+      n.object.type === "Identifier" &&
+      n.object.name === object &&
+      n.property.type === "Identifier" &&
+      n.property.name !== discriminant
+    ) {
+      found = true;
+      return;
+    }
+    for (const [key, value] of Object.entries(n)) {
+      if (key === "loc" || key.endsWith("Comments")) continue;
+      visit(value);
+    }
+  };
+  visit(root);
+  return found;
 };
 
 const valueNamesOf = (decl: t.Node): ReadonlyArray<readonly [name: string, typeName: string | null]> => {

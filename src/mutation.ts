@@ -28,9 +28,9 @@ const caughtLabel = (f: Readonly<Record<string, unknown>>): string => {
 const targetsOf = (spec: Spec, graph: Graph) =>
   spec.actions.flatMap(([action]) => {
     const found = spec.ensures[action];
-    if (found !== undefined) return found.map((e) => ({ action, reason: e.reason, line: e.line as number | null }));
+    if (found !== undefined) return found.map((e) => ({ action, reason: e.reason, line: e.line as number | null, narrowing: e.narrowing === true }));
     const reasons = [...new Set(graph.availability.filter((a) => a.action === action && a.reason !== null).map((a) => a.reason!))];
-    return reasons.map((reason) => ({ action, reason, line: null }));
+    return reasons.map((reason) => ({ action, reason, line: null, narrowing: false }));
   });
 
 export const checkEnsures = (spec: Spec, graph: Graph): Array<EnsureCheck> => {

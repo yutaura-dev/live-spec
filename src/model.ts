@@ -86,6 +86,8 @@ export const EnsureCheck = Schema.Struct({
   newStates: Schema.Array(Schema.String),
   /** 実際に通るのはどんなときか（その ensure だけを効かせて実行して求めたもの） */
   passes: Schema.String,
+  /** 後ろの条件のために型を絞る ensure か */
+  narrowing: Schema.Boolean,
 });
 export type EnsureCheck = typeof EnsureCheck.Type;
 
