@@ -9,7 +9,7 @@ import type { SurfaceNode } from "../surface.ts";
 import { ANY } from "./collapse.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
-import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle } from "./markdown.ts";
+import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle, testsOf } from "./markdown.ts";
 import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
 import { surfaceToHtml } from "./wireframe.ts";
 
@@ -303,7 +303,7 @@ const renderPage = async (
   <section class="actions">
     <h2>操作</h2>${sectionLead("操作")}
     <div class="cards">
-      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), (graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed)).join("\n      ")}
+      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), (graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed, (e) => testsOf(graph, e))).join("\n      ")}
     </div>
   </section>
   ${
@@ -483,6 +483,7 @@ const actionCard = (
   links: ReadonlyArray<ProjectLink>,
   ensures: ReadonlyArray<EnsureCheck>,
   reviewed: Spec["reviewed"],
+  testsFor: (e: EnsureCheck) => ReadonlyArray<string>,
 ) => {
   const others =
     a.othersReasons.length === 0 ? "" : `<span class="muted">ほかの人は「${a.othersReasons.map(esc).join("」「")}」</span>`;
@@ -523,7 +524,8 @@ const actionCard = (
                     const body = p.warn
                       ? `⚠ ${esc(p.head)}。${esc(p.effect)}`
                       : `${esc(p.head)}。<details class="ensure-effect"><summary>この条件が無いと</summary>${esc(p.effect)}</details>`;
-                    return `<li class="ensure ${e.verdict}${acknowledged ? " acknowledged" : ""}">${body}</li>`;
+                    const tests = testsFor(e);
+                    return `<li class="ensure ${e.verdict}${acknowledged ? " acknowledged" : ""}">${body}${tests.length === 0 ? "" : `<span class="ensure-tests">テスト: ${esc(tests.join("、"))}</span>`}</li>`;
                   })
                   .join("")}</ul></dd>`
           }
@@ -650,7 +652,7 @@ marker path{fill:var(--muted)}
 .questions .ask{font-weight:600}
 .questions .target{color:var(--muted);font-size:13px;margin-left:4px}
 .questions .note{display:block;color:var(--muted);font-size:13px}
-.questions.review.done{border-color:var(--line)}.questions.review.done h2{color:var(--muted)}.section-lead{margin:-4px 0 12px;color:var(--muted);font-size:13px}.ensure-effect{display:inline}.ensure-effect summary{display:inline;cursor:pointer;color:var(--muted);font-size:12.5px}.ensure-effect[open]{display:block}.ensure.unguarded.acknowledged{color:var(--muted);font-weight:400;font-size:12.5px}
+.questions.review.done{border-color:var(--line)}.questions.review.done h2{color:var(--muted)}.ensure-tests{display:block;color:var(--muted);font-size:12px}.section-lead{margin:-4px 0 12px;color:var(--muted);font-size:13px}.ensure-effect{display:inline}.ensure-effect summary{display:inline;cursor:pointer;color:var(--muted);font-size:12.5px}.ensure-effect[open]{display:block}.ensure.unguarded.acknowledged{color:var(--muted);font-weight:400;font-size:12.5px}
 .review-id{font-size:11.5px;color:var(--muted);margin-left:4px}.acknowledged{margin:8px 0 4px;font-size:13px}.acknowledged summary{cursor:pointer;color:var(--muted)}
 .ensure{font-size:12.5px;margin:2px 0;color:var(--muted)}.ensure.unguarded{color:var(--warn);font-weight:600;font-size:13px}
 .q-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--warn);color:var(--bg);vertical-align:middle}

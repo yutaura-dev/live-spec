@@ -27,6 +27,7 @@ AI が書き、人が見て理解できる「生きた仕様書」を作って�
 | 目指す状態 (goal) | `export const goals = { 名前: (state) => boolean }`。書くと、そこへたどり着けない状態（袋小路）を見つける |
 | 確かめてほしい点 (review items) | spec を実行した結果から出す、条件の書き忘れ・書き間違いの候補（誰でもできる操作、意図がほかに書かれていない条件など）。ID つき。意図どおりなら `export const reviewed = { ID: "理由" }` に書く |
 | 条件の効き目 (ensure mutation) | `ensure` を 1 つずつ外して探索し直し、不変条件・シナリオ・画面のボタンのどれかが気づくかを見る。気づくものがない条件は、意図がほかに書かれていない（漏れや書き間違いの候補） |
+| テストとの結びつき (test link) | 実装のテストの名前に `specOf(操作, "理由")`（`@yutaura/live-spec/testing`）を使うと、`live-spec check --tests` がそのテストを spec の条件に結ぶ。どのテストも指していない条件は確かめてほしい点（`untested:…`）に出る。spec からコードは指さない |
 | 未決事項 (question) | `export const questions`。人の判断が必要な点。推測で埋めず、ここに書く |
 | つながり (link) | `export const links`。ほかのドメインオブジェクトの操作を引き起こす関係。相手は名前の文字列で書く |
 | ルール (decision) | `export const decisions`。判断の関数と入力の例から「条件 × 結果」の表を作る。送料・割引のような境界のある業務ルールに使う |

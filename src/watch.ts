@@ -7,6 +7,7 @@ export interface WatchOptions {
   readonly format: OutputFormat;
   readonly out: string | null;
   readonly title?: string | null;
+  readonly tests?: ReadonlyArray<string>;
   readonly onBuilt?: (output: string) => void;
 }
 
@@ -24,7 +25,7 @@ export const watchSpec = (options: WatchOptions, log: (message: string) => void 
       // 生成のたびにディレクトリを展開し直す理由: 監視中に spec ファイルが増えても、次の保存で拾えるようにするため。
       const paths = expandSpecPaths(options.paths);
       try {
-        const output = await generateProject(paths, options.format, options.title ?? undefined);
+        const output = await generateProject(paths, options.format, options.title ?? undefined, options.tests);
         if (options.out !== null) await writeProjectOutput(options.out, output);
         if (output.kind === "text") options.onBuilt?.(output.content);
         const ms = Math.round(performance.now() - started);

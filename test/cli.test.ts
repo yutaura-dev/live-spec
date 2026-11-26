@@ -40,6 +40,7 @@ describe("parseCliArgs: コマンドライン引数を解釈する", () => {
       serve: false,
       port: 4747,
       title: null,
+      tests: [],
     });
   });
 
@@ -52,6 +53,7 @@ describe("parseCliArgs: コマンドライン引数を解釈する", () => {
       serve: false,
       port: 4747,
       title: null,
+      tests: [],
     });
   });
 
@@ -64,6 +66,7 @@ describe("parseCliArgs: コマンドライン引数を解釈する", () => {
       serve: true,
       port: 5000,
       title: null,
+      tests: [],
     });
   });
 

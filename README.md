@@ -120,7 +120,7 @@ npx live-spec skills install    # .claude/skills/ にコピー（既にあるも
 入る skill:
 
 - **live-spec-authoring**: spec の書き方の規約と、検査結果の直し方
-- **live-spec-from-code**: 既存のコードから spec を書き起こす。根拠（ファイルと行）を残し、分からないことは質問として返す
+- **live-spec-from-code**: 既存のコードから spec を書き起こす。分からないことは質問として返し、人のレビューで正本として確定させる
 - **live-spec-review**: spec の変更を、振る舞いの変化（誰が何をできるようになったか など）として要約する
 
 Claude Code に「このリポジトリの注文まわりの仕様を書き起こして」のように頼むと使われます。
@@ -134,9 +134,39 @@ npx live-spec specs/ --serve                            # ブラウザで見な�
 npx live-spec specs/order.spec.ts                      # spec が 1 つなら Markdown を標準出力に出す
 npx live-spec specs/ --json                            # 正規化モデル（差分レビュー用）
 npx live-spec check specs/                              # 型チェックと検査。問題があれば終了コード 1（CI 向け）
+npx live-spec check specs/ --tests src/                 # あわせて、specOf で spec の項目を指す実装のテストと結び、テストのない条件を出す
 npx live-spec diff specs/ --base main --head feature   # ブランチ間で、仕様の振る舞いの変化を出す（--head を省くと作業ツリー）
 npx live-spec diff specs/ --base main --html --out diff.html  # 重ね合わせた状態遷移図と、画面の変更前・変更後を並べた HTML
 ```
+
+## spec が先、実装が後
+
+振る舞い（誰が・いつ・何をできるか、画面に何が出るか）の正本は spec で、実装は spec に従います。
+
+1. 振る舞いを変えるときは、実装より先に spec を直す
+2. `live-spec diff` と生成した仕様書を人がレビューし、振る舞いを決める
+3. 決まってから実装する。実装が spec のとおりかは、実装のテストで確かめる
+
+spec からコードの場所は指しません。spec と実装の対応は、テストの側から spec の項目を指して持ちます。
+
+### 実装のテストと結ぶ
+
+```ts
+import { describe, it } from "vitest";
+import { specOf } from "@yutaura/live-spec/testing";
+import * as Todo from "../specs/todo.spec.ts";
+
+describe(specOf(Todo.complete), () => {                    // → "complete"
+  it(specOf(Todo.complete, "作った人だけ"), async () => {  // → "complete「作った人だけ」"
+    // 別の人が完了にしようとすると断られることを、実装で確かめる
+  });
+});
+it(specOf(Todo, { scenario: "作って完了して取り消す" }), async () => { /* … */ });
+```
+
+- `specOf` はテストの名前を返すだけなので、vitest・jest・playwright のどれでも使えます。操作は関数そのものを渡すので、名前を変えると型チェックで落ちます。条件は `ensure` の理由の文で指し、無い条件ならテストを定義した時点で失敗します
+- `live-spec check specs/ --tests src/` は、テストのファイルを（実行せずに）読んで spec の項目と結びます。どのテストも指していない条件は「確かめてほしい点」（`untested:操作:理由`）に、spec に無い項目を指すテストは検査結果に出ます。spec を先に変えると、追いついていないテストがここに出ます
+- 仕様書を作るときも `--tests` を付けると、条件ごとに確かめているテストの場所が出ます
 
 ## spec の書き方
 

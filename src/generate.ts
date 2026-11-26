@@ -5,7 +5,8 @@ import { pathToFileURL } from "node:url";
 import { explore } from "./explore.ts";
 import { checkEnsures } from "./mutation.ts";
 import { findOmissionHints } from "./omission.ts";
-import { unguardedId } from "./render/review.ts";
+import { UNTESTED, unguardedId } from "./render/review.ts";
+import { linkTests } from "./test-links.ts";
 import { loadSpec } from "./load.ts";
 import { normalize } from "./model.ts";
 import { renderErrorHtml, renderProjectHtml, type DomainObject } from "./render/html.ts";
@@ -58,13 +59,20 @@ export const loadObject = async (path: string, options: LoadObjectOptions = {}):
   const omissions = findOmissionHints(spec, graph);
   const known = new Set([...omissions.map((h) => h.id), ...ensures.filter((e) => e.verdict === "unguarded").map(unguardedId)]);
   const unmatched = Object.keys(spec.reviewed)
-    .filter((id) => !known.has(id))
+    // テストのない条件は、テストを結んだときにしか出ないので、ここでは照らさない（linkTests で照らす）。
+    .filter((id) => !known.has(id) && !id.startsWith(UNTESTED))
     .map((id) => ({ kind: "reviewed-unmatched" as const, id }));
   return { spec, graph: { ...graph, ensures, omissions, findings: [...graph.findings, ...unmatched] } };
 };
 
-export const generateProject = async (paths: ReadonlyArray<string>, format: OutputFormat, title?: string): Promise<Output> => {
-  const objects = resolveLinks(await Promise.all(paths.map((p) => loadObject(p))));
+export const generateProject = async (
+  paths: ReadonlyArray<string>,
+  format: OutputFormat,
+  title?: string,
+  tests: ReadonlyArray<string> = [],
+): Promise<Output> => {
+  const resolved = resolveLinks(await Promise.all(paths.map((p) => loadObject(p))));
+  const objects = tests.length === 0 ? resolved : linkTests(resolved, tests);
   const names = objects.map((o) => o.spec.name);
   const duplicated = names.find((n, i) => names.indexOf(n) !== i);
   if (duplicated !== undefined) throw new Error(`ドメインオブジェクトの名前が重複しています: ${duplicated}（spec のファイル名を変えてください）`);

@@ -10,3 +10,9 @@ describe("package.json: npm のページから、リポジトリと不具合の�
     expect(pkg.homepage).toBe("https://github.com/yutaura-dev/live-spec#readme");
   });
 });
+
+describe("package.json: テスト用のヘルパーを別の入口で配る", () => {
+  it("@yutaura/live-spec/testing で specOf を読み込める", () => {
+    expect((pkg.exports as Record<string, unknown>)["./testing"]).toEqual({ types: "./dist/testing.d.ts", default: "./dist/testing.js" });
+  });
+});

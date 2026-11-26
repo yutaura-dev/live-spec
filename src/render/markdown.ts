@@ -88,7 +88,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...summarizeActions(spec, graph).flatMap((a) => [
       ...actionSection(a),
       ...graph.questions.flatMap((q, i) => (q.action === a.name ? [`- **未決**: 未決事項 ${i + 1}`] : [])),
-      ...ensureLines((graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed),
+      ...ensureLines((graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed, graph),
       "",
     ]),
     ...(graph.links.length + incoming.length === 0
@@ -116,8 +116,19 @@ export const noFindingsLine = (spec: Spec, graph: Graph): string => {
   return rest.length === 0 ? "問題は見つかりませんでした。" : `問題は見つかりませんでした（ただし、${rest.join("と")}を上に挙げている）。`;
 };
 
-const ensureLines = (ensures: ReadonlyArray<EnsureCheck>, reviewed: Spec["reviewed"]): Array<string> =>
-  ensures.length === 0 ? [] : ["- **条件**:", ...ensures.map((e) => `  - ${describeEnsure(e, reviewed[unguardedId(e)] !== undefined)}`)];
+export const testsOf = (graph: Graph, e: Pick<EnsureCheck, "action" | "reason">) =>
+  (graph.tests ?? []).filter((t) => t.target === `ensure:${e.action}:${e.reason}`).map((t) => `${t.file}:${t.line}`);
+
+const ensureLines = (ensures: ReadonlyArray<EnsureCheck>, reviewed: Spec["reviewed"], graph: Graph): Array<string> =>
+  ensures.length === 0
+    ? []
+    : [
+        "- **条件**:",
+        ...ensures.map((e) => {
+          const tests = testsOf(graph, e);
+          return `  - ${describeEnsure(e, reviewed[unguardedId(e)] !== undefined)}${tests.length === 0 ? "" : `（テスト: ${tests.join("、")}）`}`;
+        }),
+      ];
 
 const reviewSection = (spec: Spec, graph: Graph): Array<string> => {
   const { pending, onHold, acknowledged } = reviewItems(spec, graph);
@@ -289,6 +300,8 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       return `ルール「${f.decision}」の ${f.row} 行目の結果が期待と違う（期待: ${f.expected}、実際: ${f.actual}）`;
     case "decision-error":
       return `ルール「${f.decision}」の ${f.row} 行目で例外を投げた: ${f.message}`;
+    case "test-link-unknown":
+      return `テスト ${f.file}:${f.line} が、spec に無い項目を指している（${f.target}）。spec を先に変えたなら、テストと実装をそれに合わせる`;
     case "question-scenario-unknown":
       return `未決事項「${f.ask}」が指すシナリオ「${f.scenario}」が無い`;
     case "question-unmatched":

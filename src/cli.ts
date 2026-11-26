@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { findTsc, typecheck } from "./check.ts";
+import { linkTests } from "./test-links.ts";
 import { expandSpecPaths, generateProject, loadObject, resolveLinks, specNameOf, writeOutput, writeProjectOutput, type OutputFormat } from "./generate.ts";
 import { describeFinding } from "./render/markdown.ts";
 import { reviewItems } from "./render/review.ts";
@@ -25,6 +26,8 @@ export interface CliOptions {
   readonly serve: boolean;
   readonly port: number;
   readonly title: string | null;
+  /** specOf で spec の項目を指すテストのファイルかディレクトリ */
+  readonly tests: ReadonlyArray<string>;
 }
 
 const DEFAULT_PORT = 4747;
@@ -44,6 +47,7 @@ export const parseCliArgs = (argv: ReadonlyArray<string>): CliOptions => {
       serve: { type: "boolean" },
       port: { type: "string" },
       title: { type: "string" },
+      tests: { type: "string", multiple: true },
     },
   });
   if (positionals.length === 0) throw new Error("spec ファイル（またはそれを含むディレクトリ）のパスを指定してください");
@@ -62,7 +66,7 @@ export const parseCliArgs = (argv: ReadonlyArray<string>): CliOptions => {
     throw new Error(`--port には 0〜65535 の整数を指定してください: "${values.port}"`);
   }
   const format = serve || values.html ? "html" : values.json ? "json" : "markdown";
-  return { paths: positionals, format, out, watch, serve, port, title: values.title ?? null };
+  return { paths: positionals, format, out, watch, serve, port, title: values.title ?? null, tests: values.tests ?? [] };
 };
 
 const USAGE = "usage: live-spec <file.spec.ts | dir>... [--html | --json] [--out <file | dir>] [--watch] [--serve [--port <n>]] [--title <名前>]";
@@ -130,7 +134,8 @@ const runDiff = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number> 
   return 0;
 };
 
-const CHECK_USAGE = "usage: live-spec check <file.spec.ts | dir>... [--cwd <dir>]（typescript を探すディレクトリ。既定は今のディレクトリ）";
+const CHECK_USAGE =
+  "usage: live-spec check <file.spec.ts | dir>... [--cwd <dir>]（typescript を探すディレクトリ。既定は今のディレクトリ） [--tests <file | dir>]...（specOf で spec の項目を指すテストと結ぶ）";
 
 const indent = (text: string) =>
   text
@@ -146,7 +151,7 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
   }
   let parsed;
   try {
-    parsed = parseArgs({ args: [...argv], allowPositionals: true, options: { cwd: { type: "string" } } });
+    parsed = parseArgs({ args: [...argv], allowPositionals: true, options: { cwd: { type: "string" }, tests: { type: "string", multiple: true } } });
   } catch (e) {
     io.stderr(`${messageOf(e)}\n${CHECK_USAGE}\n`);
     return 2;
@@ -174,7 +179,8 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
       io.stdout(`✗ ${specNameOf(path)}: 読み込めない: ${messageOf(e)}\n`);
     }
   }
-  for (const { spec, graph } of resolveLinks(loaded)) {
+  const tests = parsed.values.tests ?? [];
+  for (const { spec, graph } of tests.length === 0 ? resolveLinks(loaded) : linkTests(resolveLinks(loaded), tests)) {
     const labels = new Map(graph.states.map((s) => [s.id, s.label]));
     const labelOf = (id: string) => labels.get(id) ?? id;
     const { pending, onHold } = reviewItems(spec, graph);
@@ -267,7 +273,7 @@ export const runCli = async (argv: ReadonlyArray<string>, io: CliIo): Promise<nu
   }
   let output;
   try {
-    output = await generateProject(paths, options.format, options.title ?? undefined);
+    output = await generateProject(paths, options.format, options.title ?? undefined, options.tests);
   } catch (e) {
     io.stderr(`生成に失敗しました: ${messageOf(e)}\n`);
     return 1;

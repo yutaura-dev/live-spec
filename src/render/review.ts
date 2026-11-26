@@ -13,6 +13,9 @@ export interface ReviewItem {
 
 export const unguardedId = (e: Pick<EnsureCheck, "action" | "reason">): string => `unguarded:${e.action}:${e.reason}`;
 
+/** テストのない条件の ID の頭。テストを結んだとき（live-spec check --tests）にだけ出る */
+export const UNTESTED = "untested:";
+
 export const REVIEW_TITLE = "確かめてほしい点";
 export const REVIEW_LEAD =
   "spec を実行した結果から、条件の書き忘れ・書き間違いの候補を挙げています。直すか、意図どおりなら `export const reviewed = { \"ID\": \"理由\" }` に書いてください。";
