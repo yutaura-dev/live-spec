@@ -1,5 +1,6 @@
 import type { EnsureCheck } from "../model.ts";
 import { ensureParts } from "./ensures.ts";
+import { SECTION_LEAD } from "./sections.ts";
 import { actionTitle } from "../labels.ts";
 import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
 import type { Spec } from "../load.ts";
@@ -136,7 +137,7 @@ const overviewPage = async (objects: ReadonlyArray<DomainObject>, options: Proje
     links.length === 0
       ? ""
       : `<section class="links-section">
-    <h2>つながり</h2>
+    <h2>つながり</h2>${sectionLead("つながり")}
     ${await relationsSvg(objects, links)}
     <ul class="link-list">${links
       .map(
@@ -161,7 +162,7 @@ const renderPage = async (
     outgoing.length + incoming.length === 0
       ? ""
       : `<section class="links-section">
-    <h2>つながり</h2>
+    <h2>つながり</h2>${sectionLead("つながり")}
     <ul class="link-list">${outgoing
       .map(
         (l) =>
@@ -269,7 +270,7 @@ const renderPage = async (
     graph.questions.length === 0
       ? ""
       : `<section class="questions" aria-label="未決事項">
-    <h2>未決事項</h2>
+    <h2>未決事項</h2>${sectionLead("未決事項")}
     <ol>${graph.questions
       .map((q) => `<li><span class="ask">${esc(q.ask)}</span><span class="target">${esc(questionTarget(spec, q, labelOf))}</span>${q.note === null ? "" : `<span class="note">${esc(q.note)}</span>`}</li>`)
       .join("")}</ol>
@@ -299,7 +300,7 @@ const renderPage = async (
   </section>
   ${glossaryHtml(spec)}
   <section class="actions">
-    <h2>操作</h2>
+    <h2>操作</h2>${sectionLead("操作")}
     <div class="cards">
       ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), spec.evidence[a.name] ?? [], (graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed)).join("\n      ")}
     </div>
@@ -308,7 +309,7 @@ const renderPage = async (
     graph.decisions.length === 0
       ? ""
       : `<section class="decisions">
-    <h2>ルール</h2>
+    <h2>ルール</h2>${sectionLead("ルール")}
     ${graph.decisions
       .map(
         (d) => `<h3>${esc(d.name)}</h3><table class="decision"><thead><tr>${d.columns.map((c) => `<th>${esc(c)}</th>`).join("")}<th>結果</th></tr></thead><tbody>${d.rows
@@ -325,13 +326,13 @@ const renderPage = async (
     graph.scenarios.length === 0
       ? ""
       : `<section class="scenarios">
-    <h2>シナリオ</h2>
+    <h2>シナリオ</h2>${sectionLead("シナリオ")}
     <p class="hint">シナリオを選ぶと、状態遷移図の上でその経路を強調します。各段階には、操作した人に見える画面を並べます。</p>
     ${graph.scenarios.map(scenarioCard).join("\n    ")}
   </section>`
   }
   <section class="findings">
-    <h2>検査結果</h2>
+    <h2>検査結果</h2>${sectionLead("検査結果")}
     ${
       graph.findings.length === 0
         ? '<p class="ok-line">問題は見つかりませんでした。</p>'
@@ -391,7 +392,7 @@ const glossaryHtml = (spec: Spec) => {
   const terms = Object.entries(spec.glossary).map(([term, doc]) => `<dt>${esc(term)}</dt><dd>${esc(doc)}</dd>`);
   return fields.length + terms.length === 0
     ? ""
-    : `<section class="glossary"><h2>用語</h2><dl>${[...fields, ...terms].join("")}</dl></section>`;
+    : `<section class="glossary"><h2>用語</h2>${sectionLead("用語")}<dl>${[...fields, ...terms].join("")}</dl></section>`;
 };
 
 const nodeClass = (f: NodeFlags, extra = "") =>
@@ -445,6 +446,8 @@ const edgeSvg = (e: LaidOutEdge, markerId: string) => {
 };
 
 // 確かめてほしい点の文は Markdown と共通なので、バッククォートで囲んだ部分を HTML ではコードとして出す。
+const sectionLead = (title: string) => (SECTION_LEAD[title] === undefined ? "" : `<p class="section-lead">${esc(SECTION_LEAD[title])}</p>`);
+
 const withCode = (text: string) => esc(text).replace(/`([^`]+)`/g, "<code>$1</code>");
 
 const reviewHtml = (spec: Spec, graph: Graph) => {
@@ -654,7 +657,7 @@ marker path{fill:var(--muted)}
 .questions .ask{font-weight:600}
 .questions .target{color:var(--muted);font-size:13px;margin-left:4px}
 .questions .note{display:block;color:var(--muted);font-size:13px}
-.questions.review.done{border-color:var(--line)}.questions.review.done h2{color:var(--muted)}.ensure-effect{display:inline}.ensure-effect summary{display:inline;cursor:pointer;color:var(--muted);font-size:12.5px}.ensure-effect[open]{display:block}.ensure.unguarded.acknowledged{color:var(--muted);font-weight:400;font-size:12.5px}
+.questions.review.done{border-color:var(--line)}.questions.review.done h2{color:var(--muted)}.section-lead{margin:-4px 0 12px;color:var(--muted);font-size:13px}.ensure-effect{display:inline}.ensure-effect summary{display:inline;cursor:pointer;color:var(--muted);font-size:12.5px}.ensure-effect[open]{display:block}.ensure.unguarded.acknowledged{color:var(--muted);font-weight:400;font-size:12.5px}
 .review-id{font-size:11.5px;color:var(--muted);margin-left:4px}.acknowledged{margin:8px 0 4px;font-size:13px}.acknowledged summary{cursor:pointer;color:var(--muted)}
 .ensure{font-size:12.5px;margin:2px 0;color:var(--muted)}.ensure.unguarded{color:var(--warn);font-weight:600;font-size:13px}
 .q-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--warn);color:var(--bg);vertical-align:middle}

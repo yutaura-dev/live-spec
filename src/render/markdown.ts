@@ -1,5 +1,6 @@
 import type { EnsureCheck } from "../model.ts";
 import { describeEnsure } from "./ensures.ts";
+import { markdownSection } from "./sections.ts";
 import { actionTitle } from "../labels.ts";
 import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
 import type { Spec } from "../load.ts";
@@ -39,8 +40,7 @@ export const renderIndexMarkdown = (objects: Objects, title: string): string =>
     ...(allLinks(objects).length === 0
       ? []
       : [
-          "## つながり",
-          "",
+          ...markdownSection("つながり"),
           ...allLinks(objects).map(
             (l) => `- ${endpoint(objects, l.source, l.from)} → ${endpoint(objects, l.to, l.action)}: ${l.label}`,
           ),
@@ -61,8 +61,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...(graph.questions.length === 0
       ? []
       : [
-          "## 未決事項",
-          "",
+          ...markdownSection("未決事項"),
           ...graph.questions.flatMap((q, i) => [
             `${i + 1}. ${q.ask}${questionTarget(spec, q, labelOf)}`,
             ...(q.note === null ? [] : [`   - ${q.note}`]),
@@ -70,8 +69,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
           "",
         ]),
     ...reviewSection(spec, graph),
-    "## 状態遷移図",
-    "",
+    ...markdownSection("状態遷移図"),
     "```mermaid",
     "stateDiagram-v2",
     ...graph.states.map((s) => `  state "${s.label}" as ${s.id}`),
@@ -85,8 +83,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     "```",
     "",
     ...glossarySection(spec),
-    "## 操作",
-    "",
+    ...markdownSection("操作"),
     ...summarizeActions(spec, graph).flatMap((a) => [
       ...actionSection(a),
       ...((spec.evidence[a.name] ?? []).length === 0 ? [] : [`- **根拠**: ${spec.evidence[a.name]!.map(formatEvidence).join("、")}`]),
@@ -97,17 +94,15 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...(graph.links.length + incoming.length === 0
       ? []
       : [
-          "## つながり",
-          "",
+          ...markdownSection("つながり"),
           ...graph.links.map((l) => `- ${l.from === null ? "" : `${ownAction(l.from)} `}→ ${endpoint(objects, l.to, l.action)}: ${l.label}`),
           ...incoming.map((l) => `- ${l.action === null ? "" : `${ownAction(l.action)} `}← ${endpoint(objects, l.source, l.from)}から: ${l.label}`),
           "",
         ]),
-    ...(graph.decisions.length === 0 ? [] : ["## ルール", "", ...graph.decisions.flatMap((d) => [...decisionTable(d), ""])]),
-    ...(graph.scenarios.length === 0 ? [] : ["## シナリオ", "", ...graph.scenarios.flatMap((s) => [...scenarioSection(spec, s, labelOf), ""])]),
+    ...(graph.decisions.length === 0 ? [] : [...markdownSection("ルール"), ...graph.decisions.flatMap((d) => [...decisionTable(d), ""])]),
+    ...(graph.scenarios.length === 0 ? [] : [...markdownSection("シナリオ"), ...graph.scenarios.flatMap((s) => [...scenarioSection(spec, s, labelOf), ""])]),
     ...screensSection(spec, graph),
-    "## 検査結果",
-    "",
+    ...markdownSection("検査結果"),
     ...(graph.findings.length === 0 ? ["問題は見つかりませんでした。"] : graph.findings.map((f) => `- ⚠ ${describeFinding(f, labelOf)}`)),
     "",
   ].join("\n");
@@ -185,7 +180,7 @@ const glossarySection = (spec: Spec): Array<string> => {
     return `- **${field}**（項目）: ${doc}${values === undefined ? "" : `。値: ${values.map(String).join(" / ")}`}`;
   });
   const terms = Object.entries(spec.glossary).map(([term, doc]) => `- **${term}**: ${doc}`);
-  return fields.length + terms.length === 0 ? [] : ["## 用語", "", ...fields, ...terms, ""];
+  return fields.length + terms.length === 0 ? [] : [...markdownSection("用語"), ...fields, ...terms, ""];
 };
 
 const screensSection = (spec: Spec, graph: Graph): Array<string> => {
@@ -194,8 +189,7 @@ const screensSection = (spec: Spec, graph: Graph): Array<string> => {
   const invalidFor = (state: string, actors: ReadonlyArray<string>) =>
     graph.findings.flatMap((f) => (f.kind === "surface-action-not-allowed" && f.state === state && actors.includes(f.actor) ? [f.action] : []));
   return [
-    "## 画面",
-    "",
+    ...markdownSection("画面"),
     ...states.flatMap((s) => [
       `### ${s.label}`,
       "",

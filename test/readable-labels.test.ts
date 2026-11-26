@@ -77,3 +77,24 @@ describe("仕様書の読みやすさ: 型の識別子の代わりに JSDoc の�
     expect(html).toContain("<dt>関数名</dt><dd><code>start</code></dd>");
   });
 });
+
+describe("仕様書の読みやすさ: 節の名前に、何のための節かを一言添える", { timeout: 30_000 }, () => {
+  it("Markdown の節の見出しの下に、その節の説明を 1 行置く", async () => {
+    const { spec, graph } = await load();
+
+    const md = renderMarkdown(spec, graph);
+
+    expect(md).toContain("## 状態遷移図\n\n初期状態から操作を実行して求めた、取りうる状態とその移り変わり。\n");
+    expect(md).toContain("## 操作\n\n操作ごとに、誰が・どの状態でできるか、できないときの理由。\n");
+    expect(md).toContain("## 検査結果\n\nspec を実行して見つかった、矛盾や書き漏れ。\n");
+  });
+
+  it("HTML の節の見出しの下にも、その節の説明を置く", async () => {
+    const { spec, graph } = await load();
+
+    const html = await renderHtml(spec, graph);
+
+    expect(html).toContain('<h2>操作</h2><p class="section-lead">操作ごとに、誰が・どの状態でできるか、できないときの理由。</p>');
+    expect(html).toContain('<h2>検査結果</h2><p class="section-lead">spec を実行して見つかった、矛盾や書き漏れ。</p>');
+  });
+});
