@@ -1,5 +1,6 @@
 import type { EnsureCheck } from "../model.ts";
 import { describeEnsure } from "./ensures.ts";
+import { actionTitle } from "../labels.ts";
 import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
 import type { Spec } from "../load.ts";
 import type { Finding, Graph } from "../model.ts";
@@ -79,7 +80,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...(collapseTransitions(graph).some((t) => t.from === ANY) ? [`  state "${ANY_LABEL}" as any`] : []),
     ...collapseTransitions(graph)
       .filter((t) => t.from !== t.to)
-      .map((t) => `  ${t.from === ANY ? "any" : t.from} --> ${t.to}: ${t.action} (${t.actors.join(", ")})`),
+      .map((t) => `  ${t.from === ANY ? "any" : t.from} --> ${t.to}: ${actionTitle(spec, t.action)} (${t.actors.join(", ")})`),
     ...graph.states.filter((s) => s.terminal).map((s) => `  ${s.id} --> [*]`),
     "```",
     "",
@@ -131,8 +132,9 @@ const reviewSection = (spec: Spec, graph: Graph): Array<string> => {
 };
 
 const actionSection = (a: ActionSummary): Array<string> => {
-  const heading = a.summary === null ? `### \`${a.name}\`` : `### ${a.summary}（\`${a.name}\`）`;
-  if (a.capable.length === 0) return [heading, "", "- **できる人**: なし（どの状態でも誰も実行できない）"];
+  const heading = a.summary === null ? `### \`${a.name}\`` : `### ${a.summary}`;
+  const name = a.summary === null ? [] : [`- **関数名**: \`${a.name}\``];
+  if (a.capable.length === 0) return [heading, "", "- **できる人**: なし（どの状態でも誰も実行できない）", ...name];
   const who =
     a.othersReasons.length === 0 ? a.capable.join(", ") : `${a.capable.join(", ")}（ほかの人は「${a.othersReasons.join("」「")}」）`;
   const groups = presentBlocked(a.blocked).map((b) => `${b.states === null ? "それ以外のすべての状態" : b.states.join(", ")}（${b.reason}）`);
@@ -162,6 +164,7 @@ const actionSection = (a: ActionSummary): Array<string> => {
           ].join("\n"),
         ]),
     ...(effect === "" ? [] : [`- **結果**: ${effect}`]),
+    ...name,
   ];
 };
 

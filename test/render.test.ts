@@ -7,15 +7,21 @@ import { loadArticle } from "./fixtures/load-article.ts";
 
 const spec = loadArticle();
 const doc = renderMarkdown(spec, explore(spec));
-const section = (action: string) => doc.split(new RegExp(`### (?:.*（)?\`${action}\`）?\\n`))[1]!.split("\n### ")[0]!.split("\n## ")[0]!;
+const section = (action: string) =>
+  doc
+    .split("\n### ")
+    .map((s) => s.split("\n## ")[0]!)
+    .find((s) => s.startsWith(`\`${action}\`\n`) || s.includes(`- **関数名**: \`${action}\``))!
+    .replace(/^[^\n]*\n/, "\n");
 
 describe("renderMarkdown: 見出し", () => {
   it("状態の型の JSDoc を、仕様書の冒頭の説明にする", () => {
     expect(doc).toContain("# article\n\nブログ記事");
   });
 
-  it("操作の見出しに、JSDoc の説明文と関数名を並べる", () => {
-    expect(doc).toContain("### 公開する（`publish`）");
+  it("操作の見出しは JSDoc の説明文にし、関数名は「関数名」の欄に出す", () => {
+    expect(doc).toContain("### 公開する\n");
+    expect(doc).toContain("- **関数名**: `publish`");
   });
 
   it("JSDoc がない操作は、関数名だけを見出しにする", () => {
@@ -44,9 +50,9 @@ describe("renderMarkdown: 状態遷移図", () => {
     expect(renderMarkdown(s, explore(s))).not.toContain("s0 --> s0");
   });
 
-  it("Mermaid の状態遷移図に、操作名と実行できた登場人物を載せる", () => {
-    expect(doc).toContain("s0 --> s1: submit (alice)");
-    expect(doc).toContain("s1 --> s2: publish (editor, admin)");
+  it("Mermaid の状態遷移図に、操作の JSDoc の説明文と実行できた登場人物を載せる", () => {
+    expect(doc).toContain("s0 --> s1: レビューに出す (alice)");
+    expect(doc).toContain("s1 --> s2: 公開する (editor, admin)");
   });
 });
 

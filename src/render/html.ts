@@ -1,5 +1,6 @@
 import type { EnsureCheck } from "../model.ts";
 import { ensureParts } from "./ensures.ts";
+import { actionTitle } from "../labels.ts";
 import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
 import type { Spec } from "../load.ts";
 import type { Graph } from "../model.ts";
@@ -174,7 +175,7 @@ const renderPage = async (
       .join("")}</ul>
   </section>`;
   const linksOf = (action: string) => outgoing.filter((l) => l.from === action);
-  const l = await layout(graph);
+  const l = await layout(graph, { actionLabel: (a) => actionTitle(spec, a) });
   const actions = summarizeActions(spec, graph);
   const labelOf = (id: string) => graph.states.find((s) => s.id === id)?.label ?? id;
   const initial = graph.states.find((s) => s.initial);
@@ -229,7 +230,7 @@ const renderPage = async (
           : surfaceToHtml(found.surface as SurfaceNode, notAllowed(state, [actor]));
       return [actor, html] as const;
     });
-  const wl = graph.surfaces.length > 0 ? await layout(graph, { nodeSize: WIREFLOW_NODE }) : null;
+  const wl = graph.surfaces.length > 0 ? await layout(graph, { nodeSize: WIREFLOW_NODE, actionLabel: (a) => actionTitle(spec, a) }) : null;
   const questioned = new Set(graph.questions.flatMap((q) => q.states));
   // ノードにカーソルを合わせたとき、状態の名前に含まれる用語の説明を出す（名前だけでは意味が伝わらないことがあるため）。
   // データ（data）を組み立てる時点でも使うので、巻き上げられる関数宣言にしている。
@@ -440,7 +441,7 @@ const wireflowNodeSvg = (
 const edgeSvg = (e: LaidOutEdge, markerId: string) => {
   const d = e.points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
   const lb = e.label;
-  return `<g class="edge" data-action="${esc(e.action)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"><path d="${d}" marker-end="url(#${markerId})"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.action)}</text></g></g>`;
+  return `<g class="edge" data-action="${esc(e.action)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"><path d="${d}" marker-end="url(#${markerId})"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.text)}</text></g></g>`;
 };
 
 // 確かめてほしい点の文は Markdown と共通なので、バッククォートで囲んだ部分を HTML ではコードとして出す。
@@ -496,13 +497,14 @@ const actionCard = (
   const whenNot = blocked.length === 0 ? '<span class="muted">なし</span>' : `<ul>${blocked.join("")}</ul>`;
   const effect = formatEffect(a);
   return `<article class="card" data-action="${esc(a.name)}" tabindex="0">
-        <h3>${a.summary === null ? "" : `${esc(a.summary)} `}<code>${esc(a.name)}</code>${asks.length === 0 ? "" : ` <span class="q-badge">未決 ${asks.length}</span>`}</h3>
+        <h3>${a.summary === null ? `<code>${esc(a.name)}</code>` : esc(a.summary)}${asks.length === 0 ? "" : ` <span class="q-badge">未決 ${asks.length}</span>`}</h3>
         <dl>
           <dt>できる人</dt><dd>${who}</dd>
           <dt>できるとき</dt><dd>${when}</dd>
           <dt>できないとき</dt><dd>${whenNot}</dd>
           ${a.inputOutcomes.length === 0 ? "" : `<dt>入力ごとの結果</dt><dd><ul>${a.inputOutcomes.map((o) => `<li><span class="reason">${esc(o.input)}</span> ${o.transitions.length > 0 ? o.transitions.map((t) => `<span class="flow">${esc(formatTransition(t))}</span>`).join("") : `<span class="state">❌ ${esc(o.reasons.join("、"))}</span>`}</li>`).join("")}</ul></dd>`}
           ${effect === "" ? "" : `<dt>結果</dt><dd>${esc(effect)}</dd>`}
+          ${a.summary === null ? "" : `<dt>関数名</dt><dd><code>${esc(a.name)}</code></dd>`}
           ${
             evidence.length === 0
               ? ""

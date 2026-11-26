@@ -53,4 +53,27 @@ describe("仕様書の読みやすさ: 型の識別子の代わりに JSDoc の�
     expect(md).toContain("- **結果**: 実行の状態 → 実行中");
     expect(html).toContain("<dt>結果</dt><dd>実行の状態 → 実行中</dd>");
   });
+
+  it("状態遷移図の矢印には、関数名ではなく操作の JSDoc の最初の文を出す", async () => {
+    const { spec, graph } = await load();
+
+    const md = renderMarkdown(spec, graph);
+    const html = await renderHtml(spec, graph);
+
+    expect(md).toMatch(/--> \w+: 実行を始める \(ワーカー\)/);
+    expect(md).not.toMatch(/--> \w+: start /);
+    expect(html).toContain(">実行を始める</text>");
+  });
+
+  it("操作の見出しは JSDoc の要約だけにし、関数名は「関数名」の欄に出す", async () => {
+    const { spec, graph } = await load();
+
+    const md = renderMarkdown(spec, graph);
+    const html = await renderHtml(spec, graph);
+
+    expect(md).toContain("### 実行を始める。\n");
+    expect(md).toContain("- **関数名**: `start`");
+    expect(html).toMatch(/<h3>実行を始める。<\/h3>/);
+    expect(html).toContain("<dt>関数名</dt><dd><code>start</code></dd>");
+  });
 });

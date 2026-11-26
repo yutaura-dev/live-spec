@@ -21,6 +21,8 @@ export interface LaidOutEdge {
   readonly from: string;
   readonly to: string;
   readonly action: string;
+  /** 矢印のラベルに出す文 */
+  readonly text: string;
   readonly points: ReadonlyArray<Point>;
   readonly label: Point & { readonly width: number; readonly height: number };
 }
@@ -67,6 +69,8 @@ export interface LayoutOptions {
   readonly nodeSize?: { readonly width: number; readonly height: number };
   /** false にすると「どの状態からでも」にまとめない（差分の図で、消えた遷移まで見せるため） */
   readonly collapse?: boolean;
+  /** 矢印のラベルに出す操作の名前。既定は関数名 */
+  readonly actionLabel?: (action: string) => string;
 }
 
 export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise<Layout> => {
@@ -74,6 +78,7 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
   // 自分自身に戻る遷移は描かない。ほぼすべての状態にあると、図が線で埋まって読めなくなるため。
   const transitions = (options.collapse === false ? graph.transitions : collapseTransitions(graph)).filter((t) => t.from !== t.to);
   const hasAny = transitions.some((t) => t.from === ANY);
+  const labelOf = options.actionLabel ?? ((action: string) => action);
   const nodeList = [
     ...(hasAny ? [{ id: ANY, label: ANY_LABEL, initial: false }] : []),
     ...graph.states.map((s) => ({ id: s.id, label: s.label, initial: s.initial })),
@@ -93,7 +98,7 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
       id: `e${i}`,
       sources: [t.from],
       targets: [t.to],
-      labels: [{ text: t.action, width: textWidth(t.action, 6.6) + 8, height: LABEL_HEIGHT }],
+      labels: [{ text: labelOf(t.action), width: textWidth(labelOf(t.action), 6.6) + 8, height: LABEL_HEIGHT }],
     })),
   };
   const result = await elk.layout(input);
@@ -110,6 +115,7 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
       from: t.from,
       to: t.to,
       action: t.action,
+      text: labelOf(t.action),
       points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(({ x, y }) => ({ x, y })),
       label: { x: label.x!, y: label.y!, width: label.width!, height: label.height! },
     };
