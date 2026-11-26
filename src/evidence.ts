@@ -113,6 +113,10 @@ interface ResolvedLocation extends Location {
   readonly evidence: string;
   /** spec のソースの中で、根拠の文の直前に書かれている文字列（行番号を書き換えるときに、根拠の文を探すのに使う） */
   readonly prefix: string;
+  /** 検査結果に出す、どこの根拠か（操作の名前か「未決事項 1」） */
+  readonly label: string;
+  /** 検査結果に出す、根拠の書き方。note は全文ではなく、その場所だけを出す */
+  readonly shown: string;
   readonly file: string | undefined;
 }
 
@@ -120,25 +124,47 @@ export const QUESTION_EVIDENCE = "未決事項";
 
 // note は自由な文なので、根拠のコメントと違って先頭を場所とみなさず、「path.ext:行」の形のものだけを拾う。
 // 行番号のないファイル名は、文の中で触れているだけのことが多いので拾わない。
+// パスに ( ) [ ] を許す理由: Next.js の (group) や [param] のようなディレクトリ名があるため。ただし「(a.ts:3)」のように
+// 文の括弧で始まるものは、閉じていない先頭の括弧をパスに含めない。
+const unbalancedPrefix = (text: string): number => {
+  let k = 0;
+  while ((text[k] === "(" && !text.slice(k).includes(")")) || (text[k] === "[" && !text.slice(k).includes("]"))) k++;
+  return k;
+};
 const locationsInNote = (text: string): Array<Location> =>
-  [...text.matchAll(/[\w./-]+\.[A-Za-z][\w]*:(\d+)(?:-(\d+))?/g)].map((m) => ({
-    path: m[0].slice(0, m[0].indexOf(":")),
-    start: Number(m[1]),
-    end: m[2] === undefined ? null : Number(m[2]),
-    last: Number(m[2] ?? m[1]),
-    raw: m[0],
-  }));
+  [...text.matchAll(/[\w./()[\]-]+\.[A-Za-z][\w]*:(\d+)(?:-(\d+))?/g)].map((m) => {
+    const raw = m[0].slice(unbalancedPrefix(m[0].slice(0, m[0].lastIndexOf(":"))));
+    return {
+      path: raw.slice(0, raw.lastIndexOf(":")),
+      start: Number(m[1]),
+      end: m[2] === undefined ? null : Number(m[2]),
+      last: Number(m[2] ?? m[1]),
+      raw,
+    };
+  });
 
 const resolvedLocations = (spec: Spec, specPath: string): Array<ResolvedLocation> => {
   const roots = rootsFor(spec, specPath);
   const fileOf = (path: string) => roots.map((root) => join(root, path)).find((p) => existsSync(p));
   const fromActions = Object.entries(spec.evidence).flatMap(([action, items]) =>
-    items.flatMap((evidence) => evidenceLocations(evidence).map((loc) => ({ ...loc, action, evidence, prefix: "根拠: ", file: fileOf(loc.path) }))),
+    items.flatMap((evidence) =>
+      evidenceLocations(evidence).map((loc) => ({ ...loc, action, evidence, prefix: "根拠: ", label: action, shown: evidence, file: fileOf(loc.path) })),
+    ),
   );
-  const fromNotes = spec.questions.flatMap((q) =>
+  // lock のキーには番号を入れない。未決事項を足したり消したりして番号が変わるたびに、全件が「lock にない」と出るのを防ぐため。
+  // キーが同じになるのは同じ場所を指すときだけで、記録するのはコードの中身なので、区別しなくても照合は変わらない。
+  const fromNotes = spec.questions.flatMap((q, i) =>
     q.note === undefined
       ? []
-      : locationsInNote(q.note).map((loc) => ({ ...loc, action: QUESTION_EVIDENCE, evidence: q.note!, prefix: "", file: fileOf(loc.path) })),
+      : locationsInNote(q.note).map((loc) => ({
+          ...loc,
+          action: QUESTION_EVIDENCE,
+          evidence: q.note!,
+          prefix: "",
+          label: `${QUESTION_EVIDENCE} ${i + 1}`,
+          shown: loc.raw,
+          file: fileOf(loc.path),
+        })),
   );
   return [...fromActions, ...fromNotes];
 };
@@ -151,12 +177,12 @@ export interface CheckEvidenceOptions {
 export const checkEvidence = (spec: Spec, specPath: string, options: CheckEvidenceOptions = {}): Array<Finding> => {
   const lock = options.lock === false ? null : readLock(lockPathOf(specPath));
   return resolvedLocations(spec, specPath).flatMap((loc): Array<Finding> => {
-    const { action, evidence, file, start, end, last, path } = loc;
+    const { label: action, shown: evidence, file, start, end, last, path } = loc;
     if (file === undefined) return [{ kind: "evidence-missing", action, evidence }];
     if (start === null) return [];
     const location = `${path}:${rangeText(start, end)}`;
     if (lock !== null) {
-      const recorded = recordedHash(lock, spec, action, path, start, end);
+      const recorded = recordedHash(lock, spec, loc.action, path, start, end);
       if (recorded === undefined) return [{ kind: "evidence-unlocked", action, evidence, location }];
       const lines = normalizedLines(file);
       const length = (end ?? start) - start + 1;

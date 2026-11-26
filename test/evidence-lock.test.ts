@@ -141,8 +141,26 @@ describe("根拠の lock: 根拠の範囲のコードが変わったことを知
       withNote("src/job.ts:40 で上限を見ている")(p);
 
       expect(await evidenceFindings(p.spec)).toEqual([
-        { kind: "evidence-out-of-range", action: "未決事項", evidence: "src/job.ts:40 で上限を見ている", lines: 5 },
+        { kind: "evidence-out-of-range", action: "未決事項 1", evidence: "src/job.ts:40", lines: 5 },
       ]);
+    });
+
+    it("( ) や [ ] を含むパス（Next.js の (group) や [param] のディレクトリ）も、1 つの note に並べた場所を 1 件ずつ読む", async () => {
+      const p = project();
+      mkdirSync(join(p.dir, "src", "(app)", "runs", "[runId]"), { recursive: true });
+      writeFileSync(join(p.dir, "src", "(app)", "runs", "[runId]", "page.tsx"), "a\nb\nc\n");
+      withNote("ボタンは両方にある（src/(app)/runs/[runId]/page.tsx:2-3、src/(app)/runs/[runId]/page.tsx:9）")(p);
+
+      expect(await evidenceFindings(p.spec)).toEqual([
+        { kind: "evidence-out-of-range", action: "未決事項 1", evidence: "src/(app)/runs/[runId]/page.tsx:9", lines: 3 },
+      ]);
+    });
+
+    it("文の中の半角の括弧で始まる場所は、括弧をパスに含めない", async () => {
+      const p = project();
+      withNote("上限は見ていない(src/job.ts:40)")(p);
+
+      expect(await evidenceFindings(p.spec)).toEqual([{ kind: "evidence-out-of-range", action: "未決事項 1", evidence: "src/job.ts:40", lines: 5 }]);
     });
 
     it("場所を含まない note は照合しない", async () => {
@@ -159,7 +177,7 @@ describe("根拠の lock: 根拠の範囲のコードが変わったことを知
       expect(readFileSync(p.lock, "utf8")).toContain('"go 未決事項 src/job.ts:3"');
 
       writeFileSync(p.code, `// 追加した行\n${CODE}`);
-      expect(await lockFindings(p.spec)).toContainEqual({ kind: "evidence-moved", action: "未決事項", evidence: "上限は src/job.ts:3 で見ている", location: "src/job.ts:3", moved: "4" });
+      expect(await lockFindings(p.spec)).toContainEqual({ kind: "evidence-moved", action: "未決事項 1", evidence: "src/job.ts:3", location: "src/job.ts:3", moved: "4" });
 
       await runCli(["evidence", "--update", p.spec], io().io);
       expect(readFileSync(p.spec, "utf8")).toContain('note: "上限は src/job.ts:4 で見ている"');
