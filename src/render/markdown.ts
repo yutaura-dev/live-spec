@@ -267,6 +267,10 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       return `操作 ${f.action} は 3 つ目以降の引数をとるが、inputs に例がないので実行していない`;
     case "unknown-inputs":
       return `inputs に書かれた ${f.action} という操作は存在しない`;
+    case "evidence-missing":
+      return `${f.action} の根拠「${f.evidence}」のファイルが見つからない（移動・改名されたか、起点が違う。別の場所のコードなら export const evidenceRoot を書く）`;
+    case "evidence-out-of-range":
+      return `${f.action} の根拠「${f.evidence}」の行が、ファイルの行数（${f.lines} 行）を超えている（コードが変わって行がずれた）`;
     case "goal-unreachable":
       return `目指す状態「${f.goal}」には、どの状態からもたどり着けない`;
     case "reviewed-unmatched":

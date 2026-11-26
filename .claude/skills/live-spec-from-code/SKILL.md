@@ -32,6 +32,8 @@ spec の書き方の規約は [live-spec-authoring](../live-spec-authoring/SKILL
 
 spec の各操作と ensure に、根拠となるコードの場所を `// 根拠: path:line（補足）` の形のコメントで残す。レビューする人が spec とコードを突き合わせられるようにするため。操作の関数の中に書いた根拠は、仕様書の操作カードにも「根拠」として表示される（絶対パスは書かない。共有したときに手元の環境が漏れるため）。
 
+根拠のパスは、spec のある git リポジトリのルートからの相対で書く。spec を対象のリポジトリの外（別のリポジトリなど）に置くときは、`export const evidenceRoot = "../my-app"`（spec のファイルからの相対）で起点を指定する。live-spec は根拠のファイルが無いとき・行がファイルの範囲の外にあるときに検査結果に出すので、コードが移動したり行がずれたりしたら、根拠を直す。
+
 ```ts
 /** 注文を確定する */
 export function confirm(order: Order, user: User): Order {
