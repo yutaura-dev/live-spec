@@ -45,6 +45,8 @@ let importVersion = 0;
 export interface LoadObjectOptions {
   readonly name?: string;
   readonly source?: string;
+  /** false にすると根拠の lock と照合しない */
+  readonly evidenceLock?: boolean;
 }
 
 // 名前とソースを外から渡せるようにしている理由: 差分を取るとき、git から取り出した spec を一時ファイルに書いて
@@ -61,7 +63,7 @@ export const loadObject = async (path: string, options: LoadObjectOptions = {}):
   const unmatched = Object.keys(spec.reviewed)
     .filter((id) => !known.has(id))
     .map((id) => ({ kind: "reviewed-unmatched" as const, id }));
-  return { spec, graph: { ...graph, ensures, omissions, findings: [...graph.findings, ...checkEvidence(spec, path), ...unmatched] } };
+  return { spec, graph: { ...graph, ensures, omissions, findings: [...graph.findings, ...checkEvidence(spec, path, { lock: options.evidenceLock !== false }), ...unmatched] } };
 };
 
 export const generateProject = async (paths: ReadonlyArray<string>, format: OutputFormat, title?: string): Promise<Output> => {

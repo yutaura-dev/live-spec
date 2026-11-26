@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, parse, resolve } from "node:path";
 import type { Spec } from "./load.ts";
 import type { Finding } from "./model.ts";
@@ -8,7 +9,11 @@ const LOCATION = /^(.*?)(?::(\d+)(?:-(\d+))?)?$/;
 
 interface Location {
   readonly path: string;
+  readonly start: number | null;
+  readonly end: number | null;
   readonly last: number;
+  /** 根拠の文の中での書き方（「a.ts:2-4」「:877-879」）。行がずれたときに書き換えるのに使う */
+  readonly raw: string;
 }
 
 // 1 行に並べた複数の場所を読む（「a.ts:1-2、b.ts:4」「a.ts:186、:877-879」）。補足の括弧の中に「、」や
@@ -32,7 +37,13 @@ export const evidenceLocations = (text: string): Array<Location> => {
     const path: string | null = rawPath === "" ? currentPath : (rawPath ?? null);
     if (path === null) continue;
     currentPath = path;
-    locations.push({ path, last: Number(end ?? start ?? 0) });
+    locations.push({
+      path,
+      start: start === undefined ? null : Number(start),
+      end: end === undefined ? null : Number(end),
+      last: Number(end ?? start ?? 0),
+      raw: token,
+    });
   }
   return locations;
 };
@@ -61,17 +72,131 @@ const rootsFor = (spec: Spec, specPath: string): Array<string> => {
 
 const lineCount = (path: string) => readFileSync(path, "utf8").replace(/\n$/, "").split("\n").length;
 
-export const checkEvidence = (spec: Spec, specPath: string): Array<Finding> => {
+export const LOCK_FILE = "live-spec.evidence.lock";
+const lockPathOf = (specPath: string) => join(dirname(resolve(specPath)), LOCK_FILE);
+
+const readLock = (path: string): Record<string, string> | null => (existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as Record<string, string>) : null);
+
+// キーを並べて 1 行 1 件で書く理由: lock は spec と同じ PR で動くので、差分とマージの衝突を読みやすくするため。
+const writeLock = (path: string, entries: Record<string, string>) => {
+  const keys = Object.keys(entries).sort();
+  writeFileSync(path, keys.length === 0 ? "{}\n" : `{\n${keys.map((k) => `  ${JSON.stringify(k)}: ${JSON.stringify(entries[k])}`).join(",\n")}\n}\n`);
+};
+
+// 空白をすべて除いてからハッシュを取る理由: formatter の変更（インデントや空白）で全件が「変わった」と出るのを防ぐため。
+const normalizedLines = (file: string) =>
+  readFileSync(file, "utf8")
+    .replace(/\n$/, "")
+    .split("\n")
+    .map((l) => l.replace(/\s+/g, ""));
+const blockHash = (lines: ReadonlyArray<string>, start: number, end: number) =>
+  createHash("sha256").update(lines.slice(start - 1, end).join("\n")).digest("hex").slice(0, 16);
+
+// 行番号は無関係な変更（上に import を足す、など）でもずれるので、中身が同じなら「行がずれた」として
+// 機械的に直せるようにし、中身が変わったものだけ人に見直してもらう。
+const findMoved = (lines: ReadonlyArray<string>, hash: string, start: number, length: number): number | null => {
+  const candidates: Array<number> = [];
+  for (let p = 1; p + length - 1 <= lines.length; p++) if (blockHash(lines, p, p + length - 1) === hash) candidates.push(p);
+  if (candidates.length === 0) return null;
+  return candidates.sort((a, b) => Math.abs(a - start) - Math.abs(b - start))[0]!;
+};
+
+const rangeText = (start: number, end: number | null) => (end === null ? `${start}` : `${start}-${end}`);
+const lockKey = (spec: Spec, action: string, path: string, start: number, end: number | null) =>
+  `${spec.name} ${action} ${path}:${start}-${end ?? start}`;
+
+interface ResolvedLocation extends Location {
+  readonly action: string;
+  readonly evidence: string;
+  readonly file: string | undefined;
+}
+
+const resolvedLocations = (spec: Spec, specPath: string): Array<ResolvedLocation> => {
   const roots = rootsFor(spec, specPath);
   return Object.entries(spec.evidence).flatMap(([action, items]) =>
-    items.flatMap((evidence): Array<Finding> =>
-      evidenceLocations(evidence).flatMap(({ path, last }): Array<Finding> => {
-        const file = roots.map((root) => join(root, path)).find((p) => existsSync(p));
-        if (file === undefined) return [{ kind: "evidence-missing", action, evidence }];
-        if (last === 0) return [];
-        const lines = lineCount(file);
-        return last > lines ? [{ kind: "evidence-out-of-range", action, evidence, lines }] : [];
-      }),
+    items.flatMap((evidence) =>
+      evidenceLocations(evidence).map((loc) => ({
+        ...loc,
+        action,
+        evidence,
+        file: roots.map((root) => join(root, loc.path)).find((p) => existsSync(p)),
+      })),
     ),
   );
+};
+
+export interface CheckEvidenceOptions {
+  /** false にすると lock と照合しない（差分の比較では、変更前の spec の根拠も作業ツリーのコードと比べることになるため） */
+  readonly lock?: boolean;
+}
+
+export const checkEvidence = (spec: Spec, specPath: string, options: CheckEvidenceOptions = {}): Array<Finding> => {
+  const lock = options.lock === false ? null : readLock(lockPathOf(specPath));
+  return resolvedLocations(spec, specPath).flatMap((loc): Array<Finding> => {
+    const { action, evidence, file, start, end, last, path } = loc;
+    if (file === undefined) return [{ kind: "evidence-missing", action, evidence }];
+    if (start === null) return [];
+    const location = `${path}:${rangeText(start, end)}`;
+    if (lock !== null) {
+      const recorded = lock[lockKey(spec, action, path, start, end)];
+      if (recorded === undefined) return [{ kind: "evidence-unlocked", action, evidence, location }];
+      const lines = normalizedLines(file);
+      const length = (end ?? start) - start + 1;
+      if (last <= lines.length && blockHash(lines, start, end ?? start) === recorded) return [];
+      const moved = findMoved(lines, recorded, start, length);
+      if (moved !== null) return [{ kind: "evidence-moved", action, evidence, location, moved: rangeText(moved, end === null ? null : moved + length - 1) }];
+      return [{ kind: "evidence-changed", action, evidence, location }];
+    }
+    const lines = lineCount(file);
+    return last > lines ? [{ kind: "evidence-out-of-range", action, evidence, lines }] : [];
+  });
+};
+
+export interface EvidenceUpdate {
+  readonly lockPath: string;
+  readonly recorded: number;
+  readonly moved: number;
+  readonly changed: number;
+}
+
+// 行がずれた根拠は、spec の「// 根拠:」の行番号を書き換え、中身が変わった根拠は今の中身で記録し直す
+// （人が spec を見直したうえで実行する前提）。同じディレクトリのほかの spec の記録は残す。
+export const updateEvidenceLock = (spec: Spec, specPath: string): EvidenceUpdate => {
+  const lockPath = lockPathOf(specPath);
+  const previous = readLock(lockPath) ?? {};
+  const entries = Object.fromEntries(Object.entries(previous).filter(([k]) => !k.startsWith(`${spec.name} `)));
+  let source = readFileSync(specPath, "utf8");
+  const rewrites = new Map<string, string>();
+  let recorded = 0;
+  let moved = 0;
+  let changed = 0;
+  for (const loc of resolvedLocations(spec, specPath)) {
+    if (loc.file === undefined || loc.start === null) continue;
+    const lines = normalizedLines(loc.file);
+    const length = (loc.end ?? loc.start) - loc.start + 1;
+    let start = loc.start;
+    const old = previous[lockKey(spec, loc.action, loc.path, loc.start, loc.end)];
+    const current = loc.last <= lines.length ? blockHash(lines, loc.start, loc.end ?? loc.start) : null;
+    if (old !== undefined && old !== current) {
+      const to = findMoved(lines, old, loc.start, length);
+      if (to !== null) {
+        start = to;
+        moved++;
+        const end = loc.end === null ? null : to + length - 1;
+        const raw = loc.raw.startsWith(":") ? `:${rangeText(to, end)}` : `${loc.path}:${rangeText(to, end)}`;
+        const text = rewrites.get(loc.evidence) ?? loc.evidence;
+        rewrites.set(loc.evidence, text.replace(loc.raw, raw));
+      } else {
+        changed++;
+      }
+    }
+    const end = loc.end === null ? null : start + length - 1;
+    if (start + length - 1 > lines.length) continue;
+    entries[lockKey(spec, loc.action, loc.path, start, end)] = blockHash(lines, start, start + length - 1);
+    recorded++;
+  }
+  for (const [before, after] of rewrites) source = source.split(`根拠: ${before}`).join(`根拠: ${after}`);
+  if (rewrites.size > 0) writeFileSync(specPath, source);
+  writeLock(lockPath, entries);
+  return { lockPath, recorded, moved, changed };
 };

@@ -49,7 +49,7 @@ const loadAtRevision = async (root: string, rel: string, ref: string, tag: strin
   const tmp = join(dirname(target), `.${basename(rel).replace(/\.ts$/, "")}.live-spec-${tag}.ts`);
   writeFileSync(tmp, source);
   try {
-    return await loadObject(tmp, { name: specNameOf(rel), source });
+    return await loadObject(tmp, { name: specNameOf(rel), source, evidenceLock: false });
   } finally {
     rmSync(tmp, { force: true });
     if (created !== null) rmSync(created, { recursive: true, force: true });
@@ -85,7 +85,7 @@ export const diffProject = async (options: ProjectDiffOptions): Promise<ProjectD
   const load = async (files: ReadonlyArray<string>, ref: string | undefined, tag: string) => {
     const objects = new Map<string, DomainObject>();
     for (const rel of files) {
-      const o = ref === undefined ? await loadObject(join(root, rel)) : await loadAtRevision(root, rel, ref, tag);
+      const o = ref === undefined ? await loadObject(join(root, rel), { evidenceLock: false }) : await loadAtRevision(root, rel, ref, tag);
       objects.set(o.spec.name, o);
     }
     return objects;

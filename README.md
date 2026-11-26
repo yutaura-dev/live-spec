@@ -130,6 +130,7 @@ npx live-spec specs/ --serve                            # ブラウザで見な�
 npx live-spec specs/order.spec.ts                      # spec が 1 つなら Markdown を標準出力に出す
 npx live-spec specs/ --json                            # 正規化モデル（差分レビュー用）
 npx live-spec check specs/                              # 型チェックと検査。問題があれば終了コード 1（CI 向け）
+npx live-spec evidence --update specs/                  # 根拠の範囲のコードを specs/live-spec.evidence.lock に記録する
 npx live-spec diff specs/ --base main --head feature   # ブランチ間で、仕様の振る舞いの変化を出す（--head を省くと作業ツリー）
 npx live-spec diff specs/ --base main --html --out diff.html  # 重ね合わせた状態遷移図と、画面の変更前・変更後を並べた HTML
 ```
@@ -164,6 +165,16 @@ spec ファイルは素の TypeScript です。export の名前で役割が決�
 - 状態には、振る舞い（できる・できない）に関係する値だけを入れる。タイトルのような値まで入れると状態が増えて図が読めなくなる
 - `ensure` の理由は、そのまま「できない理由」として表示される。読み手に伝わる文にする
 - 「できない」は `ensure` で表す。普通の `throw` は仕様のバグとして検出される
+
+### 根拠のコードの変化を知らせる
+
+`// 根拠: path:line` の行番号は、コードが少し変わるだけでずれる。`npx live-spec evidence --update specs/` を実行すると、根拠の範囲のコードを spec のディレクトリの `live-spec.evidence.lock` に記録する（空白の違いは無視する）。lock があると、仕様書と `live-spec check` が根拠のコードと照らし合わせて、次を検査結果に出す。
+
+- **行がずれた**: 同じコードが別の行にある。`evidence --update` が spec の根拠の行番号を書き換える
+- **中身が変わった**: spec を見直してから、`evidence --update` で記録し直す
+- **lock に無い**: 新しく書いた根拠。`evidence --update` で記録する
+
+lock は生成物ではなく「spec を確かめた時点の根拠のコード」の記録なので、spec と一緒にコミットする。lock が無い spec は照合しない。
 
 ### 漏れを見つける手がかり
 

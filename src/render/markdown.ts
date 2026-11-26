@@ -274,6 +274,12 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       return `${f.action} の根拠「${f.evidence}」のファイルが見つからない（移動・改名されたか、起点が違う。別の場所のコードなら export const evidenceRoot を書く）`;
     case "evidence-out-of-range":
       return `${f.action} の根拠「${f.evidence}」の行が、ファイルの行数（${f.lines} 行）を超えている（コードが変わって行がずれた）`;
+    case "evidence-moved":
+      return `${f.action} の根拠「${f.location}」は、同じコードが ${f.moved} 行目に移った（live-spec evidence --update で根拠の行番号を直せる）`;
+    case "evidence-changed":
+      return `${f.action} の根拠「${f.location}」の、根拠のコードの中身が変わった。spec を見直し、よければ live-spec evidence --update で記録し直す`;
+    case "evidence-unlocked":
+      return `${f.action} の根拠「${f.location}」が lock に記録されていない（live-spec evidence --update で記録する）`;
     case "goal-unreachable":
       return `目指す状態「${f.goal}」には、どの状態からもたどり着けない`;
     case "reviewed-unmatched":
