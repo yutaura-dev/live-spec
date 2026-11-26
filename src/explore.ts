@@ -141,6 +141,9 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
       if (!states.some((s) => s.values[field] === value)) findings.push({ kind: "unreachable-value", field, value });
     }
   }
+  for (const [goal, holds] of spec.goals) {
+    if (!states.some((s) => invariantHolds(holds, s.values))) findings.push({ kind: "goal-unreachable", goal });
+  }
   for (const action of missingInputs) findings.push({ kind: "missing-inputs", action });
   for (const action of Object.keys(spec.inputs)) {
     if (!spec.actions.some(([name]) => name === action)) findings.push({ kind: "unknown-inputs", action });

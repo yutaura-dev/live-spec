@@ -267,6 +267,8 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       return `操作 ${f.action} は 3 つ目以降の引数をとるが、inputs に例がないので実行していない`;
     case "unknown-inputs":
       return `inputs に書かれた ${f.action} という操作は存在しない`;
+    case "goal-unreachable":
+      return `目指す状態「${f.goal}」には、どの状態からもたどり着けない`;
     case "reviewed-unmatched":
       return `reviewed に書かれた ${f.id} は、確かめてほしい点のどれにも当たらない（ID の書き間違いか、もう出なくなった候補）`;
     case "surface-action-not-allowed":

@@ -62,6 +62,7 @@ export const Finding = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("surface-error"), state: Schema.String, actor: Schema.String, message: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("unknown-inputs"), action: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("reviewed-unmatched"), id: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("goal-unreachable"), goal: Schema.String }),
   Schema.Struct({
     kind: Schema.Literal("invariant-violation"),
     invariant: Schema.String,
@@ -102,6 +103,7 @@ export const OmissionHint = Schema.Struct({
     "indistinguishable-example",
     "indistinguishable-actor",
     "unused-field",
+    "cannot-reach-goal",
   ]),
   action: Schema.NullOr(Schema.String),
   field: Schema.NullOr(Schema.String),

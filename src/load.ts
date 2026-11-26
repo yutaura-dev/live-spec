@@ -38,6 +38,8 @@ export interface Spec {
   readonly actors: ReadonlyArray<readonly [name: string, actor: unknown]>;
   readonly actions: ReadonlyArray<readonly [name: string, fn: ActionFn]>;
   readonly invariants: ReadonlyArray<readonly [name: string, fn: InvariantFn]>;
+  /** 目指す状態。たどり着けない状態（袋小路）を見つけるのに使う */
+  readonly goals: ReadonlyArray<readonly [name: string, fn: InvariantFn]>;
   readonly inputs: Readonly<Record<string, ReadonlyArray<readonly [label: string, args: ReadonlyArray<unknown>]>>>;
   readonly surface: SurfaceFn | null;
   readonly scenarios: ReadonlyArray<readonly [name: string, steps: ReadonlyArray<ScenarioStep>]>;
@@ -68,6 +70,7 @@ const RESERVED = new Set([
   "glossary",
   "decisions",
   "reviewed",
+  "goals",
 ]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
@@ -93,6 +96,7 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
     invariants: isRecord(mod.invariants)
       ? Object.entries(mod.invariants).filter((e): e is [string, InvariantFn] => typeof e[1] === "function")
       : [],
+    goals: isRecord(mod.goals) ? Object.entries(mod.goals).filter((e): e is [string, InvariantFn] => typeof e[1] === "function") : [],
     inputs: inputsOf(mod.inputs),
     surface: typeof mod.surface === "function" ? (mod.surface as SurfaceFn) : null,
     questions: Array.isArray(mod.questions)

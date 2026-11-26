@@ -146,7 +146,62 @@ export const findOmissionHints = (spec: Spec, graph: Graph, options: Pick<Explor
   }
 
   hints.push(...unusedFields(spec, graph, options));
+  hints.push(...deadEnds(spec, graph));
   return hints;
+};
+
+const holds = (fn: Spec["goals"][number][1], values: State) => {
+  try {
+    return Boolean((fn as (s: unknown) => unknown)(structuredClone(values)));
+  } catch {
+    return false;
+  }
+};
+
+// 袋小路の中の状態をすべて出さずに入口だけを出す理由: 1 つの原因で入った袋小路の中には状態がいくつもあり、
+// 全部を並べると同じ指摘が何件も出る。入口（たどり着ける状態から 1 手で入る状態）を直せば中も解消する。
+const deadEnds = (spec: Spec, graph: Graph): Array<OmissionHint> => {
+  if (spec.goals.length === 0) return [];
+  const goals = new Set(graph.states.filter((s) => spec.goals.some(([, fn]) => holds(fn, s.values))).map((s) => s.id));
+  if (goals.size === 0) return [];
+  const moves = graph.transitions.filter((t) => t.from !== t.to);
+  const live = new Set(goals);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const t of moves) {
+      if (live.has(t.to) && !live.has(t.from)) {
+        live.add(t.from);
+        changed = true;
+      }
+    }
+  }
+  const parent = new Map<string, { from: string; action: string; actor: string }>();
+  const queue = graph.states.filter((s) => s.initial).map((s) => s.id);
+  const seen = new Set(queue);
+  for (let i = 0; i < queue.length; i++) {
+    for (const t of moves.filter((m) => m.from === queue[i])) {
+      if (seen.has(t.to)) continue;
+      seen.add(t.to);
+      parent.set(t.to, { from: t.from, action: t.action, actor: t.actors[0] ?? "" });
+      queue.push(t.to);
+    }
+  }
+  const pathTo = (id: string) => {
+    const steps: Array<string> = [];
+    for (let p = parent.get(id); p !== undefined; p = parent.get(p.from)) steps.unshift(`${p.action}（${p.actor}）`);
+    return steps.join(" → ");
+  };
+  const goalNames = spec.goals.map(([name]) => name).join("、");
+  return graph.states
+    .filter((s) => !s.terminal && !live.has(s.id))
+    .filter((s) => s.initial || moves.some((t) => t.to === s.id && live.has(t.from)))
+    .map((s) => ({
+      id: `cannot-reach-goal:${s.label}`,
+      kind: "cannot-reach-goal" as const,
+      action: null,
+      field: null,
+      message: `状態「${s.label}」は終端ではないのに、目指す状態（${goalNames}）のどれにもたどり着けない。入る手順: ${s.initial ? "（初期状態）" : pathTo(s.id)}`,
+    }));
 };
 
 const MAX_PERTURBED_STATES = 50;
