@@ -56,6 +56,7 @@ spec からは `import { ensure, ui, api, cli } from "@yutaura/live-spec"` で�
 | `links` | | `[{ from?: 操作, to: "相手の名前", action?: "相手の操作名", label }]` |
 | `decisions` | | `{ 名前: { decide: (入力) => 結果, cases: [{ input, expect? }] } }` |
 | `glossary` | | `{ 用語: "説明" }` |
+| `diagram` | | `{ groupBy: "status" }`。HTML の要約の図で状態をまとめる項目。書かなければ最初の文字列の項目。状態を項目の組で表して図が込み入るときは、モデルから項目を外さずに、ここで見せ方をまとめる |
 
 状態の型の JSDoc は仕様書の冒頭の説明に、関数の JSDoc の最初の段落（空行まで）は操作の見出しになる。読み手が業務の言葉で理解できる文を書く。見出しは短く、詳しい説明は空行のあとの段落に書く（仕様書には出ないが、spec を読む人の役に立つ）。
 

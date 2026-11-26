@@ -10,7 +10,10 @@ export interface Point {
 
 export interface LaidOutNode {
   readonly id: string;
+  /** 図に出す名前（入れ子の枠の中では、枠で分かる値を省いたもの） */
   readonly label: string;
+  /** 省かない名前 */
+  readonly title: string;
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -21,15 +24,26 @@ export interface LaidOutEdge {
   readonly from: string;
   readonly to: string;
   readonly action: string;
+  /** この線の操作を実行できる登場人物 */
+  readonly actors: ReadonlyArray<string>;
   /** 矢印のラベルに出す文 */
   readonly text: string;
   readonly points: ReadonlyArray<Point>;
   readonly label: Point & { readonly width: number; readonly height: number };
 }
 
+export interface LaidOutGroup {
+  readonly label: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface Layout {
   readonly width: number;
   readonly height: number;
+  readonly groups: ReadonlyArray<LaidOutGroup>;
   readonly nodes: ReadonlyArray<LaidOutNode>;
   readonly edges: ReadonlyArray<LaidOutEdge>;
 }
@@ -71,7 +85,11 @@ export interface LayoutOptions {
   readonly collapse?: boolean;
   /** 矢印のラベルに出す操作の名前。既定は関数名 */
   readonly actionLabel?: (action: string) => string;
+  /** 状態を入れ子の枠に入れるとき、状態の id から属する枠と短い名前を返す */
+  readonly groupOf?: ((id: string) => { readonly key: string; readonly label: string; readonly short: string } | null) | null;
 }
+
+const GROUP_PADDING = "[top=30,left=14,bottom=14,right=14]";
 
 export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise<Layout> => {
   const elk = new ELK();
@@ -79,21 +97,44 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
   const transitions = (options.collapse === false ? graph.transitions : collapseTransitions(graph)).filter((t) => t.from !== t.to);
   const sources = [...new Set(transitions.map((t) => t.from).filter(isCollapsed))];
   const labelOf = options.actionLabel ?? ((action: string) => action);
+  const group = (id: string) => options.groupOf?.(id) ?? null;
   const nodeList = [
-    ...sources.map((id) => ({ id, label: sourceLabel(graph, id), initial: false })),
-    ...graph.states.map((s) => ({ id: s.id, label: s.label, initial: s.initial })),
+    ...sources.map((id) => ({ id, label: sourceLabel(graph, id), title: sourceLabel(graph, id), initial: false })),
+    ...graph.states.map((s) => ({ id: s.id, label: group(s.id)?.short ?? s.label, title: s.label, initial: s.initial })),
   ];
+  // 状態が 1 つしかない値は枠に入れない。枠と箱が二重になるだけで、読み手に何も足さないため。
+  const members = new Map<string, Array<string>>();
+  for (const s of graph.states) {
+    const g = group(s.id);
+    if (g !== null) members.set(g.key, [...(members.get(g.key) ?? []), s.id]);
+  }
+  const boxed = new Map([...members].filter(([, ids]) => ids.length > 1).map(([key, ids], i) => [key, { id: `box${i}`, ids }]));
+  const boxOf = (id: string) => {
+    const g = group(id);
+    return g === null ? undefined : boxed.get(g.key);
+  };
+  const elkNode = (s: (typeof nodeList)[number]): ElkNode => ({
+    id: s.id,
+    width: options.nodeSize?.width ?? textWidth(s.label) + NODE_PADDING_X * 2,
+    height: options.nodeSize?.height ?? NODE_HEIGHT,
+    // 「どの状態からでも」には層の指定をしない。初期状態へ戻る遷移（リセットなど）があると、
+    // 初期状態と同じ最初の層に置くことになり、ELK が層の中の辺を扱えずに落ちるため。
+    ...(s.initial && boxOf(s.id) === undefined ? { layoutOptions: { "elk.layered.layering.layerConstraint": "FIRST" } } : {}),
+  });
   const input: ElkNode = {
     id: "root",
-    layoutOptions: LAYOUT_OPTIONS,
-    children: nodeList.map((s) => ({
-      id: s.id,
-      width: options.nodeSize?.width ?? textWidth(s.label) + NODE_PADDING_X * 2,
-      height: options.nodeSize?.height ?? NODE_HEIGHT,
-      // 「どの状態からでも」には層の指定をしない。初期状態へ戻る遷移（リセットなど）があると、
-      // 初期状態と同じ最初の層に置くことになり、ELK が層の中の辺を扱えずに落ちるため。
-      ...(s.initial ? { layoutOptions: { "elk.layered.layering.layerConstraint": "FIRST" } } : {}),
-    })),
+    layoutOptions: {
+      ...LAYOUT_OPTIONS,
+      ...(boxed.size === 0 ? {} : { "elk.hierarchyHandling": "INCLUDE_CHILDREN", "elk.json.edgeCoords": "ROOT", "elk.json.shapeCoords": "ROOT" }),
+    },
+    children: [
+      ...nodeList.filter((s) => boxOf(s.id) === undefined).map(elkNode),
+      ...[...boxed.values()].map((b) => ({
+        id: b.id,
+        layoutOptions: { "elk.padding": GROUP_PADDING },
+        children: nodeList.filter((s) => b.ids.includes(s.id)).map(elkNode),
+      })),
+    ],
     edges: transitions.map((t, i) => ({
       id: `e${i}`,
       sources: [t.from],
@@ -103,9 +144,14 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
   };
   const result = await elk.layout(input);
 
+  const flat = (result.children ?? []).flatMap((c) => [c, ...(c.children ?? [])]);
   const nodes = nodeList.map((s) => {
-    const n = result.children!.find((c) => c.id === s.id)!;
-    return { id: s.id, label: s.label, x: n.x!, y: n.y!, width: n.width!, height: n.height! };
+    const n = flat.find((c) => c.id === s.id)!;
+    return { id: s.id, label: s.label, title: s.title, x: n.x!, y: n.y!, width: n.width!, height: n.height! };
+  });
+  const groups = [...boxed].map(([key, b]) => {
+    const n = flat.find((c) => c.id === b.id)!;
+    return { label: group(b.ids[0]!)!.label, key, x: n.x!, y: n.y!, width: n.width!, height: n.height! };
   });
   const edges = transitions.map((t, i) => {
     const e = result.edges!.find((x) => x.id === `e${i}`)!;
@@ -115,10 +161,11 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
       from: t.from,
       to: t.to,
       action: t.action,
+      actors: t.actors,
       text: labelOf(t.action),
       points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(({ x, y }) => ({ x, y })),
       label: { x: label.x!, y: label.y!, width: label.width!, height: label.height! },
     };
   });
-  return { width: result.width!, height: result.height!, nodes, edges };
+  return { width: result.width!, height: result.height!, groups, nodes, edges };
 };

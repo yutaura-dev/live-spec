@@ -57,6 +57,8 @@ export interface Spec {
   readonly reviewed: Readonly<Record<string, string>>;
   readonly fields: Readonly<Record<string, ReadonlyArray<FieldValue>>>;
   readonly stateDoc: string | null;
+  /** 要約の図で、状態をまとめる項目（export const diagram = { groupBy: "status" }）。無ければ最初の文字列の項目 */
+  readonly groupBy: string | null;
 }
 
 const RESERVED = new Set([
@@ -72,6 +74,7 @@ const RESERVED = new Set([
   "decisions",
   "reviewed",
   "goals",
+  "diagram",
 ]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
@@ -97,6 +100,7 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
     invariants: isRecord(mod.invariants)
       ? Object.entries(mod.invariants).filter((e): e is [string, InvariantFn] => typeof e[1] === "function")
       : [],
+    groupBy: isRecord(mod.diagram) && typeof mod.diagram.groupBy === "string" ? mod.diagram.groupBy : null,
     goals: isRecord(mod.goals) ? Object.entries(mod.goals).filter((e): e is [string, InvariantFn] => typeof e[1] === "function") : [],
     inputs: inputsOf(mod.inputs),
     surface: typeof mod.surface === "function" ? (mod.surface as SurfaceFn) : null,

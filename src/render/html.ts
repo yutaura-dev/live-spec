@@ -7,6 +7,7 @@ import type { Spec } from "../load.ts";
 import type { Graph } from "../model.ts";
 import type { SurfaceNode } from "../surface.ts";
 import { isCollapsed } from "./collapse.ts";
+import { detailGroups, summaryGraph } from "./group.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
 import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle, testsOf } from "./markdown.ts";
@@ -176,7 +177,9 @@ const renderPage = async (
       .join("")}</ul>
   </section>`;
   const linksOf = (action: string) => outgoing.filter((l) => l.from === action);
-  const l = await layout(graph, { actionLabel: (a) => actionTitle(spec, a) });
+  const l = await layout(graph, { actionLabel: (a) => actionTitle(spec, a), groupOf: detailGroups(spec, graph) });
+  const summary = summaryGraph(spec, graph);
+  const sl = summary === null ? null : await layout(summary, { actionLabel: (a) => actionTitle(spec, a) });
   const actions = summarizeActions(spec, graph);
   const labelOf = (id: string) => graph.states.find((s) => s.id === id)?.label ?? id;
   const initial = graph.states.find((s) => s.initial);
@@ -279,17 +282,27 @@ const renderPage = async (
   </section>`
   }
   ${reviewHtml(spec, graph, index)}
-  <section class="board" aria-label="状態遷移図" data-mode="states">
+  <section class="board" aria-label="状態遷移図" data-mode="${sl === null ? "states" : "summary"}">
     <button type="button" class="fit-toggle" aria-pressed="false">全体を表示</button>
     <p class="hint">状態をクリックすると、その状態でできること・できないことを表示します。矢印のラベルや操作カードをクリックすると、その操作の遷移を強調します。Esc で解除。図が画面に収まらないときは、横にスクロールするか「全体を表示」を押してください。</p>
-    ${
-      wl === null
-        ? ""
-        : `<div class="toolbar">
-      <div class="modes" role="group" aria-label="図の表示"><button type="button" data-mode="states" aria-pressed="true">状態遷移図</button><button type="button" data-mode="wireflow" aria-pressed="false">画面つき</button></div>
-      <label class="viewpoint">視点 <select class="viewpoint-select">${actorNames.map((a) => `<option value="${esc(a)}">${esc(a)}</option>`).join("")}</select></label>
-    </div>`
-    }
+    <div class="toolbar">
+      ${
+        sl === null && wl === null
+          ? ""
+          : `<div class="modes" role="group" aria-label="図の表示">${[
+              ...(sl === null ? [] : [["summary", "要約"]]),
+              ["states", sl === null ? "状態遷移図" : "詳細"],
+              ...(wl === null ? [] : [["wireflow", "画面つき"]]),
+            ]
+              .map(([mode, name], i) => `<button type="button" data-mode="${mode}" aria-pressed="${i === 0}">${name}</button>`)
+              .join("")}</div>`
+      }
+      ${actorNames.length < 2 ? "" : `<label class="actor-filter-label">操作する人 <select class="actor-filter"><option value="">すべての人</option>${actorNames.map((a) => `<option value="${esc(a)}">${esc(a)}</option>`).join("")}</select></label>`}
+      ${wl === null ? "" : `<label class="viewpoint">視点 <select class="viewpoint-select">${actorNames.map((a) => `<option value="${esc(a)}">${esc(a)}</option>`).join("")}</select></label>`}
+    </div>
+    ${sl === null ? "" : `<div class="diagram diagram-summary">
+      ${diagramSvg(spec.name, sl, `arrow-sum-${index}`, groupNodeSvg)}
+    </div>`}
     <div class="diagram diagram-states">
       ${diagramSvg(spec.name, l, arrow, (n) => nodeSvg(n, flags(n.id), arrow))}
     </div>
@@ -381,6 +394,7 @@ const diagramSvg = (name: string, l: Layout, markerId: string, node: (n: LaidOut
   `<svg viewBox="0 0 ${l.width + 24} ${l.height}" width="${l.width + 24}" height="${l.height}" role="img" aria-label="${esc(name)} の状態遷移図">
         <defs><marker id="${markerId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
         <g transform="translate(24 0)">
+        ${l.groups.map((g) => `<g class="group-box"><rect x="${g.x}" y="${g.y}" width="${g.width}" height="${g.height}" rx="12"/><text x="${g.x + 12}" y="${g.y + 18}">${esc(g.label)}</text></g>`).join("\n        ")}
         ${l.edges.map((e) => edgeSvg(e, markerId)).join("\n        ")}
         ${l.nodes.map(node).join("\n        ")}
         </g>
@@ -408,16 +422,20 @@ export const shortTransition = (t: { readonly from: string; readonly to: string 
   return `${removed.join(" · ")} → ${added.join(" · ")}`;
 };
 
-const flowSpan = (t: { readonly from: string; readonly to: string }) => {
-  const full = formatTransition(t);
-  const short = shortTransition(t);
-  return short === full ? `<span class="flow">${esc(full)}</span>` : `<span class="flow" title="${esc(full)}">${esc(short)}</span>`;
-};
-
 const scenarioFlow = (t: { readonly from: string; readonly to: string }) => {
   const full = `${t.from} → ${t.to}`;
   const short = shortTransition(t);
   return short === formatTransition(t) ? `<p class="flow">${esc(full)}</p>` : `<p class="flow" title="${esc(full)}">${esc(short)}</p>`;
+};
+
+const flowSpans = (ts: ReadonlyArray<{ readonly from: string; readonly to: string }>) => {
+  const byShort = new Map<string, Array<string>>();
+  for (const t of ts) byShort.set(shortTransition(t), [...(byShort.get(shortTransition(t)) ?? []), formatTransition(t)]);
+  return [...byShort]
+    .map(([short, fulls]) =>
+      fulls.length === 1 && fulls[0] === short ? `<span class="flow">${esc(short)}</span>` : `<span class="flow" title="${fulls.map(esc).join("&#10;")}">${esc(short)}</span>`,
+    )
+    .join("");
 };
 
 const nodeClass = (f: NodeFlags, extra = "") =>
@@ -435,13 +453,17 @@ const terminalRect = (n: LaidOutNode) =>
   `<rect class="inner" x="${n.x + 3}" y="${n.y + 3}" width="${n.width - 6}" height="${n.height - 6}" rx="7"/>`;
 
 // 「どの状態からでも」は実在の状態ではないので、点線で描き、クリックできる状態（data-state）にはしない。
+// 要約の図の箱は、詳細の状態とは別物（いくつかの状態をまとめたもの）なので、状態のパネルは開かない。
+const groupNodeSvg = (n: LaidOutNode) =>
+  `<g class="node group-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></g>`;
+
 const anyNodeSvg = (n: LaidOutNode) =>
   `<g class="any-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="${n.height / 2}"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></g>`;
 
 const nodeSvg = (n: LaidOutNode, f: NodeFlags, markerId: string) => {
   if (isCollapsed(n.id)) return anyNodeSvg(n);
   const cy = n.y + n.height / 2;
-  return `${f.initial ? startMarker(n, cy, markerId) : ""}<g class="${nodeClass(f)}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terms.length === 0 ? "" : `<title>${esc(f.terms.join("\n"))}</title>`}${f.terminal ? terminalRect(n) : ""}<text x="${n.x + n.width / 2}" y="${cy}">${esc(n.label)}</text>${questionMark(n, f)}</g>`;
+  return `${f.initial ? startMarker(n, cy, markerId) : ""}<g class="${nodeClass(f)}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.title)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terms.length === 0 ? "" : `<title>${esc(f.terms.join("\n"))}</title>`}${f.terminal ? terminalRect(n) : ""}<text x="${n.x + n.width / 2}" y="${cy}">${esc(n.label)}</text>${questionMark(n, f)}</g>`;
 };
 
 // サムネイルを SVG の foreignObject に入れる理由: パネルと同じ HTML のワイヤーフレームを、
@@ -467,7 +489,7 @@ const wireflowNodeSvg = (
 const edgeSvg = (e: LaidOutEdge, markerId: string) => {
   const d = e.points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
   const lb = e.label;
-  return `<g class="edge" data-action="${esc(e.action)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"><path d="${d}" marker-end="url(#${markerId})"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.text)}</text></g></g>`;
+  return `<g class="edge" data-action="${esc(e.action)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}" data-actors="${esc(e.actors.join("|"))}"><path d="${d}" marker-end="url(#${markerId})"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.text)}</text></g></g>`;
 };
 
 // 確かめてほしい点の文は Markdown と共通なので、バッククォートで囲んだ部分を HTML ではコードとして出す。
@@ -518,7 +540,7 @@ const actionCard = (
   const when =
     a.when.length === 0
       ? '<span class="muted">なし</span>'
-      : a.when.map(flowSpan).join("");
+      : flowSpans(a.when);
   const blocked = presentBlocked(a.blocked).map(
     (b) =>
       `<li><span class="reason">${esc(canOnlyWhen(b.reason))}</span> ${
@@ -614,7 +636,8 @@ h2{font-size:18px;margin:40px 0 16px}
 .modes button{font:inherit;font-size:13px;background:none;border:0;color:var(--muted);padding:4px 12px;cursor:pointer}
 .modes button[aria-pressed="true"]{background:var(--accent-weak);color:var(--accent);font-weight:600}
 .viewpoint{color:var(--muted)}.viewpoint select{font:inherit;font-size:13px;margin-left:4px}
-.board[data-mode="states"] .diagram-wireflow,.board[data-mode="wireflow"] .diagram-states{display:none}
+.board[data-mode="states"] .diagram-wireflow,.board[data-mode="wireflow"] .diagram-states,.board[data-mode="summary"] .diagram-states,.board[data-mode="summary"] .diagram-wireflow,.board[data-mode="states"] .diagram-summary,.board[data-mode="wireflow"] .diagram-summary{display:none}
+.group-box rect{fill:none;stroke:var(--line);stroke-dasharray:4 3}.group-box text{font-size:12px;font-weight:600;fill:var(--muted)}.edge.is-filtered{opacity:.12}.actor-filter-label{font-size:13px;color:var(--muted)}
 .board:not([data-mode="wireflow"]) .viewpoint{display:none}
 svg text.wf-node-label{text-anchor:start;font-weight:600;font-size:13px}
 .thumb-frame{width:100%;height:100%;overflow:hidden;pointer-events:none}
@@ -893,6 +916,14 @@ const CLIENT = `
 
   document.addEventListener("click", function (ev) { activate(ev.target); });
   document.addEventListener("change", function (ev) {
+    // 選んだ人ができる操作の線だけを残し、ほかは薄くする。運用者とワーカーのように、人ごとに関わる流れが違うため。
+    if (ev.target.classList && ev.target.classList.contains("actor-filter")) {
+      var who = ev.target.value;
+      ev.target.closest(".board").querySelectorAll(".edge").forEach(function (e) {
+        e.classList.toggle("is-filtered", who !== "" && (e.dataset.actors || "").split("|").indexOf(who) === -1);
+      });
+      return;
+    }
     if (!ev.target.classList || !ev.target.classList.contains("viewpoint-select")) return;
     within(".thumb").forEach(function (t) { t.hidden = t.dataset.actor !== ev.target.value; });
   });
