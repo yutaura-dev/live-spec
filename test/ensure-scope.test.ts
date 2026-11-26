@@ -48,6 +48,20 @@ describe("ensure の実際: その ensure だけを効かせて実行し、通�
     expect(scopeOf("cancel", "作った人だけ")).toEqual({ dimension: "relation", passes: "ownerId が登場人物の id と同じとき" });
   });
 
+  it("通るときを言い表せる項目が複数あるときは、initial に先に書いた項目で言い表す", () => {
+    type Run = { status: "queued" | "running"; dispatch: "未手配" | "手配済み" };
+    const run = loadSpec("run", {
+      initial: { status: "queued", dispatch: "未手配" },
+      actors: { w: {} },
+      begin: (r: Run): Run => {
+        ensure(r.status === "queued", "待機中のときだけ");
+        return { status: "running", dispatch: "手配済み" };
+      },
+    });
+
+    expect(ensureScope(run, explore(run), "begin", "待機中のときだけ").passes).toBe("status が queued のとき");
+  });
+
   it("一度も止めない条件は、そう示す", () => {
     expect(scopeOf("finish", "持ち主がいるときだけ")).toEqual({ dimension: "none", passes: "到達できるどの場合も通る（この条件で止まることがない）" });
   });

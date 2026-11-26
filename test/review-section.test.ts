@@ -88,5 +88,7 @@ describe("確かめてほしい点: 漏れの候補と、意図がほかに書�
 
     expect(html).toContain("確かめてほしい点");
     expect(html).toContain("unused-field:flagged");
+    expect(html).toContain("<code>publish</code> の「編集者だけ」");
+    expect(html).not.toContain("`publish`");
   });
 });

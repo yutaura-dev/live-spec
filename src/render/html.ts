@@ -443,6 +443,9 @@ const edgeSvg = (e: LaidOutEdge, markerId: string) => {
   return `<g class="edge" data-action="${esc(e.action)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"><path d="${d}" marker-end="url(#${markerId})"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.action)}</text></g></g>`;
 };
 
+// 確かめてほしい点の文は Markdown と共通なので、バッククォートで囲んだ部分を HTML ではコードとして出す。
+const withCode = (text: string) => esc(text).replace(/`([^`]+)`/g, "<code>$1</code>");
+
 const reviewHtml = (spec: Spec, graph: Graph) => {
   const { pending, acknowledged } = reviewItems(spec, graph);
   if (pending.length + acknowledged.length === 0) return "";
@@ -451,7 +454,7 @@ const reviewHtml = (spec: Spec, graph: Graph) => {
     ${
       pending.length === 0
         ? '<p class="note">確かめてほしい点はありません。</p>'
-        : `<p class="note">${esc(REVIEW_LEAD)}</p><ol>${pending.map((i) => `<li><span class="ask">${esc(i.message)}</span> <code class="review-id">${esc(i.id)}</code></li>`).join("")}</ol>`
+        : `<p class="note">${withCode(REVIEW_LEAD)}</p><ol>${pending.map((i) => `<li><span class="ask">${withCode(i.message)}</span> <code class="review-id">${esc(i.id)}</code></li>`).join("")}</ol>`
     }
     ${
       acknowledged.length === 0

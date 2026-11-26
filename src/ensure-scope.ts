@@ -58,7 +58,12 @@ export const ensureScope = (spec: Spec, graph: Graph, action: string, reason: st
 
   // 関係を先に調べる理由: 所有者の条件は、到達できる状態で持ち主が 1 人しかいないと「その人のとき」とも読めてしまう。
   // 「持ち主と同じとき」のほうが、理由の文（「作った人だけ」）と見比べやすい。
-  const fields = [...new Set(cells.flatMap((c) => Object.keys(c.state.values)))];
+  // initial に書いた順に試す理由: 到達できる状態で連動している項目（status と dispatch など）は、どちらでも
+  // 言い表せる。書き手が先に書いた、読み手に見せたい項目で言い表すほうが、理由の文と見比べやすい。
+  const declared = Object.keys(spec.initial);
+  const fields = [...new Set([...declared, ...cells.flatMap((c) => Object.keys(c.state.values))])].filter((f) =>
+    cells.some((c) => f in c.state.values),
+  );
   const actorKeys = [...new Set(cells.flatMap((c) => (isPlainObject(c.actorValue) ? Object.keys(c.actorValue) : [])))];
   for (const field of fields) {
     for (const key of actorKeys) {
