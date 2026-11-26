@@ -1,5 +1,6 @@
 import { withOnlyEnsure } from "./ensure.ts";
 import { runAction } from "./explore.ts";
+import { fieldLabel } from "./labels.ts";
 import type { Spec } from "./load.ts";
 import type { Graph } from "./model.ts";
 
@@ -85,7 +86,7 @@ export const ensureScope = (spec: Spec, graph: Graph, action: string, reason: st
         [...passValues].map((v) => JSON.parse(v) as unknown),
         spec.fields[field],
       );
-      return { dimension: "state", passes: `${field} が ${values.map(String).join(", ")} のとき` };
+      return { dimension: "state", passes: `${fieldLabel(spec, field)} が ${values.map(String).join(", ")} のとき` };
     }
     return { dimension: "state", passes: `${pass.map((s) => s.label).join(", ")} のとき` };
   }

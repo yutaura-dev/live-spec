@@ -1,4 +1,5 @@
 import type { Spec } from "../load.ts";
+import { fieldLabel } from "../labels.ts";
 import type { Graph } from "../model.ts";
 import { ANY, ANY_LABEL, collapseTransitions } from "./collapse.ts";
 
@@ -69,7 +70,7 @@ export const summarizeActions = (spec: Spec, graph: Graph): ReadonlyArray<Action
         (w) => `${w.from}→${w.to}`,
       ),
       blocked: [...blocked.entries()].map(([reason, states]) => ({ reason, states })),
-      effect: effectOf(graph, name),
+      effect: effectOf(graph, name).map((e) => ({ ...e, field: fieldLabel(spec, e.field) })),
       inputReasons: inputReasonsOf(entries),
       inputOutcomes: inputOutcomesOf(spec, name, entries, labelOf),
     };
