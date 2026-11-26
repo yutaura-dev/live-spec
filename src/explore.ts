@@ -165,7 +165,10 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
             .filter((s) => Object.entries(about).every(([k, v]) => JSON.stringify(canonical(v)) === JSON.stringify(s.values[k])))
             .map((s) => s.id);
     if (about !== undefined && typeof about !== "function" && matched.length === 0) findings.push({ kind: "question-unmatched", ask: q.ask });
-    return { ask: q.ask, note: q.note ?? null, action, states: matched };
+    if (q.scenario !== undefined && !spec.scenarios.some(([name]) => name === q.scenario)) {
+      findings.push({ kind: "question-scenario-unknown", ask: q.ask, scenario: q.scenario });
+    }
+    return { ask: q.ask, note: q.note ?? null, action, states: matched, ...(q.scenario === undefined ? {} : { scenario: q.scenario }) };
   });
 
   const decisions = spec.decisions.map(([name, d]) => {

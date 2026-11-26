@@ -8,6 +8,8 @@ export type SurfaceFn = (state: never, actor: never) => unknown;
 export interface Question {
   readonly ask: string;
   readonly note?: string;
+  /** このシナリオについての未決事項（今の動きを写しただけで、正しいと決めていないシナリオ）。シナリオの名前で書く */
+  readonly scenario?: string;
   readonly about?: ActionFn | Readonly<Record<string, unknown>>;
 }
 

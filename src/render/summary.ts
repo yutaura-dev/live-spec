@@ -10,7 +10,8 @@ export interface ActionSummary {
   readonly othersReasons: ReadonlyArray<string>;
   readonly when: ReadonlyArray<{ readonly from: string; readonly to: string }>;
   readonly blocked: ReadonlyArray<{ readonly reason: string; readonly states: ReadonlyArray<string> }>;
-  readonly effect: ReadonlyArray<{ readonly field: string; readonly values: ReadonlyArray<string> }>;
+  /** partial: その操作で変わらない場合もある項目 */
+  readonly effect: ReadonlyArray<{ readonly field: string; readonly values: ReadonlyArray<string>; readonly partial: boolean }>;
   readonly inputReasons: ReadonlyArray<{ readonly input: string; readonly reason: string }>;
   readonly inputOutcomes: ReadonlyArray<{
     readonly input: string;
@@ -158,17 +159,19 @@ export const formatTransition = (t: { readonly from: string; readonly to: string
 
 const effectOf = (graph: Graph, action: string): ActionSummary["effect"] => {
   const changed = new Map<string, Set<string>>();
-  for (const t of graph.transitions) {
-    if (t.action !== action) continue;
+  const mine = graph.transitions.filter((t) => t.action === action);
+  const changes = new Map<string, number>();
+  for (const t of mine) {
     const from = graph.states.find((s) => s.id === t.from)!.values;
     const to = graph.states.find((s) => s.id === t.to)!.values;
     for (const k of Object.keys(to)) {
       if (JSON.stringify(from[k]) === JSON.stringify(to[k])) continue;
       if (!changed.has(k)) changed.set(k, new Set());
+      changes.set(k, (changes.get(k) ?? 0) + 1);
       changed.get(k)!.add(typeof to[k] === "string" ? (to[k] as string) : JSON.stringify(to[k]));
     }
   }
-  return [...changed.entries()].map(([field, values]) => ({ field, values: [...values] }));
+  return [...changed.entries()].map(([field, values]) => ({ field, values: [...values], partial: changes.get(field)! < mine.length }));
 };
 
 const labeler = (graph: Graph) => (id: string) => graph.states.find((s) => s.id === id)?.label ?? id;

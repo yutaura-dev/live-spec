@@ -70,7 +70,7 @@ describe("シナリオの denied: この手順は断られるはず、と書け�
 
     const md = renderMarkdown(spec, explore(spec));
 
-    expect(md).toContain("1. 著者alice が approve（approve）: この操作はできない（編集者だけ）");
+    expect(md).toContain("1. 著者alice が approve（approve）: この操作はできない（できるのは、編集者だけ）");
   });
 });
 

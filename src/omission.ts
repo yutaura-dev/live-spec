@@ -1,4 +1,5 @@
 import { runAction, type ExploreOptions } from "./explore.ts";
+import { actionTitle } from "./labels.ts";
 import type { Spec, State } from "./load.ts";
 import type { Graph, OmissionHint } from "./model.ts";
 
@@ -185,7 +186,7 @@ const deadEnds = (spec: Spec, graph: Graph): Array<OmissionHint> => {
     for (const r of steps.filter((x) => x.state === queue[i])) {
       if (seen.has(r.to!)) continue;
       seen.add(r.to!);
-      parent.set(r.to!, { from: r.state, step: `${r.action}（${r.input === null ? r.actor : `${r.actor}、${r.input}`}）` });
+      parent.set(r.to!, { from: r.state, step: `${actionTitle(spec, r.action)}（${r.input === null ? r.actor : `${r.actor}、${r.input}`}）` });
       queue.push(r.to!);
     }
   }

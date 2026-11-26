@@ -42,6 +42,7 @@ export const Finding = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("state-limit"), maxStates: Schema.Number }),
   Schema.Struct({ kind: Schema.Literal("missing-inputs"), action: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("question-unmatched"), ask: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("question-scenario-unknown"), ask: Schema.String, scenario: Schema.String }),
   Schema.Struct({
     kind: Schema.Literal("decision-mismatch"),
     decision: Schema.String,
@@ -142,6 +143,7 @@ export const Graph = Schema.Struct({
       note: Schema.NullOr(Schema.String),
       action: Schema.NullOr(Schema.String),
       states: Schema.Array(Schema.String),
+      scenario: Schema.optionalKey(Schema.String),
     }),
   ),
   ensures: Schema.optionalKey(Schema.Array(EnsureCheck)),

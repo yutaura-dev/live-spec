@@ -9,4 +9,8 @@ const firstSentence = (doc: string | undefined): string | null => {
 // 英語の項目名を覚えずに読めるようにするため。JSDoc がなければ識別子のまま出す。
 export const fieldLabel = (spec: Pick<Spec, "fieldDocs">, field: string): string => firstSentence(spec.fieldDocs[field]) ?? field;
 
+// できない理由の文（「待機中のときだけ」）は、できる条件を書いたもの。「できないとき（待機中のときだけ）」と並べると
+// 「待機中のときだけできない」と逆に読まれるので、「できるのは、」を添えて主語をはっきりさせる。
+export const canOnlyWhen = (reason: string): string => (/だけ$/.test(reason) ? `できるのは、${reason}` : reason);
+
 export const actionTitle = (spec: Pick<Spec, "docs">, action: string): string => firstSentence(spec.docs[action]) ?? action;

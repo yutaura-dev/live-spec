@@ -1,7 +1,7 @@
 import type { EnsureCheck } from "../model.ts";
 import { describeEnsure } from "./ensures.ts";
 import { markdownSection } from "./sections.ts";
-import { actionTitle } from "../labels.ts";
+import { actionTitle, canOnlyWhen } from "../labels.ts";
 import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
 import type { Spec } from "../load.ts";
 import type { Finding, Graph } from "../model.ts";
@@ -56,6 +56,8 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     `# ${spec.name}`,
     "",
     ...(spec.stateDoc === null ? [] : [spec.stateDoc, ""]),
+    // 用語を未決事項より前に置く理由: 未決事項や判断待ちの文は状態の値や業務の言葉で書かれるので、その意味を知らないと読めないため。
+    ...glossarySection(spec),
     // 未決事項を状態遷移図より前に置く理由: AI が書いた仕様のうち、人が判断すべきなのはここだけ、という
     // 入口にしたいため。全体を読む前に、判断が必要な点が目に入るようにする。
     ...(graph.questions.length === 0
@@ -82,7 +84,6 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...graph.states.filter((s) => s.terminal).map((s) => `  ${s.id} --> [*]`),
     "```",
     "",
-    ...glossarySection(spec),
     ...markdownSection("操作"),
     ...summarizeActions(spec, graph).flatMap((a) => [
       ...actionSection(a),
@@ -100,12 +101,20 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
           "",
         ]),
     ...(graph.decisions.length === 0 ? [] : [...markdownSection("ルール"), ...graph.decisions.flatMap((d) => [...decisionTable(d), ""])]),
-    ...(graph.scenarios.length === 0 ? [] : [...markdownSection("シナリオ"), ...graph.scenarios.flatMap((s) => [...scenarioSection(spec, s, labelOf), ""])]),
+    ...(graph.scenarios.length === 0 ? [] : [...markdownSection("シナリオ"), ...graph.scenarios.flatMap((s) => [...scenarioSection(spec, s, labelOf, graph.questions), ""])]),
     ...screensSection(spec, graph),
     ...markdownSection("検査結果"),
-    ...(graph.findings.length === 0 ? ["問題は見つかりませんでした。"] : graph.findings.map((f) => `- ⚠ ${describeFinding(f, labelOf)}`)),
+    ...(graph.findings.length === 0 ? [noFindingsLine(spec, graph)] : graph.findings.map((f) => `- ⚠ ${describeFinding(f, labelOf)}`)),
     "",
   ].join("\n");
+};
+
+// 検査結果が無いときも、判断待ちや確かめてほしい点が残っていれば添える。「問題は見つかりませんでした」だけだと、
+// 上に挙げた点が解消済みなのかと迷わせるため。
+export const noFindingsLine = (spec: Spec, graph: Graph): string => {
+  const { pending, onHold } = reviewItems(spec, graph);
+  const rest = [...(onHold.length === 0 ? [] : [`判断待ち ${onHold.length} 件`]), ...(pending.length === 0 ? [] : [`確かめてほしい点 ${pending.length} 件`])];
+  return rest.length === 0 ? "問題は見つかりませんでした。" : `問題は見つかりませんでした（ただし、${rest.join("と")}を上に挙げている）。`;
 };
 
 const ensureLines = (ensures: ReadonlyArray<EnsureCheck>, reviewed: Spec["reviewed"]): Array<string> =>
@@ -132,7 +141,7 @@ const actionSection = (a: ActionSummary): Array<string> => {
   if (a.capable.length === 0) return [heading, "", "- **できる人**: なし（どの状態でも誰も実行できない）", ...name];
   const who =
     a.othersReasons.length === 0 ? a.capable.join(", ") : `${a.capable.join(", ")}（ほかの人は「${a.othersReasons.join("」「")}」）`;
-  const groups = presentBlocked(a.blocked).map((b) => `${b.states === null ? "それ以外のすべての状態" : b.states.join(", ")}（${b.reason}）`);
+  const groups = presentBlocked(a.blocked).map((b) => `${b.states === null ? "それ以外のすべての状態" : b.states.join(", ")}（${canOnlyWhen(b.reason)}）`);
   const whenNot =
     groups.length === 0
       ? "- **できないとき**: なし"
@@ -154,7 +163,7 @@ const actionSection = (a: ActionSummary): Array<string> => {
             ...a.inputOutcomes.map((o) =>
               o.transitions.length > 0
                 ? `  - ${o.input}: ${o.transitions.map(formatTransition).join(" / ")}`
-                : `  - ${o.input}: ❌ ${o.reasons.join("、")}`,
+                : `  - ${o.input}: ❌ ${o.reasons.map(canOnlyWhen).join("、")}`,
             ),
           ].join("\n"),
         ]),
@@ -221,6 +230,14 @@ const decisionTable = (d: Graph["decisions"][number]): Array<string> => [
   ...d.rows.map((r) => `| ${[...d.columns.map((c) => inputCell(r.input, c)), resultCell(r)].join(" | ")} |`),
 ];
 
+// 未決事項が指すシナリオは、今の動きを写しただけで正しいと決めたものではないので、通っても ✅ にしない。
+// ✅ だと「合意済みの仕様」に見えるため。
+export const scenarioTitle = (s: Graph["scenarios"][number], questions: Graph["questions"]): string => {
+  const q = questions.findIndex((x) => x.scenario === s.name);
+  if (!s.passed) return `❌ ${s.name}`;
+  return q === -1 ? `✅ ${s.name}` : `⚠ ${s.name}（未決事項 ${q + 1} を判断中）`;
+};
+
 export const questionTarget = (spec: Spec, q: Graph["questions"][number], labelOf: (id: string) => string) =>
   q.action !== null
     ? `（操作: ${(spec.docs[q.action] ?? q.action).replace(/。$/, "")}）`
@@ -235,19 +252,20 @@ export const describeStep = (spec: Spec, step: Graph["scenarios"][number]["steps
   return `${step.actor} が ${what}（${detail}）`;
 };
 
-const scenarioSection = (spec: Spec, s: Graph["scenarios"][number], labelOf: (id: string) => string): Array<string> => [
-  `### ${s.passed ? "✅" : "❌"} ${s.name}`,
+const scenarioSection = (spec: Spec, s: Graph["scenarios"][number], labelOf: (id: string) => string, questions: Graph["questions"]): Array<string> => [
+  `### ${scenarioTitle(s, questions)}`,
   "",
   ...s.steps.map((step, i) =>
     step.ok && step.denied
-      ? `${i + 1}. ${describeStep(spec, step)}: この操作はできない（${step.reason}）`
+      ? `${i + 1}. ${describeStep(spec, step)}: この操作はできない（${canOnlyWhen(step.reason ?? "")}）`
       : step.ok
       ? `${i + 1}. ${describeStep(spec, step)}: ${labelOf(step.from ?? "")} → ${labelOf(step.to ?? "")}`
       : `${i + 1}. ❌ ${describeStep(spec, step)}: ${step.reason}`,
   ),
 ];
 
-export const formatEffect = (a: ActionSummary) => a.effect.map((e) => `${e.field} → ${e.values.join(" / ")}`).join(", ");
+export const formatEffect = (a: ActionSummary) =>
+  a.effect.map((e) => `${e.field} → ${e.values.join(" / ")}${e.partial ? "（変わらない場合もある）" : ""}`).join(", ");
 
 export const describeFinding = (f: Finding, labelOf: (id: string) => string): string => {
   switch (f.kind) {
@@ -293,6 +311,8 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       return `ルール「${f.decision}」の ${f.row} 行目の結果が期待と違う（期待: ${f.expected}、実際: ${f.actual}）`;
     case "decision-error":
       return `ルール「${f.decision}」の ${f.row} 行目で例外を投げた: ${f.message}`;
+    case "question-scenario-unknown":
+      return `未決事項「${f.ask}」が指すシナリオ「${f.scenario}」が無い`;
     case "question-unmatched":
       return `未決事項「${f.ask}」の対象の状態が、到達できるどの状態にも当てはまらない`;
     case "scenario-failed":

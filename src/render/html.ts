@@ -1,7 +1,7 @@
 import type { EnsureCheck } from "../model.ts";
 import { ensureParts } from "./ensures.ts";
 import { SECTION_LEAD } from "./sections.ts";
-import { actionTitle } from "../labels.ts";
+import { actionTitle, canOnlyWhen } from "../labels.ts";
 import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
 import type { Spec } from "../load.ts";
 import type { Graph } from "../model.ts";
@@ -9,7 +9,7 @@ import type { SurfaceNode } from "../surface.ts";
 import { ANY } from "./collapse.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
-import { describeFinding, describeStep, formatEffect, inputCell, questionTarget, resultCell, splitEvidence } from "./markdown.ts";
+import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle, splitEvidence } from "./markdown.ts";
 import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
 import { surfaceToHtml } from "./wireframe.ts";
 
@@ -207,13 +207,13 @@ const renderPage = async (
     ),
   };
   const scenarioCard = (s: Graph["scenarios"][number]) => `<article class="card scenario-card" data-scenario="${esc(s.name)}" tabindex="0">
-        <h3>${s.passed ? "✅" : "❌"} ${esc(s.name)}</h3>
+        <h3>${esc(scenarioTitle(s, graph.questions))}</h3>
         <ol class="storyboard">${s.steps
           .map((st) => {
             const shown = st.to === null ? undefined : graph.surfaces.find((x) => x.state === st.to && x.actor === st.actor);
             return `<li class="${st.ok ? "" : "failed"}"><p class="step">${esc(describeStep(spec, st))}</p>${
               st.ok && st.denied
-                ? `<p class="flow">この操作はできない（${esc(st.reason ?? "")}）</p>`
+                ? `<p class="flow">この操作はできない（${esc(canOnlyWhen(st.reason ?? ""))}）</p>`
                 : st.ok
                 ? `<p class="flow">${esc(labelOf(st.from ?? ""))} → ${esc(labelOf(st.to ?? ""))}</p>`
                 : `<p class="reason">❌ ${esc(st.reason ?? "")}</p>`
@@ -267,6 +267,7 @@ const renderPage = async (
   </dl>
 </header>
 <main>
+  ${glossaryHtml(spec)}
   ${
     graph.questions.length === 0
       ? ""
@@ -299,7 +300,6 @@ const renderPage = async (
     </div>`
     }
   </section>
-  ${glossaryHtml(spec)}
   <section class="actions">
     <h2>操作</h2>${sectionLead("操作")}
     <div class="cards">
@@ -336,7 +336,7 @@ const renderPage = async (
     <h2>検査結果</h2>${sectionLead("検査結果")}
     ${
       graph.findings.length === 0
-        ? '<p class="ok-line">問題は見つかりませんでした。</p>'
+        ? `<p class="ok-line">${esc(noFindingsLine(spec, graph))}</p>`
         : `<ul>${graph.findings.map((f) => `<li>${esc(describeFinding(f, labelOf))}</li>`).join("")}</ul>`
     }
   </section>
@@ -497,7 +497,7 @@ const actionCard = (
       : a.when.map((w) => `<span class="flow">${esc(formatTransition(w))}</span>`).join("");
   const blocked = presentBlocked(a.blocked).map(
     (b) =>
-      `<li><span class="reason">${esc(b.reason)}</span> ${
+      `<li><span class="reason">${esc(canOnlyWhen(b.reason))}</span> ${
         b.states === null ? '<span class="state rest">それ以外のすべての状態</span>' : b.states.map((s) => `<span class="state">${esc(s)}</span>`).join("")
       }</li>`,
   );
@@ -509,7 +509,7 @@ const actionCard = (
           <dt>できる人</dt><dd>${who}</dd>
           <dt>できるとき</dt><dd>${when}</dd>
           <dt>できないとき</dt><dd>${whenNot}</dd>
-          ${a.inputOutcomes.length === 0 ? "" : `<dt>入力ごとの結果</dt><dd><ul>${a.inputOutcomes.map((o) => `<li><span class="reason">${esc(o.input)}</span> ${o.transitions.length > 0 ? o.transitions.map((t) => `<span class="flow">${esc(formatTransition(t))}</span>`).join("") : `<span class="state">❌ ${esc(o.reasons.join("、"))}</span>`}</li>`).join("")}</ul></dd>`}
+          ${a.inputOutcomes.length === 0 ? "" : `<dt>入力ごとの結果</dt><dd><ul>${a.inputOutcomes.map((o) => `<li><span class="reason">${esc(o.input)}</span> ${o.transitions.length > 0 ? o.transitions.map((t) => `<span class="flow">${esc(formatTransition(t))}</span>`).join("") : `<span class="state">❌ ${esc(o.reasons.map(canOnlyWhen).join("、"))}</span>`}</li>`).join("")}</ul></dd>`}
           ${effect === "" ? "" : `<dt>結果</dt><dd>${esc(effect)}</dd>`}
           ${a.summary === null ? "" : `<dt>関数名</dt><dd><code>${esc(a.name)}</code></dd>`}
           ${

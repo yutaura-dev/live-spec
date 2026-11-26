@@ -70,20 +70,20 @@ describe("renderMarkdown: 操作ごとの節", () => {
   });
 
   it("できないときは、担当者が止められた理由で状態をまとめる", () => {
-    expect(section("publish")).toContain("- **できないとき**: それ以外のすべての状態（レビュー中のときだけ）");
+    expect(section("publish")).toContain("- **できないとき**: それ以外のすべての状態（できるのは、レビュー中のときだけ）");
   });
 
   it("できない理由が状態によって違うときは、理由ごとに行を分け、一番多いまとまりを『それ以外』にする", () => {
     expect(section("pin")).toContain(
-      "- **できないとき**:\n  - published · pinned（まだ固定していないときだけ）\n  - それ以外のすべての状態（公開中のときだけ）",
+      "- **できないとき**:\n  - published · pinned（できるのは、まだ固定していないときだけ）\n  - それ以外のすべての状態（できるのは、公開中のときだけ）",
     );
   });
 
   it("できないときの状態が少ないなら、『それ以外』にまとめずに並べる", () => {
-    expect(section("submit")).toContain("- **できないとき**: それ以外のすべての状態（下書きのときだけ）");
+    expect(section("submit")).toContain("- **できないとき**: それ以外のすべての状態（できるのは、下書きのときだけ）");
     const small = loopSpec();
     const doc2 = renderMarkdown(small, explore(small));
-    expect(doc2).toContain("- **できないとき**: b（a のときだけ）");
+    expect(doc2).toContain("- **できないとき**: b（できるのは、a のときだけ）");
   });
 
   it("自分自身に戻る遷移は、できるときの一覧で『変わらない』と書く", () => {

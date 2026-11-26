@@ -19,7 +19,7 @@ describe("summarizeActions: 操作ごとの要約", () => {
       othersReasons: ["編集者か管理者だけ"],
       when: [{ from: "inReview", to: "published" }],
       blocked: [{ reason: "レビュー中のときだけ", states: ["draft", "published", "published · pinned", "archived"] }],
-      effect: [{ field: "status", values: ["published"] }],
+      effect: [{ field: "status", values: ["published"], partial: false }],
       inputReasons: [],
       inputOutcomes: [],
     });

@@ -41,7 +41,7 @@ spec からは `import { ensure, ui, api, cli } from "@yutaura/live-spec"` で�
 | `inputs` | | 3 つ目以降の引数の例。`{ 操作名: { 例の名前: [引数...] } }` |
 | `surface` | | `(状態, 登場人物) => 画面 \| null` |
 | `scenarios` | | `{ 名前: [{ do: 操作, by: "登場人物", input?: "例の名前", expect?: { 項目: 値 }, denied?: "理由" }] }`。`denied` は「この手順は断られるはず」 |
-| `questions` | | `[{ ask, about?: 操作 \| { 項目: 値 }, note? }]` |
+| `questions` | | `[{ ask, about?: 操作 \| { 項目: 値 }, scenario?: "シナリオの名前", note? }]` |
 | `links` | | `[{ from?: 操作, to: "相手の名前", action?: "相手の操作名", label }]` |
 | `decisions` | | `{ 名前: { decide: (入力) => 結果, cases: [{ input, expect? }] } }` |
 | `glossary` | | `{ 用語: "説明" }` |
@@ -145,7 +145,7 @@ export function reserve(run: Run, worker: Worker, nextIsLast: boolean): Run {
 
 ### 8. 判断できないことは未決事項にする
 
-要件やコードから決められないこと（「アーカイブした記事を戻せるか？」）は、推測で spec に書かずに `questions` に書く。対象の操作（関数）か状態（`{ status: "archived" }`）を `about` に付けると、仕様書の図とカードに印が出る。人は未決事項だけを見れば判断すべき点が分かる。
+要件やコードから決められないこと（「アーカイブした記事を戻せるか？」）は、推測で spec に書かずに `questions` に書く。対象の操作（関数）か状態（`{ status: "archived" }`）を `about` に付けると、仕様書の図とカードに印が出る。人は未決事項だけを見れば判断すべき点が分かる。今の動きを写しただけで、正しいと決めていないシナリオ（既存のコードから書き起こしたものなど）は、`scenario: "シナリオの名前"` で未決事項に結ぶ。結ばないと ✅ が付き、合意済みの仕様に見える。
 
 ### 9. ほかのドメインオブジェクトとのつながりを書く
 
