@@ -6,7 +6,7 @@ import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts
 import type { Spec } from "../load.ts";
 import type { Graph } from "../model.ts";
 import type { SurfaceNode } from "../surface.ts";
-import { ANY } from "./collapse.ts";
+import { isCollapsed } from "./collapse.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
 import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle, testsOf } from "./markdown.ts";
@@ -215,7 +215,7 @@ const renderPage = async (
               st.ok && st.denied
                 ? `<p class="flow">この操作はできない（${esc(canOnlyWhen(st.reason ?? ""))}）</p>`
                 : st.ok
-                ? `<p class="flow">${esc(labelOf(st.from ?? ""))} → ${esc(labelOf(st.to ?? ""))}</p>`
+                ? scenarioFlow({ from: labelOf(st.from ?? ""), to: labelOf(st.to ?? "") })
                 : `<p class="reason">❌ ${esc(st.reason ?? "")}</p>`
             }${shown === undefined ? "" : `<div class="frame"><div class="frame-inner">${surfaceToHtml(shown.surface as SurfaceNode, notAllowed(st.to!, [st.actor]))}</div></div>`}</li>`;
           })
@@ -280,7 +280,8 @@ const renderPage = async (
   }
   ${reviewHtml(spec, graph, index)}
   <section class="board" aria-label="状態遷移図" data-mode="states">
-    <p class="hint">状態をクリックすると、その状態でできること・できないことを表示します。矢印のラベルや操作カードをクリックすると、その操作の遷移を強調します。Esc で解除。</p>
+    <button type="button" class="fit-toggle" aria-pressed="false">全体を表示</button>
+    <p class="hint">状態をクリックすると、その状態でできること・できないことを表示します。矢印のラベルや操作カードをクリックすると、その操作の遷移を強調します。Esc で解除。図が画面に収まらないときは、横にスクロールするか「全体を表示」を押してください。</p>
     ${
       wl === null
         ? ""
@@ -393,7 +394,30 @@ const glossaryHtml = (spec: Spec) => {
   const terms = Object.entries(spec.glossary).map(([term, doc]) => `<dt>${esc(term)}</dt><dd>${esc(doc)}</dd>`);
   return fields.length + terms.length === 0
     ? ""
-    : `<section class="glossary"><h2>用語</h2>${sectionLead("用語")}<dl>${[...fields, ...terms].join("")}</dl></section>`;
+    : `<details class="glossary"><summary>用語（${fields.length + terms.length} 件）</summary>${sectionLead("用語")}<dl>${[...fields, ...terms].join("")}</dl></details>`;
+};
+
+// 状態の名前は項目の値を「 · 」でつないだものなので、遷移では変わる値だけを出す。全部出すと、カードが状態名の壁になるため。
+// 変わらない値も含めた全体は、ホバーで見せる。
+export const shortTransition = (t: { readonly from: string; readonly to: string }): string => {
+  const from = t.from.split(" · ");
+  const to = t.to.split(" · ");
+  const removed = from.filter((x) => !to.includes(x));
+  const added = to.filter((x) => !from.includes(x));
+  if (removed.length === 0 || added.length === 0 || (removed.length === from.length && added.length === to.length)) return formatTransition(t);
+  return `${removed.join(" · ")} → ${added.join(" · ")}`;
+};
+
+const flowSpan = (t: { readonly from: string; readonly to: string }) => {
+  const full = formatTransition(t);
+  const short = shortTransition(t);
+  return short === full ? `<span class="flow">${esc(full)}</span>` : `<span class="flow" title="${esc(full)}">${esc(short)}</span>`;
+};
+
+const scenarioFlow = (t: { readonly from: string; readonly to: string }) => {
+  const full = `${t.from} → ${t.to}`;
+  const short = shortTransition(t);
+  return short === formatTransition(t) ? `<p class="flow">${esc(full)}</p>` : `<p class="flow" title="${esc(full)}">${esc(short)}</p>`;
 };
 
 const nodeClass = (f: NodeFlags, extra = "") =>
@@ -415,7 +439,7 @@ const anyNodeSvg = (n: LaidOutNode) =>
   `<g class="any-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="${n.height / 2}"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></g>`;
 
 const nodeSvg = (n: LaidOutNode, f: NodeFlags, markerId: string) => {
-  if (n.id === ANY) return anyNodeSvg(n);
+  if (isCollapsed(n.id)) return anyNodeSvg(n);
   const cy = n.y + n.height / 2;
   return `${f.initial ? startMarker(n, cy, markerId) : ""}<g class="${nodeClass(f)}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terms.length === 0 ? "" : `<title>${esc(f.terms.join("\n"))}</title>`}${f.terminal ? terminalRect(n) : ""}<text x="${n.x + n.width / 2}" y="${cy}">${esc(n.label)}</text>${questionMark(n, f)}</g>`;
 };
@@ -429,7 +453,7 @@ const wireflowNodeSvg = (
   visible: string | undefined,
   markerId: string,
 ) => {
-  if (n.id === ANY) return anyNodeSvg(n);
+  if (isCollapsed(n.id)) return anyNodeSvg(n);
   const inner = n.width - 16;
   const thumbHtml = thumbs
     .map(
@@ -494,7 +518,7 @@ const actionCard = (
   const when =
     a.when.length === 0
       ? '<span class="muted">なし</span>'
-      : a.when.map((w) => `<span class="flow">${esc(formatTransition(w))}</span>`).join("");
+      : a.when.map(flowSpan).join("");
   const blocked = presentBlocked(a.blocked).map(
     (b) =>
       `<li><span class="reason">${esc(canOnlyWhen(b.reason))}</span> ${
@@ -516,7 +540,7 @@ const actionCard = (
           ${
             ensures.length === 0
               ? ""
-              : `<dt>条件</dt><dd><ul>${ensures
+              : `<dt>条件</dt><dd><details class="ensures"${ensures.some((e) => ensureParts(e, reviewed[unguardedId(e)] !== undefined).warn) ? " open" : ""}><summary>${ensures.length} 件</summary><ul>${ensures
                   .map((e) => {
                     const acknowledged = reviewed[unguardedId(e)] !== undefined;
                     const p = ensureParts(e, acknowledged);
@@ -525,9 +549,9 @@ const actionCard = (
                       ? `⚠ ${esc(p.head)}。${esc(p.effect)}`
                       : `${esc(p.head)}。<details class="ensure-effect"><summary>この条件が無いと</summary>${esc(p.effect)}</details>`;
                     const tests = testsFor(e);
-                    return `<li class="ensure ${e.verdict}${acknowledged ? " acknowledged" : ""}">${body}${tests.length === 0 ? "" : `<span class="ensure-tests">テスト: ${esc(tests.join("、"))}</span>`}</li>`;
+                    return `<li class="ensure ${e.verdict}${acknowledged ? " acknowledged" : ""}">${body}${tests.length === 0 ? "" : `<span class="ensure-tests">テスト: ${tests.map((t) => `<span class="test-loc" title="${esc(t)}">${esc(t.split("/").pop()!)}</span>`).join("、")}</span>`}</li>`;
                   })
-                  .join("")}</ul></dd>`
+                  .join("")}</ul></details></dd>`
           }
           ${asks.length === 0 ? "" : `<dt>未決</dt><dd><ul>${asks.map((q) => `<li class="ask"><a href="#${q.href}">${esc(q.label)}</a></li>`).join("")}</ul></dd>`}
         </dl>
@@ -560,7 +584,7 @@ main{padding:24px 40px 64px}
 h2{font-size:18px;margin:40px 0 16px}
 .board .hint{margin:0 0 10px}
 .diagram{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:auto;padding:8px}
-.diagram svg{display:block;max-width:100%;height:auto;margin:0 auto}
+.diagram svg{display:block;margin:0 auto}.diagram.fit svg{max-width:100%;height:auto}.fit-toggle{font:inherit;font-size:12.5px;background:none;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:3px 10px;cursor:pointer;margin:0 0 8px}.fit-toggle[aria-pressed="true"]{background:var(--accent-weak);color:var(--accent)}
 .panel{position:fixed;top:16px;right:16px;width:400px;max-height:calc(100vh - 32px);overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.25);z-index:10}
 .panel[hidden]{display:none}
 .panel h2{margin:0 0 12px;font-size:20px}
@@ -633,7 +657,7 @@ marker path{fill:var(--muted)}
 .node.is-selected rect{stroke:var(--accent);stroke-width:2.2;fill:var(--accent-weak)}
 .edge.is-active path{stroke:var(--accent);stroke-width:2.2}
 .edge.is-active .edge-label text{fill:var(--accent);font-weight:600}
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;cursor:pointer;outline:none;min-width:0}
 .card:hover,.card:focus-visible{border-color:var(--accent)}
 .card.is-selected{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
@@ -671,6 +695,7 @@ marker path{fill:var(--muted)}
 .rel-node:hover rect{stroke:var(--accent)}
 .any-node rect{fill:none;stroke:var(--muted);stroke-width:1.2;stroke-dasharray:4 3}
 .any-node text{fill:var(--muted);font-size:12px}
+details.glossary{margin:0 0 16px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 16px}details.glossary summary{cursor:pointer;font-weight:600}details.glossary[open] summary{margin-bottom:8px}details.ensures summary{cursor:pointer;color:var(--muted);font-size:13px}.test-loc{text-decoration:underline dotted;cursor:help}
 .glossary dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}
 .glossary dt{font-weight:600}
 .glossary .kind{font-size:11px;color:var(--muted);font-weight:400;margin-left:4px}
@@ -684,8 +709,8 @@ table.decision td.result{font-weight:600}
 table.decision tr.ng td.result{color:var(--warn)}
 .decisions h3{font-size:15px;margin:16px 0 4px}
 .scenario-card{margin-bottom:16px}
-.storyboard{display:flex;gap:14px;overflow-x:auto;list-style:none;margin:0;padding:0 0 6px;counter-reset:step}
-.storyboard li{flex:0 0 220px;counter-increment:step}
+.storyboard{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;list-style:none;margin:0;padding:0 0 6px;counter-reset:step}
+.storyboard li{min-width:0;counter-increment:step}
 .storyboard li::before{content:counter(step);display:inline-block;width:20px;height:20px;border-radius:50%;background:var(--accent-weak);color:var(--accent);font-size:12px;font-weight:700;text-align:center;line-height:20px;margin-bottom:4px}
 .storyboard li.failed::before{background:var(--warn);color:var(--bg)}
 .storyboard .step{margin:0 0 4px;font-size:13px;font-weight:600}
@@ -848,6 +873,15 @@ const CLIENT = `
   function activate(target) {
     var scenario = target.closest(".scenario-card");
     if (scenario) return selectScenario(scenario.dataset.scenario);
+    // 図は実寸で出し、はみ出す分は横にスクロールさせる。画面の幅に縮めると、状態の多い図は文字が読めない大きさになるため。
+    // 全体の形をつかみたいときだけ、ボタンで縮めて表示する。
+    var fit = target.closest(".fit-toggle");
+    if (fit) {
+      var on = fit.getAttribute("aria-pressed") !== "true";
+      fit.setAttribute("aria-pressed", String(on));
+      fit.closest(".board").querySelectorAll(".diagram").forEach(function (d) { d.classList.toggle("fit", on); });
+      return;
+    }
     var modeButton = target.closest(".modes button");
     if (modeButton) return setMode(modeButton.dataset.mode);
     if (target.closest("[data-clear]")) return reset();

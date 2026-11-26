@@ -5,7 +5,7 @@ import { actionTitle, canOnlyWhen } from "../labels.ts";
 import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
 import type { Spec } from "../load.ts";
 import type { Finding, Graph } from "../model.ts";
-import { ANY, ANY_LABEL, collapseTransitions } from "./collapse.ts";
+import { collapseTransitions, isCollapsed, sourceLabel } from "./collapse.ts";
 import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
 import type { SurfaceNode } from "../surface.ts";
 import { surfaceToText } from "./wireframe.ts";
@@ -77,10 +77,10 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...graph.states.map((s) => `  state "${s.label}" as ${s.id}`),
     ...graph.states.filter((s) => s.initial).map((s) => `  [*] --> ${s.id}`),
     // 自分自身に戻る遷移は図に描かない（線が図を埋めるため）。操作の節の「できるとき」には残る。
-    ...(collapseTransitions(graph).some((t) => t.from === ANY) ? [`  state "${ANY_LABEL}" as any`] : []),
+    ...[...new Set(collapseTransitions(graph).map((t) => t.from).filter(isCollapsed))].map((id, i) => `  state "${sourceLabel(graph, id)}" as any${i}`),
     ...collapseTransitions(graph)
       .filter((t) => t.from !== t.to)
-      .map((t) => `  ${t.from === ANY ? "any" : t.from} --> ${t.to}: ${actionTitle(spec, t.action)} (${t.actors.join(", ")})`),
+      .map((t) => `  ${isCollapsed(t.from) ? mermaidSource(graph, t.from) : t.from} --> ${t.to}: ${actionTitle(spec, t.action)} (${t.actors.join(", ")})`),
     ...graph.states.filter((s) => s.terminal).map((s) => `  ${s.id} --> [*]`),
     "```",
     "",
@@ -110,6 +110,9 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
 
 // 検査結果が無いときも、判断待ちや確かめてほしい点が残っていれば添える。「問題は見つかりませんでした」だけだと、
 // 上に挙げた点が解消済みなのかと迷わせるため。
+const mermaidSource = (graph: Graph, id: string) =>
+  `any${[...new Set(collapseTransitions(graph).map((t) => t.from).filter(isCollapsed))].indexOf(id)}`;
+
 export const noFindingsLine = (spec: Spec, graph: Graph): string => {
   const { pending, onHold } = reviewItems(spec, graph);
   const rest = [...(onHold.length === 0 ? [] : [`判断待ち ${onHold.length} 件`]), ...(pending.length === 0 ? [] : [`確かめてほしい点 ${pending.length} 件`])];

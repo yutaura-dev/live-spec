@@ -1,7 +1,7 @@
 import type { Spec } from "../load.ts";
 import { fieldLabel } from "../labels.ts";
 import type { Graph } from "../model.ts";
-import { ANY, ANY_LABEL, collapseTransitions } from "./collapse.ts";
+import { ANY, ANY_LABEL, collapseTransitions, isCollapsed, sourceLabel } from "./collapse.ts";
 
 export interface ActionSummary {
   readonly name: string;
@@ -67,7 +67,7 @@ export const summarizeActions = (spec: Spec, graph: Graph): ReadonlyArray<Action
       when: uniqueBy(
         collapseTransitions(graph)
           .filter((t) => t.action === name)
-          .map((t) => ({ from: t.from === ANY ? ANY : labelOf(t.from), to: labelOf(t.to) })),
+          .map((t) => ({ from: t.from === ANY ? ANY : isCollapsed(t.from) ? sourceLabel(graph, t.from) : labelOf(t.from), to: labelOf(t.to) })),
         (w) => `${w.from}→${w.to}`,
       ),
       blocked: [...blocked.entries()].map(([reason, states]) => ({ reason, states })),

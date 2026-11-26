@@ -1,7 +1,7 @@
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import ElkModule from "elkjs/lib/elk.bundled.js";
 import type { Graph } from "../model.ts";
-import { ANY, ANY_LABEL, collapseTransitions } from "./collapse.ts";
+import { collapseTransitions, isCollapsed, sourceLabel } from "./collapse.ts";
 
 export interface Point {
   readonly x: number;
@@ -77,10 +77,10 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
   const elk = new ELK();
   // 自分自身に戻る遷移は描かない。ほぼすべての状態にあると、図が線で埋まって読めなくなるため。
   const transitions = (options.collapse === false ? graph.transitions : collapseTransitions(graph)).filter((t) => t.from !== t.to);
-  const hasAny = transitions.some((t) => t.from === ANY);
+  const sources = [...new Set(transitions.map((t) => t.from).filter(isCollapsed))];
   const labelOf = options.actionLabel ?? ((action: string) => action);
   const nodeList = [
-    ...(hasAny ? [{ id: ANY, label: ANY_LABEL, initial: false }] : []),
+    ...sources.map((id) => ({ id, label: sourceLabel(graph, id), initial: false })),
     ...graph.states.map((s) => ({ id: s.id, label: s.label, initial: s.initial })),
   ];
   const input: ElkNode = {

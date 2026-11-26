@@ -151,7 +151,7 @@ describe("テストと spec の項目を結ぶ", { timeout: 60_000 }, () => {
 
     const html = await renderHtml(spec, graph);
 
-    expect(html).toMatch(/<span class="ensure-tests">テスト: [^<]*tests\/todo\.test\.ts:7<\/span>/);
+    expect(html).toMatch(/<span class="ensure-tests">テスト: <span class="test-loc" title="[^"]*tests\/todo\.test\.ts:7">todo\.test\.ts:7<\/span><\/span>/);
   });
 
   it("仕様書を作るときも --tests でテストと結べる", async () => {
