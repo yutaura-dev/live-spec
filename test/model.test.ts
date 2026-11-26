@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
+import { diffModels, isEmptyDiff } from "../src/diff.ts";
 import { explore } from "../src/explore.ts";
 import { ensure } from "../src/index.ts";
 import { loadSpec } from "../src/load.ts";
@@ -23,10 +24,14 @@ describe("normalize: 差分レビュー用の正規化モデル", () => {
     ]);
   });
 
-  it("オブジェクトのキーの書き順が違っても、同じ JSON になる", () => {
+  it("オブジェクトのキーの書き順が違っても、状態の値は同じで、差分としては何も変わらない", () => {
     const reordered = loadSpec("article", { ...Article, initial: { authorId: "alice", pinned: false, status: "draft" } }, { source: SOURCE });
 
-    expect(JSON.stringify(normalize(reordered, explore(reordered)))).toBe(JSON.stringify(normalize(spec, explore(spec))));
+    const a = normalize(spec, explore(spec));
+    const b = normalize(reordered, explore(reordered));
+
+    expect(b.states.map((s) => s.values)).toEqual(a.states.map((s) => s.values));
+    expect(isEmptyDiff(diffModels(a, b))).toBe(true);
   });
 
   it("同じ状態・同じ操作で全員の結果が同じなら、登場人物と入力をまとめて * にする", () => {

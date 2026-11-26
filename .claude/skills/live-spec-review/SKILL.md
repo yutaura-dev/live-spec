@@ -21,7 +21,7 @@ npx live-spec diff specs/ --base origin/main --head HEAD
 npx live-spec diff specs/ --base origin/main --html --out spec-diff.html
 ```
 
-出力には次が含まれる。状態はラベルで比べる（ID は探索順で振り直されるため）。
+出力には次が含まれる。状態は値で比べる（ID は探索順で振り直され、名前は `initial` の書き順で変わるため）。
 
 - ドメインオブジェクトごとのまとめの表
 - 変更前と変更後を重ねた状態遷移図（増えた・消えた・通れる人が変わった遷移）

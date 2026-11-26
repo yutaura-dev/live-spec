@@ -20,23 +20,27 @@ export interface UnionEdge {
   readonly actorsRemoved: ReadonlyArray<string>;
 }
 
-// 状態はラベルで突き合わせる（ID は探索順なので変わりうる）。
+// 状態は値で突き合わせる（ID は探索順で、名前は initial の書き順で変わりうる）。
 // 自分自身に戻る遷移は、通常の図と同じく描かない。
 export const unionGraph = (before: Graph | null, after: Graph | null) => {
-  const labelsOf = (g: Graph | null) => new Map((g?.states ?? []).map((s) => [s.id, s.label]));
+  const keyOf = (s: Graph["states"][number]) => JSON.stringify(s.values);
+  const labelsOf = (g: Graph | null) => new Map((g?.states ?? []).map((s) => [s.id, keyOf(s)]));
   const lb = labelsOf(before);
   const la = labelsOf(after);
-  const beforeLabels = new Set(lb.values());
-  const afterLabels = new Set(la.values());
-  const ordered = [...new Set([...afterLabels, ...beforeLabels])];
-  const initialLabel = (after ?? before)?.states.find((s) => s.initial)?.label;
-  const nodes: Array<UnionNode> = ordered.map((label, i) => ({
+  const beforeKeys = new Set(lb.values());
+  const afterKeys = new Set(la.values());
+  const ordered = [...new Set([...afterKeys, ...beforeKeys])];
+  // 変更後の名前を優先する理由: レビューする人が読むのは変更後の spec なので。
+  const names = new Map([...(before?.states ?? []), ...(after?.states ?? [])].map((s) => [keyOf(s), s.label]));
+  const initialState = (after ?? before)?.states.find((s) => s.initial);
+  const initialKey = initialState === undefined ? undefined : keyOf(initialState);
+  const nodes: Array<UnionNode> = ordered.map((key, i) => ({
     id: `n${i}`,
-    label,
-    status: !beforeLabels.has(label) ? "added" : !afterLabels.has(label) ? "removed" : "kept",
-    initial: label === initialLabel,
+    label: names.get(key) ?? key,
+    status: !beforeKeys.has(key) ? "added" : !afterKeys.has(key) ? "removed" : "kept",
+    initial: key === initialKey,
   }));
-  const idOf = new Map(nodes.map((n) => [n.label, n.id]));
+  const idOf = new Map(ordered.map((key, i) => [key, nodes[i]!.id]));
   const actorsByKey = (g: Graph | null, labels: Map<string, string>) => {
     const map = new Map<string, Set<string>>();
     for (const t of (g?.transitions ?? []).filter((t) => t.from !== t.to)) {

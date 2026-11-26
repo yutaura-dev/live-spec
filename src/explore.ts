@@ -126,7 +126,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
     processed.add(from);
   }
 
-  const labelOf = labeler([...valuesById.values()]);
+  const labelOf = labeler([...valuesById.values()], Object.keys(spec.initial));
   const states = [...valuesById.entries()].map(([id, values]) => ({
     id,
     label: labelOf(values),
@@ -304,10 +304,13 @@ const checkSurfaces = (
 // ラベルに「状態によって値が変わる項目」だけを使う理由: authorId のように
 // どの状態でも同じ値の項目まで並べると、状態を区別する情報が埋もれるため。
 // 文字列の項目を先に並べるのは、status のような主たる区分を先頭に見せるため。
-const labeler = (all: ReadonlyArray<State>) => {
+// initial に書いた順に並べる理由: 書き手は、読み手に最初に見せたい項目を先に書く。
+// 状態の値そのもの（canonical）はキーを並べ替えて持つので、その順番は使わない。
+const labeler = (all: ReadonlyArray<State>, declared: ReadonlyArray<string>) => {
+  const position = (k: string) => (declared.includes(k) ? declared.indexOf(k) : declared.length);
   const keys = [...new Set(all.flatMap((v) => Object.keys(v)))]
     .filter((k) => new Set(all.map((v) => JSON.stringify(v[k]))).size > 1)
-    .sort((a, b) => rank(all[0]![a]) - rank(all[0]![b]) || a.localeCompare(b));
+    .sort((a, b) => position(a) - position(b) || a.localeCompare(b));
   return (values: State): string => {
     const parts = keys.flatMap((k) => {
       const v = values[k];
@@ -318,4 +321,3 @@ const labeler = (all: ReadonlyArray<State>) => {
     return parts.length > 0 ? parts.join(" · ") : "初期状態";
   };
 };
-const rank = (v: unknown) => (typeof v === "string" ? 0 : typeof v === "boolean" ? 1 : 2);

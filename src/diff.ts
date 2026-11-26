@@ -3,7 +3,7 @@ interface Model {
   readonly actors?: ReadonlyArray<{ readonly name: string }>;
   readonly inputs?: Readonly<Record<string, ReadonlyArray<string>>>;
   readonly actions?: ReadonlyArray<string | { readonly name: string }>;
-  readonly states: ReadonlyArray<{ readonly id: string; readonly label: string }>;
+  readonly states: ReadonlyArray<{ readonly id: string; readonly label: string; readonly values?: unknown }>;
   readonly transitions: ReadonlyArray<{ readonly from: string; readonly to: string; readonly action: string }>;
   readonly availability: ReadonlyArray<FlatAvailability | CompactAvailability>;
   readonly findings: ReadonlyArray<Readonly<Record<string, unknown>>>;
@@ -57,12 +57,16 @@ export interface ModelDiff {
 
 export const EMPTY_MODEL: Model = { states: [], transitions: [], availability: [], findings: [], surfaces: [] };
 
-// 状態 ID（s0, s1…）ではなくラベルで比べる理由: ID は幅優先探索で見つけた順に振られるので、
+// 状態 ID（s0, s1…）ではなく状態の値で比べる理由: ID は幅優先探索で見つけた順に振られるので、
 // 状態が 1 つ増えるだけで後ろの ID がずれ、何も変わっていない状態まで「変わった」ことになるため。
+// 名前（label）で比べない理由: 名前は initial に書いた項目の順に並ぶので、書き順を変えただけで変わってしまう。
+// 値を持たない古い形式の JSON だけは名前で比べる。
+const keyOfState = (s: Model["states"][number]) => (s.values === undefined ? s.label : JSON.stringify(s.values));
 const labeler = (model: Model) => {
-  const labels = new Map(model.states.map((s) => [s.id, s.label]));
-  return (id: string | null) => (id === null ? "" : (labels.get(id) ?? id));
+  const keys = new Map(model.states.map((s) => [s.id, keyOfState(s)]));
+  return (id: string | null) => (id === null ? "" : (keys.get(id) ?? id));
 };
+const ENABLED_PREFIX = "✅ → ";
 
 const setDiff = (before: ReadonlyArray<string>, after: ReadonlyArray<string>) => ({
   added: after.filter((x) => !before.includes(x)),
@@ -96,9 +100,17 @@ export const diffModels = (beforeRaw: unknown, afterRaw: unknown): ModelDiff => 
   const after = afterRaw as Model;
   const lb = labeler(before);
   const la = labeler(after);
-  const cellOf = (a: FlatAvailability, l: (id: string | null) => string) => (a.enabled ? `✅ → ${l(a.to)}` : `❌ ${a.reason ?? "エラー"}`);
+  // 変更後の名前を優先する理由: レビューする人が読むのは変更後の spec なので。
+  const names = new Map([...before.states, ...after.states].map((s) => [keyOfState(s), s.label]));
+  const show = (key: string) => names.get(key) ?? key;
+  const showCell = (cell: string) => (cell.startsWith(ENABLED_PREFIX) ? ENABLED_PREFIX + show(cell.slice(ENABLED_PREFIX.length)) : cell);
+  const cellOf = (a: FlatAvailability, l: (id: string | null) => string) => (a.enabled ? `${ENABLED_PREFIX}${l(a.to)}` : `❌ ${a.reason ?? "エラー"}`);
 
-  const transitionKeys = (m: Model, l: (id: string | null) => string) => m.transitions.map((t) => `${l(t.from)} -${t.action}-> ${l(t.to)}`);
+  const transitionKeys = (m: Model, l: (id: string | null) => string) => m.transitions.map((t) => JSON.stringify([l(t.from), t.action, l(t.to)]));
+  const showTransition = (key: string) => {
+    const [from, action, to] = JSON.parse(key) as [string, string, string];
+    return `${show(from)} -${action}-> ${show(to)}`;
+  };
   const availabilityOf = (m: Model, l: (id: string | null) => string) =>
     new Map(expandAvailability(m).map((a) => [JSON.stringify([l(a.state), a.action, a.actor, a.input]), cellOf(a, l)]));
   const ab = availabilityOf(before, lb);
@@ -108,7 +120,7 @@ export const diffModels = (beforeRaw: unknown, afterRaw: unknown): ModelDiff => 
     const old = ab.get(key);
     if (old === undefined || old === cell) continue;
     const [state, action, actor, input] = JSON.parse(key) as [string, string, string, string | null];
-    availability.push({ state, action, actor, input, before: old, after: cell });
+    availability.push({ state: show(state), action, actor, input, before: showCell(old), after: showCell(cell) });
   }
 
   // 最短の手順（path）を除いて突き合わせる理由: 違反そのものが同じでも、権限を変えると探索の順が変わり、
@@ -122,19 +134,21 @@ export const diffModels = (beforeRaw: unknown, afterRaw: unknown): ModelDiff => 
   const fb = findingsOf(before, lb);
   const fa = findingsOf(after, la);
   const fd = setDiff([...fb.keys()], [...fa.keys()]);
+  const showFinding = (f: Readonly<Record<string, unknown>> | undefined): unknown =>
+    f !== undefined && typeof f.state === "string" ? { ...f, state: show(f.state) } : f;
 
   const surfacesOf = (m: Model, l: (id: string | null) => string) =>
     new Map((m.surfaces ?? []).map((s) => [JSON.stringify([l(s.state), s.actor]), JSON.stringify(s.surface)]));
   const sb = surfacesOf(before, lb);
   const sa = surfacesOf(after, la);
   const surfaces: Array<ModelDiff["surfaces"][number]> = [];
-  const afterLabels = new Set(after.states.map((s) => s.label));
+  const afterKeys = new Set(after.states.map(keyOfState));
   for (const key of new Set([...sb.keys(), ...sa.keys()])) {
     if (sb.get(key) === sa.get(key)) continue;
     const [state, actor] = JSON.parse(key) as [string, string];
     // 消えた状態の画面は出さない（状態ごと消えたことは「状態」の差分と図でわかる）。増えた状態の画面は、レビューで見たいので出す。
-    if (!afterLabels.has(state)) continue;
-    surfaces.push({ state, actor });
+    if (!afterKeys.has(state)) continue;
+    surfaces.push({ state: show(state), actor });
   }
 
   const actionNames = (m: Model) => (m.actions ?? []).map((a) => (typeof a === "string" ? a : a.name));
@@ -153,13 +167,14 @@ export const diffModels = (beforeRaw: unknown, afterRaw: unknown): ModelDiff => 
       (after.questions ?? []).map((q) => q.ask),
     ),
     actions: setDiff(actionNames(before), actionNames(after)),
-    states: setDiff(
-      before.states.map((s) => s.label),
-      after.states.map((s) => s.label),
+    states: (({ added, removed }) => ({ added: added.map(show), removed: removed.map(show) }))(
+      setDiff(before.states.map(keyOfState), after.states.map(keyOfState)),
     ),
-    transitions: setDiff(transitionKeys(before, lb), transitionKeys(after, la)),
+    transitions: (({ added, removed }) => ({ added: added.map(showTransition), removed: removed.map(showTransition) }))(
+      setDiff(transitionKeys(before, lb), transitionKeys(after, la)),
+    ),
     availability,
-    findings: { added: fd.added.map((k) => fa.get(k) as unknown), removed: fd.removed.map((k) => fb.get(k) as unknown) },
+    findings: { added: fd.added.map((k) => showFinding(fa.get(k))), removed: fd.removed.map((k) => showFinding(fb.get(k))) },
     surfaces,
   };
 };
