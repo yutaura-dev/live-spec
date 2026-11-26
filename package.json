@@ -11,6 +11,12 @@
     "spec-driven-development",
     "wireframe"
   ],
+  "homepage": "https://github.com/yutaura-dev/live-spec#readme",
+  "bugs": "https://github.com/yutaura-dev/live-spec/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yutaura-dev/live-spec.git"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
