@@ -20,9 +20,7 @@ export const glossary = {
 
 /** レビューに出す */
 export function submit(a: Article, u: User): Article {
-  // 根拠: src/articles/routes.ts:42（requireAuthor）
   ensure(u.id === a.authorId, "自分の記事だけ");
-  // 根拠: src/articles/service.ts:88-90
   ensure(a.status === "draft", "下書きのときだけ");
   return { ...a, status: "inReview" };
 }

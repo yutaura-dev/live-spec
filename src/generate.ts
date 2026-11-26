@@ -3,7 +3,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { explore } from "./explore.ts";
-import { checkEvidence } from "./evidence.ts";
 import { checkEnsures } from "./mutation.ts";
 import { findOmissionHints } from "./omission.ts";
 import { unguardedId } from "./render/review.ts";
@@ -45,8 +44,6 @@ let importVersion = 0;
 export interface LoadObjectOptions {
   readonly name?: string;
   readonly source?: string;
-  /** false にすると根拠の lock と照合しない */
-  readonly evidenceLock?: boolean;
 }
 
 // 名前とソースを外から渡せるようにしている理由: 差分を取るとき、git から取り出した spec を一時ファイルに書いて
@@ -63,7 +60,7 @@ export const loadObject = async (path: string, options: LoadObjectOptions = {}):
   const unmatched = Object.keys(spec.reviewed)
     .filter((id) => !known.has(id))
     .map((id) => ({ kind: "reviewed-unmatched" as const, id }));
-  return { spec, graph: { ...graph, ensures, omissions, findings: [...graph.findings, ...checkEvidence(spec, path, { lock: options.evidenceLock !== false }), ...unmatched] } };
+  return { spec, graph: { ...graph, ensures, omissions, findings: [...graph.findings, ...unmatched] } };
 };
 
 export const generateProject = async (paths: ReadonlyArray<string>, format: OutputFormat, title?: string): Promise<Output> => {

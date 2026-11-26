@@ -64,11 +64,6 @@ export const Finding = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("unknown-inputs"), action: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("reviewed-unmatched"), id: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("goal-unreachable"), goal: Schema.String }),
-  Schema.Struct({ kind: Schema.Literal("evidence-missing"), action: Schema.String, evidence: Schema.String }),
-  Schema.Struct({ kind: Schema.Literal("evidence-out-of-range"), action: Schema.String, evidence: Schema.String, lines: Schema.Number }),
-  Schema.Struct({ kind: Schema.Literal("evidence-moved"), action: Schema.String, evidence: Schema.String, location: Schema.String, moved: Schema.String }),
-  Schema.Struct({ kind: Schema.Literal("evidence-changed"), action: Schema.String, evidence: Schema.String, location: Schema.String }),
-  Schema.Struct({ kind: Schema.Literal("evidence-unlocked"), action: Schema.String, evidence: Schema.String, location: Schema.String }),
   Schema.Struct({
     kind: Schema.Literal("invariant-violation"),
     invariant: Schema.String,

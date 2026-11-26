@@ -32,7 +32,6 @@ export const links = [
  */
 export function save(_s: Session, watcher: Watcher, valid: boolean): Session {
   if (valid) return { output: "最新" };
-  // 根拠: src/generate.ts failureOutput（HTML はエラーページ、Markdown は失敗を知らせる文書）
   // 前回の内容のまま残すと、古い仕様を最新だと取り違えるため、どの形式でも失敗したことを書き出す。
   return { output: watcher.format === "html" ? "エラーページ" : "失敗のお知らせ" };
 }

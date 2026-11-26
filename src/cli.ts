@@ -2,9 +2,8 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { relative, resolve } from "node:path";
+import { resolve } from "node:path";
 import { findTsc, typecheck } from "./check.ts";
-import { updateEvidenceLock } from "./evidence.ts";
 import { expandSpecPaths, generateProject, loadObject, resolveLinks, specNameOf, writeOutput, writeProjectOutput, type OutputFormat } from "./generate.ts";
 import { describeFinding } from "./render/markdown.ts";
 import { reviewItems } from "./render/review.ts";
@@ -195,38 +194,6 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
   return failed ? 1 : 0;
 };
 
-const EVIDENCE_USAGE = "usage: live-spec evidence --update <file.spec.ts | dir>...（根拠の範囲のコードを、spec のディレクトリの live-spec.evidence.lock に記録する）";
-
-const runEvidence = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number> => {
-  if (wantsHelp(argv)) {
-    io.stdout(`${EVIDENCE_USAGE}\n`);
-    return 0;
-  }
-  let parsed;
-  try {
-    parsed = parseArgs({ args: [...argv], allowPositionals: true, options: { update: { type: "boolean" } } });
-  } catch (e) {
-    io.stderr(`${messageOf(e)}\n${EVIDENCE_USAGE}\n`);
-    return 2;
-  }
-  const paths = expandSpecPaths(parsed.positionals);
-  if (!parsed.values.update || paths.length === 0) {
-    io.stderr(`${EVIDENCE_USAGE}\n`);
-    return 2;
-  }
-  for (const path of paths) {
-    const { spec } = await loadObject(path, { evidenceLock: false });
-    const r = updateEvidenceLock(spec, path);
-    io.stdout(
-      [
-        `${spec.name}: ${relative(process.cwd(), r.lockPath)} に根拠を ${r.recorded} 件記録した`,
-        ...(r.moved === 0 ? [] : [`  行がずれた根拠を直した: ${r.moved} 件（spec の「// 根拠:」の行番号を書き換えた）`]),
-        ...(r.changed === 0 ? [] : [`  中身が変わった根拠を記録し直した: ${r.changed} 件`]),
-      ].join("\n") + "\n",
-    );
-  }
-  return 0;
-};
 
 const SKILLS_USAGE = "usage: live-spec skills install [--dir <path>]（既定は .claude/skills） [--force]";
 
@@ -261,9 +228,8 @@ export const runCli = async (argv: ReadonlyArray<string>, io: CliIo): Promise<nu
   if (argv[0] === "diff") return runDiff(argv.slice(1), io);
   if (argv[0] === "skills") return runSkills(argv.slice(1), io);
   if (argv[0] === "check") return runCheck(argv.slice(1), io);
-  if (argv[0] === "evidence") return runEvidence(argv.slice(1), io);
   if (wantsHelp(argv)) {
-    io.stdout(`${[USAGE, DIFF_USAGE, CHECK_USAGE, EVIDENCE_USAGE, SKILLS_USAGE].join("\n")}\n`);
+    io.stdout(`${[USAGE, DIFF_USAGE, CHECK_USAGE, SKILLS_USAGE].join("\n")}\n`);
     return 0;
   }
   let options: CliOptions;

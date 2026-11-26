@@ -9,7 +9,7 @@ import type { SurfaceNode } from "../surface.ts";
 import { ANY } from "./collapse.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
-import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle, splitEvidence } from "./markdown.ts";
+import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle } from "./markdown.ts";
 import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
 import { surfaceToHtml } from "./wireframe.ts";
 
@@ -303,7 +303,7 @@ const renderPage = async (
   <section class="actions">
     <h2>操作</h2>${sectionLead("操作")}
     <div class="cards">
-      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), spec.evidence[a.name] ?? [], (graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed)).join("\n      ")}
+      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), (graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed)).join("\n      ")}
     </div>
   </section>
   ${
@@ -481,7 +481,6 @@ const actionCard = (
   a: ActionSummary,
   asks: ReadonlyArray<{ readonly label: string; readonly href: string }>,
   links: ReadonlyArray<ProjectLink>,
-  evidence: ReadonlyArray<string>,
   ensures: ReadonlyArray<EnsureCheck>,
   reviewed: Spec["reviewed"],
 ) => {
@@ -512,16 +511,6 @@ const actionCard = (
           ${a.inputOutcomes.length === 0 ? "" : `<dt>入力ごとの結果</dt><dd><ul>${a.inputOutcomes.map((o) => `<li><span class="reason">${esc(o.input)}</span> ${o.transitions.length > 0 ? o.transitions.map((t) => `<span class="flow">${esc(formatTransition(t))}</span>`).join("") : `<span class="state">❌ ${esc(o.reasons.map(canOnlyWhen).join("、"))}</span>`}</li>`).join("")}</ul></dd>`}
           ${effect === "" ? "" : `<dt>結果</dt><dd>${esc(effect)}</dd>`}
           ${a.summary === null ? "" : `<dt>関数名</dt><dd><code>${esc(a.name)}</code></dd>`}
-          ${
-            evidence.length === 0
-              ? ""
-              : `<dt>根拠</dt><dd>${evidence
-                  .map((e) => {
-                    const { path, rest } = splitEvidence(e);
-                    return `<span class="ev"><code class="evidence">${esc(path)}</code>${esc(rest)}</span>`;
-                  })
-                  .join("")}</dd>`
-          }
           ${links.length === 0 ? "" : `<dt>つながり</dt><dd>${links.map((l) => `<span class="flow">→ ${objectLink(l.to)}${l.action === null ? "" : ` の ${esc(l.action)}`}</span>`).join("")}<span class="muted">${esc(links.map((l) => l.label).join(" / "))}</span></dd>`}
           ${
             ensures.length === 0
@@ -685,7 +674,7 @@ marker path{fill:var(--muted)}
 .glossary .kind{font-size:11px;color:var(--muted);font-weight:400;margin-left:4px}
 .glossary .sub{display:block;color:var(--muted);font-size:13px}
 .ev{display:block;font-size:13px}
-code.evidence{font-size:12px}
+
 table.decision{border-collapse:collapse;margin:8px 0 20px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:14px}
 table.decision th,table.decision td{padding:6px 14px;border-bottom:1px solid var(--line);text-align:left}
 table.decision th{color:var(--muted);font-weight:600;font-size:12.5px}

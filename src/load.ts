@@ -50,9 +50,6 @@ export interface Spec {
   readonly decisions: ReadonlyArray<readonly [name: string, decision: Decision]>;
   readonly docs: Readonly<Record<string, string>>;
   readonly fieldDocs: Readonly<Record<string, string>>;
-  readonly evidence: Readonly<Record<string, ReadonlyArray<string>>>;
-  /** 根拠のパスを解決する起点（spec のファイルからの相対）。無ければ git のルートなどから探す */
-  readonly evidenceRoot: string | null;
   /** 操作ごとの ensure（静的解析で読んだもの。ソースがなければ空） */
   readonly ensures: Readonly<Record<string, ReadonlyArray<EnsureCall>>>;
   readonly glossary: Readonly<Record<string, string>>;
@@ -75,7 +72,6 @@ const RESERVED = new Set([
   "decisions",
   "reviewed",
   "goals",
-  "evidenceRoot",
 ]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
@@ -120,8 +116,6 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
       : [],
     docs: info?.docs ?? {},
     fieldDocs: info?.fieldDocs ?? {},
-    evidence: info?.evidence ?? {},
-    evidenceRoot: typeof mod.evidenceRoot === "string" ? mod.evidenceRoot : null,
     ensures: info?.ensures ?? {},
     reviewed: isRecord(mod.reviewed)
       ? Object.fromEntries(Object.entries(mod.reviewed).filter((e): e is [string, string] => typeof e[1] === "string"))

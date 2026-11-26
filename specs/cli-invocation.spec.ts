@@ -92,23 +92,17 @@ export const inputs = {
  */
 export function start(inv: Invocation, _user: User, args: Args): Invocation {
   ensure(inv.status === "起動前", "起動前のときだけ");
-  // 根拠: src/cli.ts runCli（--help / -h はほかの引数より先に見て、使い方を出して終了コード 0）
   if (args.help) return { status: "使い方を出して終了" };
-  // 根拠: src/cli.ts parseCliArgs（spec のパスが必須）
   ensure(args.paths > 0, "spec ファイルかディレクトリのパスが必要");
-  // 根拠: src/cli.ts parseCliArgs（組み合わせのエラー）
   ensure(!(args.html && args.json), "--html と --json は同時に指定できない");
   ensure(!(args.serve && args.json), "--serve と --json は同時に指定できない");
   ensure(!(args.port !== undefined && !args.serve), "--port は --serve と一緒に指定する");
   ensure(args.port !== "empty" && args.port !== "invalid", "--port は 0〜65535 の整数");
   ensure(!(args.watch && !args.serve && !args.out), "--watch には --out が必要");
-  // 根拠: src/cli.ts runCli（複数の Markdown は --out のディレクトリに書く）
   // 標準出力に連結して出す選択肢は設けない（決定済み。ほかのツールにつなぐ必要が出てから考える）。
   ensure(!(args.paths > 1 && !args.html && !args.json && !args.out && !args.watch && !args.serve), "spec が複数の Markdown には --out <ディレクトリ> が必要");
-  // 根拠: src/cli.ts runCli（startServer の EADDRINUSE を捕まえて終了コード 1）
   if (args.serve) return { status: args.portInUse ? "ポートが使えず終了" : "配信中" };
   if (args.watch) return { status: "監視中" };
-  // 根拠: src/cli.ts runCli（generateProject の失敗は短いメッセージで終了コード 1）
   return { status: args.brokenSpec ? "生成に失敗して終了" : "書き出して終了" };
 }
 
@@ -119,10 +113,8 @@ export function start(inv: Invocation, _user: User, args: Args): Invocation {
  */
 export function diff(inv: Invocation, _user: User, args: DiffArgs): Invocation {
   ensure(inv.status === "起動前", "起動前のときだけ");
-  // 根拠: src/cli.ts runDiff（パスがない・組み合わせの誤りは usage を出して終了コード 2）
   ensure(args.paths > 0, "比べる spec ファイルかディレクトリが必要");
   ensure(!(args.html && args.json), "--html と --json は同時に指定できない");
-  // 根拠: src/project-diff.ts diffProject（リビジョンを確かめて、なければ終了コード 1）
   return { status: args.unknownRevision ? "差分を取れずに終了" : "書き出して終了" };
 }
 
@@ -133,16 +125,13 @@ export function diff(inv: Invocation, _user: User, args: DiffArgs): Invocation {
  */
 export function check(inv: Invocation, _user: User, args: CheckArgs): Invocation {
   ensure(inv.status === "起動前", "起動前のときだけ");
-  // 根拠: src/cli.ts runCheck（型チェック、検査結果、未確認の確かめてほしい点のどれかがあれば 1）
   return { status: args.problems ? "問題を挙げて終了" : "検査に通って終了" };
 }
 
 /** 同梱の skill をプロジェクトの .claude/skills に置く（live-spec skills install） */
 export function installSkills(inv: Invocation, _user: User, args: SkillsArgs): Invocation {
   ensure(inv.status === "起動前", "起動前のときだけ");
-  // 根拠: src/cli.ts runSkills（install 以外は usage を出して終了コード 2）
   ensure(args.sub === "install", "サブコマンドは install だけ");
-  // 根拠: src/skills.ts installSkills（すでにある skill は --force がなければ上書きしない）
   return { status: "skill を置いて終了" };
 }
 

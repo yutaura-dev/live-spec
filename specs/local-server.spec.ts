@@ -38,7 +38,6 @@ export const inputs = {
 export function listen(s: Server, client: Client, portFree: boolean): Server {
   ensure(client.kind === "cli", "CLI だけ");
   ensure(s.status === "起動中", "起動中のときだけ");
-  // 根拠: src/serve.ts startServer（server.listen(port, "127.0.0.1")）
   return { status: portFree ? "待ち受け中" : "起動に失敗" };
 }
 
@@ -50,9 +49,7 @@ export function listen(s: Server, client: Client, portFree: boolean): Server {
 export function request(s: Server, client: Client, path: string): Server {
   ensure(client.kind === "browser", "ブラウザだけ");
   ensure(s.status === "待ち受け中", "待ち受け中のときだけ");
-  // 根拠: src/serve.ts（Host ヘッダが 127.0.0.1 / localhost でなければ 403。DNS リバインディング対策）
   ensure(client.host !== "evil.example.com", "Host が 127.0.0.1 か localhost のときだけ（ほかは 403）");
-  // 根拠: src/serve.ts（/ と /__live-spec/events 以外は 404）
   ensure(path === "/" || path === "/__live-spec/events", "仕様書のページと通知の接続だけ（ほかは 404）");
   return s;
 }

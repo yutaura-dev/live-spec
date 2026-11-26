@@ -87,7 +87,6 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...markdownSection("操作"),
     ...summarizeActions(spec, graph).flatMap((a) => [
       ...actionSection(a),
-      ...((spec.evidence[a.name] ?? []).length === 0 ? [] : [`- **根拠**: ${spec.evidence[a.name]!.map(formatEvidence).join("、")}`]),
       ...graph.questions.flatMap((q, i) => (q.action === a.name ? [`- **未決**: 未決事項 ${i + 1}`] : [])),
       ...ensureLines((graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed),
       "",
@@ -170,17 +169,6 @@ const actionSection = (a: ActionSummary): Array<string> => {
     ...(effect === "" ? [] : [`- **結果**: ${effect}`]),
     ...name,
   ];
-};
-
-// 根拠の先頭（空白か「（」まで）をコードの場所としてコード書式にし、残りは補足として続ける。
-export const splitEvidence = (text: string): { readonly path: string; readonly rest: string } => {
-  const m = /^(\S+?)((?:（|\s).*)?$/.exec(text);
-  return { path: m?.[1] ?? text, rest: m?.[2] ?? "" };
-};
-
-const formatEvidence = (text: string) => {
-  const { path, rest } = splitEvidence(text);
-  return `\`${path}\`${rest}`;
 };
 
 const glossarySection = (spec: Spec): Array<string> => {
@@ -285,16 +273,6 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       return `操作 ${f.action} は 3 つ目以降の引数をとるが、inputs に例がないので実行していない`;
     case "unknown-inputs":
       return `inputs に書かれた ${f.action} という操作は存在しない`;
-    case "evidence-missing":
-      return `${f.action} の根拠「${f.evidence}」のファイルが見つからない（移動・改名されたか、起点が違う。別の場所のコードなら export const evidenceRoot を書く）`;
-    case "evidence-out-of-range":
-      return `${f.action} の根拠「${f.evidence}」の行が、ファイルの行数（${f.lines} 行）を超えている（コードが変わって行がずれた）`;
-    case "evidence-moved":
-      return `${f.action} の根拠「${f.location}」は、同じコードが ${f.moved} 行目に移った（live-spec evidence --update で根拠の行番号を直せる）`;
-    case "evidence-changed":
-      return `${f.action} の根拠「${f.location}」の、根拠のコードの中身が変わった。spec を見直し、よければ live-spec evidence --update で記録し直す`;
-    case "evidence-unlocked":
-      return `${f.action} の根拠「${f.location}」が lock に記録されていない（live-spec evidence --update で記録する）`;
     case "goal-unreachable":
       return `目指す状態「${f.goal}」には、どの状態からもたどり着けない`;
     case "reviewed-unmatched":
