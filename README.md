@@ -63,12 +63,16 @@ pnpm spec examples/minimal.spec.ts --serve   # http://127.0.0.1:4747/ をブラ�
 生成される仕様書のうち、`publish` の節:
 
 ```markdown
-### 公開する（`publish`）
+### 公開する
 
 - **できる人**: 編集者eve, 管理者root（ほかの人は「編集者か管理者だけ」）
 - **できるとき**: inReview → published
 - **できないとき**: draft, published（レビュー中のときだけ）
 - **結果**: status → published
+- **関数名**: `publish`
+- **条件**:
+  - 「編集者か管理者だけ」— 通るのは 編集者eve, 管理者root のとき。この条件が無いと、著者alice が inReview で実行できるようになる（→ published） ほか 1 件（画面のボタンで確かめている）
+  - 「レビュー中のときだけ」— 通るのは status が inReview のとき。この条件が無いと、編集者eve が draft で実行できるようになる（→ published） ほか 3 件（画面のボタンで確かめている）
 ```
 
 ## できること
