@@ -53,6 +53,27 @@ describe("根拠の参照先を検査する", { timeout: 30_000 }, () => {
     expect(graph.findings).toContainEqual({ kind: "evidence-out-of-range", action: "go", evidence: "src/go.ts:2-9", lines: 3 });
   });
 
+  it("1 行に「、」や「,」で並べた複数の場所を、それぞれ検査する。「:877-879」は直前と同じファイルとして読む", async () => {
+    const dir = project();
+    writeFileSync(join(dir, "src", "other.ts"), "a\nb\nc\nd\n");
+    writeFileSync(
+      join(dir, "specs", "go.spec.ts"),
+      specSource([
+        "src/go.ts:1-2、src/other.ts:4",
+        "src/go.ts:1, src/other.ts:2-3",
+        "src/other.ts:1、:3-4（a・b、c）",
+        "src/go.ts:2（開始）、:9（再開）",
+        "src/go.ts handler（server.listen(port, \"127.0.0.1\")、補足）",
+      ]),
+    );
+
+    const { graph } = await loadObject(join(dir, "specs", "go.spec.ts"));
+
+    expect(graph.findings.filter((f) => f.kind.startsWith("evidence-"))).toEqual([
+      { kind: "evidence-out-of-range", action: "go", evidence: "src/go.ts:2（開始）、:9（再開）", lines: 3 },
+    ]);
+  });
+
   it("evidenceRoot を書くと、spec のファイルからの相対でそこを起点に探す", async () => {
     const dir = project();
     mkdirSync(join(dir, "app", "lib"), { recursive: true });
