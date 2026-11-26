@@ -7,6 +7,7 @@ import { diffProject } from "./project-diff.ts";
 import { renderDiffHtml } from "./render/diff-html.ts";
 import { renderDiffMarkdown } from "./render/diff-markdown.ts";
 import { startServer } from "./serve.ts";
+import { registerSpecLoader } from "./spec-loader.ts";
 import { installSkills } from "./skills.ts";
 import { watchSpec } from "./watch.ts";
 
@@ -227,6 +228,8 @@ export const isMain = (moduleUrl: string, argv1: string | undefined): boolean =>
 };
 
 if (isMain(import.meta.url, process.argv[1])) {
+  // CLI として起動したときだけ登録する。ライブラリとして読み込んだ側（テストランナーなど）の読み込み方には手を出さない。
+  registerSpecLoader();
   const code = await runCli(process.argv.slice(2), {
     stdout: (text) => process.stdout.write(text),
     stderr: (text) => process.stderr.write(text),
