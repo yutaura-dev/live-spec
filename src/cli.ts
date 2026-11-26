@@ -2,7 +2,11 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { expandSpecPaths, generateProject, writeOutput, writeProjectOutput, type OutputFormat } from "./generate.ts";
+import { resolve } from "node:path";
+import { findTsc, typecheck } from "./check.ts";
+import { expandSpecPaths, generateProject, loadObject, resolveLinks, specNameOf, writeOutput, writeProjectOutput, type OutputFormat } from "./generate.ts";
+import { describeFinding } from "./render/markdown.ts";
+import { reviewItems } from "./render/review.ts";
 import { diffProject } from "./project-diff.ts";
 import { renderDiffHtml } from "./render/diff-html.ts";
 import { renderDiffMarkdown } from "./render/diff-markdown.ts";
@@ -126,6 +130,70 @@ const runDiff = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number> 
   return 0;
 };
 
+const CHECK_USAGE = "usage: live-spec check <file.spec.ts | dir>... [--cwd <dir>]（typescript を探すディレクトリ。既定は今のディレクトリ）";
+
+const indent = (text: string) =>
+  text
+    .split("\n")
+    .map((l) => `  ${l}`)
+    .join("\n");
+
+// CI で使うために、問題が 1 つでもあれば 1 で終わる。未決事項（questions）は人の判断待ちで、正常な状態なので失敗にしない。
+const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number> => {
+  if (wantsHelp(argv)) {
+    io.stdout(`${CHECK_USAGE}\n`);
+    return 0;
+  }
+  let parsed;
+  try {
+    parsed = parseArgs({ args: [...argv], allowPositionals: true, options: { cwd: { type: "string" } } });
+  } catch (e) {
+    io.stderr(`${messageOf(e)}\n${CHECK_USAGE}\n`);
+    return 2;
+  }
+  const paths = expandSpecPaths(parsed.positionals);
+  if (paths.length === 0) {
+    io.stderr(`spec ファイル（*.spec.ts）を指定してください\n${CHECK_USAGE}\n`);
+    return 2;
+  }
+  let failed = false;
+  const tsc = findTsc(parsed.values.cwd ?? process.cwd());
+  if (tsc === null) {
+    io.stderr("typescript が見つからないので、型チェックを飛ばしました（--cwd で typescript を入れたディレクトリを指定できます）\n");
+  } else {
+    const result = typecheck(tsc, paths.map((p) => resolve(p)));
+    failed ||= !result.ok;
+    io.stdout(result.ok ? "✓ 型チェック\n" : `✗ 型チェック\n${indent(result.output)}\n`);
+  }
+  const loaded = [];
+  for (const path of paths) {
+    try {
+      loaded.push(await loadObject(path));
+    } catch (e) {
+      failed = true;
+      io.stdout(`✗ ${specNameOf(path)}: 読み込めない: ${messageOf(e)}\n`);
+    }
+  }
+  for (const { spec, graph } of resolveLinks(loaded)) {
+    const labels = new Map(graph.states.map((s) => [s.id, s.label]));
+    const labelOf = (id: string) => labels.get(id) ?? id;
+    const pending = reviewItems(spec, graph).pending;
+    if (graph.findings.length + pending.length === 0) {
+      io.stdout(`✓ ${spec.name}\n`);
+      continue;
+    }
+    failed = true;
+    io.stdout(
+      [
+        `✗ ${spec.name}: 検査結果 ${graph.findings.length} 件、確かめてほしい点 ${pending.length} 件`,
+        ...graph.findings.map((f) => `  - ${describeFinding(f, labelOf)}`),
+        ...pending.map((i) => `  - ${i.message}（${i.id}）`),
+      ].join("\n") + "\n",
+    );
+  }
+  return failed ? 1 : 0;
+};
+
 const SKILLS_USAGE = "usage: live-spec skills install [--dir <path>]（既定は .claude/skills） [--force]";
 
 const runSkills = (argv: ReadonlyArray<string>, io: CliIo): number => {
@@ -158,8 +226,9 @@ const runSkills = (argv: ReadonlyArray<string>, io: CliIo): number => {
 export const runCli = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number | null> => {
   if (argv[0] === "diff") return runDiff(argv.slice(1), io);
   if (argv[0] === "skills") return runSkills(argv.slice(1), io);
+  if (argv[0] === "check") return runCheck(argv.slice(1), io);
   if (wantsHelp(argv)) {
-    io.stdout(`${[USAGE, DIFF_USAGE, SKILLS_USAGE].join("\n")}\n`);
+    io.stdout(`${[USAGE, DIFF_USAGE, CHECK_USAGE, SKILLS_USAGE].join("\n")}\n`);
     return 0;
   }
   let options: CliOptions;

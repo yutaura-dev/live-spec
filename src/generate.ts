@@ -88,7 +88,7 @@ export const generateProject = async (paths: ReadonlyArray<string>, format: Outp
 
 // つながりの名前の誤りをプロジェクトを読み込んだ時点で調べる理由: 相手のドメインオブジェクトは別の spec にあり、
 // 1 つの spec を探索するだけでは確かめられないため。spec が 1 つのときは相手がいないので調べない。
-const resolveLinks = (objects: ReadonlyArray<DomainObject>): Array<DomainObject> =>
+export const resolveLinks = (objects: ReadonlyArray<DomainObject>): Array<DomainObject> =>
   objects.map((o) => {
     if (objects.length < 2) return o;
     const unresolved = o.graph.links.filter((l) => {

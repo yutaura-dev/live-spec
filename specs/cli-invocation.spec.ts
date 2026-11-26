@@ -1,7 +1,7 @@
 import { cli, ensure } from "../src/index.ts";
 
 /**
- * live-spec のコマンド（pnpm spec / live-spec / live-spec diff / live-spec skills install）を 1 回起動したときの流れ。
+ * live-spec のコマンド（live-spec / live-spec diff / live-spec check / live-spec skills install）を 1 回起動したときの流れ。
  *
  * どの引数の組み合わせが通り、どの状態で動き続けるか（監視・配信）または終わるかを表す。
  */
@@ -16,6 +16,8 @@ export type Invocation = {
     | "差分を取れずに終了"
     | "skill を置いて終了"
     | "使い方を出して終了"
+    | "検査に通って終了"
+    | "問題を挙げて終了"
     | "Ctrl+C で終了";
 };
 
@@ -39,6 +41,9 @@ type Args = {
 type DiffArgs = { paths: number; html?: boolean; json?: boolean; unknownRevision?: boolean };
 
 type SkillsArgs = { sub: "install" | "other" };
+
+/** live-spec check の対象。型の誤り・検査結果・未確認の確かめてほしい点・未決事項があるかを入力として表す。 */
+type CheckArgs = { problems: boolean; questionsOnly?: boolean };
 
 export const initial: Invocation = { status: "起動前" };
 
@@ -69,6 +74,11 @@ export const inputs = {
     パスなし: [{ paths: 0 }],
     存在しないリビジョン: [{ paths: 1, unknownRevision: true }],
   } satisfies Record<string, [DiffArgs]>,
+  check: {
+    問題なし: [{ problems: false }],
+    未決事項だけある: [{ problems: false, questionsOnly: true }],
+    問題がある: [{ problems: true }],
+  } satisfies Record<string, [CheckArgs]>,
   installSkills: {
     install: [{ sub: "install" }],
     "install 以外": [{ sub: "other" }],
@@ -116,6 +126,17 @@ export function diff(inv: Invocation, _user: User, args: DiffArgs): Invocation {
   return { status: args.unknownRevision ? "差分を取れずに終了" : "書き出して終了" };
 }
 
+/**
+ * 型チェックと検査をまとめて行う（live-spec check）
+ *
+ * CI で使うため、問題が 1 つでもあれば終了コード 1 で終わる。未決事項は人の判断待ちの正常な状態なので、問題に数えない。
+ */
+export function check(inv: Invocation, _user: User, args: CheckArgs): Invocation {
+  ensure(inv.status === "起動前", "起動前のときだけ");
+  // 根拠: src/cli.ts runCheck（型チェック、検査結果、未確認の確かめてほしい点のどれかがあれば 1）
+  return { status: args.problems ? "問題を挙げて終了" : "検査に通って終了" };
+}
+
 /** 同梱の skill をプロジェクトの .claude/skills に置く（live-spec skills install） */
 export function installSkills(inv: Invocation, _user: User, args: SkillsArgs): Invocation {
   ensure(inv.status === "起動前", "起動前のときだけ");
@@ -151,12 +172,17 @@ export const scenarios = {
   使い方を見る: [{ do: start, by: "利用者", input: "--help", expect: { status: "使い方を出して終了" } }],
   ブランチ間の仕様の差分を見る: [{ do: diff, by: "利用者", input: "specs/ --base main --head feature", expect: { status: "書き出して終了" } }],
   存在しないリビジョンとは比べられない: [{ do: diff, by: "利用者", input: "存在しないリビジョン", expect: { status: "差分を取れずに終了" } }],
+  "CI で仕様を検査する": [{ do: check, by: "利用者", input: "問題がある", expect: { status: "問題を挙げて終了" } }],
+  未決事項は検査の失敗にしない: [{ do: check, by: "利用者", input: "未決事項だけある", expect: { status: "検査に通って終了" } }],
   "skill を入れる": [{ do: installSkills, by: "利用者", input: "install", expect: { status: "skill を置いて終了" } }],
 };
 
 export const reviewed = {
   "unguarded:start:起動前のときだけ": "1 回の起動を表す spec なので、起動し直すことはない（モデルの前提）",
   "unguarded:diff:起動前のときだけ": "1 回の起動を表す spec なので、起動し直すことはない（モデルの前提）",
+  "indistinguishable-example:check:問題なし,未決事項だけある":
+    "未決事項は人の判断待ちの正常な状態なので、問題がないときと同じく検査に通る。同じ結果になることが、この 2 つの例の要点",
+  "unguarded:check:起動前のときだけ": "1 回の起動を表す spec なので、起動し直すことはない（モデルの前提）",
   "unguarded:installSkills:起動前のときだけ": "1 回の起動を表す spec なので、起動し直すことはない（モデルの前提）",
   "unguarded:interrupt:監視中か配信中のときだけ": "書き出して終わるコマンドは自分で終わる。Ctrl+C で止めるのは、動き続ける監視中と配信中だけ",
   "indistinguishable-example:start:spec を 1 つ,ディレクトリ（spec が複数）--out dir,--html --out file,--json":
@@ -194,6 +220,10 @@ export function surface(inv: Invocation) {
       return cli.output("差分を取れませんでした: リビジョン nope が見つかりません\n（終了コード 1）");
     case "skill を置いて終了":
       return cli.output(".claude/skills に live-spec の skill を置きました。Claude Code を起動し直すと使えます。");
+    case "検査に通って終了":
+      return cli.output("✓ 型チェック\n✓ order\n✓ payment\n（終了コード 0）");
+    case "問題を挙げて終了":
+      return cli.output("✓ 型チェック\n✗ order: 検査結果 0 件、確かめてほしい点 1 件\n  - place は、誰が実行しても可否が変わらない（誰でもできる）。…（anyone-can:place）\n（終了コード 1）");
     case "使い方を出して終了":
       return cli.output("usage: live-spec <file.spec.ts | dir>... [--html | --json] ...\nusage: live-spec diff ...\nusage: live-spec skills install ...");
     case "Ctrl+C で終了":

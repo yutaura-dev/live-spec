@@ -17,6 +17,7 @@ live-spec は npm パッケージ `@yutaura/live-spec`（`npm i -D @yutaura/live
 | HTML を書き出す | `npx live-spec specs/ --html --out spec.html` |
 | ブラウザで見ながら書く | `npx live-spec specs/ --serve` |
 | 変更前と比べる | `npx live-spec diff specs/ [--base <リビジョン>] [--head <リビジョン>] [--html --out <file>]` |
+| 型チェックと検査（CI 向け） | `npx live-spec check specs/`（型の誤り・検査結果・未確認の確かめてほしい点があれば終了コード 1） |
 
 （live-spec リポジトリ自身の中では `pnpm spec ...`）
 
@@ -27,11 +28,7 @@ live-spec は npm パッケージ `@yutaura/live-spec`（`npm i -D @yutaura/live
 
 spec からは `import { ensure, ui, api, cli } from "@yutaura/live-spec"` で読み込む（live-spec リポジトリ自身の `specs/` と `examples/` だけは `../src/index.ts` から読み込む）。
 
-型チェックは live-spec の実行とは別に行う（live-spec は型を消して実行するだけなので、型の誤りでは止まらない）:
-
-```sh
-npx tsc --noEmit --ignoreConfig --strict --module nodenext --moduleResolution nodenext --target es2024 --skipLibCheck <file.spec.ts>
-```
+仕様書の生成（`live-spec specs/`）は型を消して実行するだけなので、型の誤りでは止まらない。書き終えたら `npx live-spec check specs/` で型チェックと検査をまとめて行う。型チェックには、実行したディレクトリから見える typescript を使う（monorepo で typescript が別の package にあるなら `--cwd <その package>`）。
 
 ## spec の形
 
