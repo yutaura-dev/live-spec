@@ -203,6 +203,7 @@ const deadEnds = (spec: Spec, graph: Graph): Array<OmissionHint> => {
       kind: "cannot-reach-goal" as const,
       action: null,
       field: null,
+      state: s.id,
       message: `状態「${s.label}」は終端ではないのに、目指す状態（${goalNames}）のどれにもたどり着けない。入る手順: ${s.initial ? "（初期状態）" : pathTo(s.id)}`,
     }));
 };

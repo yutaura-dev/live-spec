@@ -109,6 +109,8 @@ export const OmissionHint = Schema.Struct({
   ]),
   action: Schema.NullOr(Schema.String),
   field: Schema.NullOr(Schema.String),
+  /** 状態についての候補（袋小路の入口など）の、その状態の id */
+  state: Schema.optionalKey(Schema.String),
   message: Schema.String,
 });
 export type OmissionHint = typeof OmissionHint.Type;

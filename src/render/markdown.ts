@@ -116,13 +116,16 @@ const ensureLines = (ensures: ReadonlyArray<EnsureCheck>, reviewed: Spec["review
   ensures.length === 0 ? [] : ["- **条件**:", ...ensures.map((e) => `  - ${describeEnsure(e, reviewed[unguardedId(e)] !== undefined)}`)];
 
 const reviewSection = (spec: Spec, graph: Graph): Array<string> => {
-  const { pending, acknowledged } = reviewItems(spec, graph);
-  if (pending.length + acknowledged.length === 0) return [];
+  const { pending, onHold, acknowledged } = reviewItems(spec, graph);
+  if (pending.length + onHold.length + acknowledged.length === 0) return [];
   return [
     `## ${REVIEW_TITLE}`,
     "",
     ...(pending.length === 0 ? ["確かめてほしい点はありません。"] : [REVIEW_LEAD, "", ...pending.map((i) => `- ${i.message}（\`${i.id}\`）`)]),
     "",
+    ...(onHold.length === 0
+      ? []
+      : ["### 判断待ち（未決事項）", "", ...onHold.map((i) => `- ${i.message}（\`${i.id}\`）— 未決事項 ${i.question}「${i.ask}」`), ""]),
     ...(acknowledged.length === 0 ? [] : ["### 確認済み", "", ...acknowledged.map((i) => `- \`${i.id}\`: ${i.note}`), ""]),
   ];
 };

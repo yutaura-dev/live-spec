@@ -3,6 +3,7 @@ import { ensure } from "../src/ensure.ts";
 import { explore } from "../src/explore.ts";
 import { loadSpec } from "../src/load.ts";
 import { findOmissionHints } from "../src/omission.ts";
+import { reviewItems } from "../src/render/review.ts";
 
 type Job = { status: "待機" | "実行中" | "中断" | "成功" | "失敗"; exhausted: boolean };
 
@@ -43,6 +44,7 @@ describe("goals: 目指す状態にたどり着けない状態（袋小路）を
         kind: "cannot-reach-goal",
         action: null,
         field: null,
+        state: expect.stringMatching(/^s\d+$/),
         message: "状態「中断 · exhausted」は終端ではないのに、目指す状態（成功）のどれにもたどり着けない。入る手順: start（人） → suspend（人）",
       },
     ]);
@@ -75,6 +77,32 @@ describe("goals: 目指す状態にたどり着けない状態（袋小路）を
       .map((h) => h.message);
 
     expect(messages.join("\n")).toContain("入る手順: begin（人、最後の試行になる） → pause（人）");
+  });
+
+  it("未決事項の about が指す状態の袋小路は「判断待ち」にし、確かめてほしい点には残さない", () => {
+    const spec = specWith({
+      goals: { 成功: (j: Job) => j.status === "成功" },
+      questions: [{ ask: "上限で中断した実行を再開すると失敗で終わる。意図どおりか？", about: { status: "中断", exhausted: true } }],
+    });
+    const graph = explore(spec);
+
+    const items = reviewItems(spec, { ...graph, omissions: findOmissionHints(spec, graph) });
+
+    expect(items.pending.map((i) => i.id)).not.toContain("cannot-reach-goal:中断 · exhausted");
+    expect(items.onHold).toContainEqual(
+      expect.objectContaining({ id: "cannot-reach-goal:中断 · exhausted", question: 1, ask: "上限で中断した実行を再開すると失敗で終わる。意図どおりか？" }),
+    );
+  });
+
+  it("未決事項の about が操作を指すときは、その操作についての候補を判断待ちにする", () => {
+    const spec = specWith({ questions: [{ ask: "始めるのに条件は要らないか？", about: start }] });
+    const graph = explore(spec);
+    const hint = { id: "anyone-can:start", kind: "anyone-can" as const, action: "start", field: null, message: "start は誰でもできる" };
+
+    const items = reviewItems(spec, { ...graph, omissions: [hint] });
+
+    expect(items.pending).toEqual([]);
+    expect(items.onHold.map((i) => i.id)).toEqual(["anyone-can:start"]);
   });
 
   it("goals を書かなければ、袋小路を調べない", () => {

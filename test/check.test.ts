@@ -63,6 +63,18 @@ describe("live-spec check: 型チェックと検査を行い、問題があれ�
     expect(r.out).toContain("unguarded:publish:編集者だけ");
   });
 
+  it("未決事項が判断待ちにしている候補は、失敗に数えない", async () => {
+    const source = CLEAN.replace(/export const scenarios = \{[\s\S]*?\n\};/, "").replace(
+      'export const questions = [{ ask: "公開を取り消せるか？" }];',
+      'export const questions = [{ ask: "誰が公開できるかは未定", about: publish }];',
+    );
+
+    const r = await run([write(source)]);
+
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("✓ doc（判断待ち 2 件）");
+  });
+
   it("型の誤りがあれば、1 で終わる", async () => {
     const r = await run([write(CLEAN.replace('return { status: "published" };', 'return { status: "公開" };'))]);
 

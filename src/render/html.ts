@@ -447,14 +447,19 @@ const edgeSvg = (e: LaidOutEdge, markerId: string) => {
 const withCode = (text: string) => esc(text).replace(/`([^`]+)`/g, "<code>$1</code>");
 
 const reviewHtml = (spec: Spec, graph: Graph) => {
-  const { pending, acknowledged } = reviewItems(spec, graph);
-  if (pending.length + acknowledged.length === 0) return "";
+  const { pending, onHold, acknowledged } = reviewItems(spec, graph);
+  if (pending.length + onHold.length + acknowledged.length === 0) return "";
   return `<section class="questions review${pending.length === 0 ? " done" : ""}" aria-label="${REVIEW_TITLE}">
     <h2>${REVIEW_TITLE}</h2>
     ${
       pending.length === 0
         ? '<p class="note">確かめてほしい点はありません。</p>'
         : `<p class="note">${withCode(REVIEW_LEAD)}</p><ol>${pending.map((i) => `<li><span class="ask">${withCode(i.message)}</span> <code class="review-id">${esc(i.id)}</code></li>`).join("")}</ol>`
+    }
+    ${
+      onHold.length === 0
+        ? ""
+        : `<details class="acknowledged" open><summary>判断待ち（未決事項、${onHold.length} 件）</summary><ul>${onHold.map((i) => `<li>${withCode(i.message)} <code class="review-id">${esc(i.id)}</code><span class="muted"> — 未決事項 ${i.question}「${esc(i.ask)}」</span></li>`).join("")}</ul></details>`
     }
     ${
       acknowledged.length === 0

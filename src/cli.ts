@@ -177,9 +177,9 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
   for (const { spec, graph } of resolveLinks(loaded)) {
     const labels = new Map(graph.states.map((s) => [s.id, s.label]));
     const labelOf = (id: string) => labels.get(id) ?? id;
-    const pending = reviewItems(spec, graph).pending;
+    const { pending, onHold } = reviewItems(spec, graph);
     if (graph.findings.length + pending.length === 0) {
-      io.stdout(`✓ ${spec.name}\n`);
+      io.stdout(`✓ ${spec.name}${onHold.length === 0 ? "" : `（判断待ち ${onHold.length} 件）`}\n`);
       continue;
     }
     failed = true;
