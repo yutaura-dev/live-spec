@@ -621,16 +621,16 @@ marker path{fill:var(--muted)}
 .edge.is-active path{stroke:var(--accent);stroke-width:2.2}
 .edge.is-active .edge-label text{fill:var(--accent);font-weight:600}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;cursor:pointer;outline:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;cursor:pointer;outline:none;min-width:0}
 .card:hover,.card:focus-visible{border-color:var(--accent)}
 .card.is-selected{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
 .card h3{margin:0 0 12px;font-size:16px}
-.card dl{display:grid;grid-template-columns:5.5em 1fr;gap:8px 12px;margin:0;font-size:14px}
+.card dl{display:grid;grid-template-columns:5.5em minmax(0,1fr);gap:8px 12px;margin:0;font-size:14px}
 .card dt{color:var(--muted);font-size:12.5px;padding-top:2px}
-.card dd{margin:0}
+.card dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .card ul{margin:0;padding:0;list-style:none}
 .card li+li{margin-top:6px}
-.chip,.state,.flow{display:inline-block;font-size:12.5px;border-radius:6px;padding:0 7px;margin:0 4px 4px 0;background:var(--chip)}
+.chip,.state,.flow{display:inline-block;max-width:100%;font-size:12.5px;border-radius:6px;padding:0 7px;margin:0 4px 4px 0;background:var(--chip)}
 .flow{background:var(--accent-weak)}
 .questions{border:1px solid var(--warn);border-radius:14px;padding:4px 20px 12px;margin:0 0 20px;background:var(--card)}
 .questions h2{margin:14px 0 8px;color:var(--warn);font-size:16px}
