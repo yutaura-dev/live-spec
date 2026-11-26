@@ -455,7 +455,9 @@ const terminalRect = (n: LaidOutNode) =>
 // 「どの状態からでも」は実在の状態ではないので、点線で描き、クリックできる状態（data-state）にはしない。
 // 要約の図の箱は、詳細の状態とは別物（いくつかの状態をまとめたもの）なので、状態のパネルは開かない。
 const groupNodeSvg = (n: LaidOutNode) =>
-  `<g class="node group-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></g>`;
+  isCollapsed(n.id)
+    ? anyNodeSvg(n)
+    : `<g class="node group-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></g>`;
 
 const anyNodeSvg = (n: LaidOutNode) =>
   `<g class="any-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="${n.height / 2}"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></g>`;

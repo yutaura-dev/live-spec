@@ -98,10 +98,6 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
   const sources = [...new Set(transitions.map((t) => t.from).filter(isCollapsed))];
   const labelOf = options.actionLabel ?? ((action: string) => action);
   const group = (id: string) => options.groupOf?.(id) ?? null;
-  const nodeList = [
-    ...sources.map((id) => ({ id, label: sourceLabel(graph, id), title: sourceLabel(graph, id), initial: false })),
-    ...graph.states.map((s) => ({ id: s.id, label: group(s.id)?.short ?? s.label, title: s.label, initial: s.initial })),
-  ];
   // 状態が 1 つしかない値は枠に入れない。枠と箱が二重になるだけで、読み手に何も足さないため。
   const members = new Map<string, Array<string>>();
   for (const s of graph.states) {
@@ -113,6 +109,11 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
     const g = group(id);
     return g === null ? undefined : boxed.get(g.key);
   };
+  // 名前から値を省くのは、枠に入る状態だけ。枠に入らない状態で省くと、値の違う状態が同じ名前になって見分けられないため。
+  const nodeList = [
+    ...sources.map((id) => ({ id, label: sourceLabel(graph, id), title: sourceLabel(graph, id), initial: false })),
+    ...graph.states.map((s) => ({ id: s.id, label: boxOf(s.id) === undefined ? s.label : group(s.id)!.short, title: s.label, initial: s.initial })),
+  ];
   const elkNode = (s: (typeof nodeList)[number]): ElkNode => ({
     id: s.id,
     width: options.nodeSize?.width ?? textWidth(s.label) + NODE_PADDING_X * 2,

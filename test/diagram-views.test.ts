@@ -11,7 +11,7 @@ export const RUN = (extra = "") => `import { ensure } from "${INDEX}";
 /** 実行 */
 export type Run = {
   /** 実行の段階 */
-  status: "待機中" | "実行中" | "成功" | "停止";
+  status: "待機中" | "実行中" | "一時停止" | "成功" | "停止";
   /** 上限に届いた */
   limited: boolean;
 };
@@ -24,8 +24,12 @@ export function start(r: Run, c: Caller): Run { ensure(c.kind === "worker", "ワ
 export function fail(r: Run, c: Caller): Run { ensure(c.kind === "worker", "ワーカーだけ"); ensure(r.status === "実行中", "実行中のときだけ"); return { status: "待機中", limited: true }; }
 /** 成功を報告する */
 export function succeed(r: Run, c: Caller): Run { ensure(c.kind === "worker", "ワーカーだけ"); ensure(r.status === "実行中", "実行中のときだけ"); return { ...r, status: "成功" }; }
+/** 一時停止する */
+export function pause(r: Run, c: Caller): Run { ensure(c.kind === "worker", "ワーカーだけ"); ensure(r.status === "実行中", "実行中のときだけ"); return { ...r, status: "一時停止" }; }
+/** 再開する */
+export function resume(r: Run, c: Caller): Run { ensure(c.kind === "worker", "ワーカーだけ"); ensure(r.status === "一時停止", "一時停止のときだけ"); return { ...r, status: "実行中" }; }
 /** 停止する */
-export function stop(r: Run, c: Caller): Run { ensure(c.kind === "operator", "運用者だけ"); ensure(r.status === "待機中" || r.status === "実行中", "終わっていないときだけ"); return { ...r, status: "停止" }; }
+export function stop(r: Run, c: Caller): Run { ensure(c.kind === "operator", "運用者だけ"); ensure(r.status === "待機中" || r.status === "実行中" || r.status === "一時停止", "終わっていないときだけ"); return { status: "停止", limited: true }; }
 ${extra}
 `;
 
@@ -46,7 +50,7 @@ describe("状態遷移図の見せ方", { timeout: 60_000 }, () => {
     const svg = summarySvg(html);
 
     expect(graph.states.length).toBeGreaterThan(4);
-    expect(count(svg, 'class="node group-node')).toBe(4);
+    expect(count(svg, 'class="node group-node')).toBe(5);
     expect(svg).toContain(">待機中</text>");
     expect(html).toContain('<section class="board" aria-label="状態遷移図" data-mode="summary">');
     expect(html).toContain('<button type="button" data-mode="summary" aria-pressed="true">要約</button><button type="button" data-mode="states" aria-pressed="false">詳細</button>');
@@ -97,5 +101,22 @@ describe("状態遷移図の見せ方", { timeout: 60_000 }, () => {
 
     expect(html).toContain('<select class="actor-filter"><option value="">すべての人</option><option value="ワーカー">ワーカー</option><option value="運用者">運用者</option></select>');
     expect(html).toMatch(/<g class="edge" data-action="stop" [^>]*data-actors="運用者"/);
+  });
+
+  it("詳細の図で枠に入らない状態（その値の状態が 1 つだけ）は、名前から値を省かない", async () => {
+    const { spec, graph } = await load();
+
+    const html = await renderHtml(spec, graph);
+    const detail = html.slice(html.indexOf('<div class="diagram diagram-states">'), html.indexOf("</div>", html.indexOf('<div class="diagram diagram-states">')));
+
+    expect(detail).toMatch(/aria-label="状態 停止 · limited">.*?>停止 · limited<\/text>/);
+  });
+
+  it("要約の図でも、まとめた線の出どころは状態の箱と描き分ける", async () => {
+    const { spec, graph } = await load();
+
+    const svg = summarySvg(await renderHtml(spec, graph));
+
+    expect(svg).toMatch(/<g class="any-node">.*?>終わっていないどの状態からでも<\/text>/);
   });
 });
