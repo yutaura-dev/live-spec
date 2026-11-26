@@ -47,7 +47,7 @@ const referencesIn = (file: string): Array<Reference> => {
   for (const node of ast.program.body) {
     if (node.type !== "ImportDeclaration") continue;
     const from = node.source.value;
-    const spec = from.startsWith(".") && /\.spec(\.[cm]?[jt]s)?$/.test(from) ? specNameOf(resolve(dirname(file), from.replace(/(\.spec)$/, "$1.ts"))) : null;
+    const spec = from.startsWith(".") && /\.spec(\.[cm]?[jt]s)?$/.test(from) ? specNameOf(resolve(dirname(file), from.replace(/\.spec(\.[cm]?[jt]s)?$/, ".spec.ts"))) : null;
     for (const s of node.specifiers) {
       if (s.type === "ImportNamespaceSpecifier" && spec !== null) namespaces.set(s.local.name, spec);
       if (s.type === "ImportSpecifier") {

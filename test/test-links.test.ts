@@ -162,4 +162,19 @@ describe("テストと spec の項目を結ぶ", { timeout: 60_000 }, () => {
 
     expect(out.join("")).toMatch(/（テスト: [^\n]*tests\/todo\.test\.ts:7）/);
   });
+
+  it.each(["../specs/todo.spec.js", "../specs/todo.spec.mjs", "../specs/todo.spec", "../specs/todo.spec.ts"])(
+    "spec を %s のように import したテストも結ぶ（NodeNext では .js で書くため）",
+    async (from) => {
+      const p = project();
+      writeFileSync(
+        join(p.tests, "todo.test.ts"),
+        `import { specOf } from "@yutaura/live-spec/testing";\nimport * as Todo from "${from}";\nit(specOf(Todo.complete, "作った人だけ"), () => {});\n`,
+      );
+
+      const [object] = linkTests([await loadObject(p.spec)], [p.tests]);
+
+      expect(object!.graph.tests).toEqual([expect.objectContaining({ target: "ensure:complete:作った人だけ" })]);
+    },
+  );
 });
