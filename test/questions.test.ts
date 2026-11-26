@@ -47,7 +47,7 @@ describe("questions: 未決事項", { timeout: 30_000 }, () => {
     expect(md.indexOf("## 未決事項")).toBeLessThan(md.indexOf("## 状態遷移図"));
     expect(md).toContain("1. アーカイブした記事を戻せるようにするか？（操作: アーカイブする）\n   - 今は戻す操作がない");
     expect(md).toContain("2. 固定中の記事は何件まで？（状態: published · pinned）");
-    expect(md).toContain("- **未決**: アーカイブした記事を戻せるようにするか？");
+    expect(md).toContain("- **未決**: 未決事項 1");
   });
 
   it("Markdown の一覧に、ドメインオブジェクトごとの未決事項の数を出す", () => {

@@ -2,7 +2,11 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { ensure } from "../src/ensure.ts";
+import { explore } from "../src/explore.ts";
 import { loadObject } from "../src/generate.ts";
+import { loadSpec } from "../src/load.ts";
+import { findOmissionHints } from "../src/omission.ts";
 import { renderHtml } from "../src/render/html.ts";
 import { renderMarkdown } from "../src/render/markdown.ts";
 
@@ -96,5 +100,74 @@ describe("仕様書の読みやすさ: 節の名前に、何のための節か�
 
     expect(html).toContain('<h2>操作</h2><p class="section-lead">操作ごとに、誰が・どの状態でできるか、できないときの理由。</p>');
     expect(html).toContain('<h2>検査結果</h2><p class="section-lead">spec を実行して見つかった、矛盾や書き漏れ。</p>');
+  });
+});
+
+describe("仕様書の読みやすさ: 未決事項は 1 か所に書き、ほかからは番号で指す", () => {
+  type Job = { status: "待機" | "実行中" | "中断" | "成功" | "失敗"; exhausted: boolean };
+  const ASK_STATE = "上限で中断した実行は、どうやって終わらせるのか？";
+  const ASK_ACTION = "始めるのに条件は要らないか？";
+  const start = (j: Job): Job => {
+    ensure(j.status === "待機", "待機のときだけ");
+    ensure(!j.exhausted, "試行の上限に届いていないときだけ");
+    return { ...j, status: "実行中" };
+  };
+  const suspend = (j: Job): Job => {
+    ensure(j.status === "実行中", "実行中のときだけ");
+    return { status: "中断", exhausted: true };
+  };
+  const resume = (j: Job): Job => {
+    ensure(j.status === "中断", "中断のときだけ");
+    return { ...j, status: "待機" };
+  };
+  const fail = (j: Job): Job => {
+    ensure(j.status === "待機" || j.status === "実行中", "終わっていないときだけ");
+    return { ...j, status: "失敗" };
+  };
+  const succeed = (j: Job): Job => {
+    ensure(j.status === "実行中", "実行中のときだけ");
+    return { ...j, status: "成功" };
+  };
+  const objectWithQuestions = () => {
+    const spec = loadSpec("job", {
+      initial: { status: "待機", exhausted: false },
+      actors: { 人: {} },
+      start,
+      suspend,
+      resume,
+      succeed,
+      fail,
+      goals: { 成功: (j: Job) => j.status === "成功" },
+      questions: [
+        { ask: ASK_STATE, about: { status: "中断", exhausted: true } },
+        { ask: ASK_ACTION, about: start },
+      ],
+    });
+    const graph = explore(spec);
+    return { spec, graph: { ...graph, omissions: findOmissionHints(spec, graph) } };
+  };
+  const count = (text: string, part: string) => text.split(part).length - 1;
+
+  it("Markdown では、判断待ちと操作の節から、未決事項を番号で指す", () => {
+    const { spec, graph } = objectWithQuestions();
+
+    const md = renderMarkdown(spec, graph);
+
+    expect(count(md, ASK_STATE)).toBe(1);
+    expect(count(md, ASK_ACTION)).toBe(1);
+    expect(md).toMatch(/cannot-reach-goal:中断 · exhausted`）— 未決事項 1 で判断を待っている/);
+    expect(md).toContain("- **未決**: 未決事項 2");
+  });
+
+  it("HTML では、判断待ちと操作カードから、未決事項へのリンクで指す", async () => {
+    const { spec, graph } = objectWithQuestions();
+
+    // 状態をクリックしたときのパネルのデータ（script の中）は、その場で読めるよう文のまま持つので数えない。
+    const html = (await renderHtml(spec, graph)).replace(/<script[\s\S]*?<\/script>/g, "");
+
+    expect(count(html, ASK_STATE)).toBe(1);
+    expect(count(html, ASK_ACTION)).toBe(1);
+    expect(html).toContain('<li id="q-0-2">');
+    expect(html).toContain('<a href="#q-0-2">未決事項 2</a>');
   });
 });

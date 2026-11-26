@@ -247,7 +247,8 @@ const renderPage = async (
     violation: violating.has(id),
     question: questioned.has(id),
   });
-  const asksOf = (action: string) => graph.questions.filter((q) => q.action === action).map((q) => q.ask);
+  const asksOf = (action: string) =>
+    graph.questions.flatMap((q, i) => (q.action === action ? [{ label: `未決事項 ${i + 1}`, href: questionId(index, i + 1) }] : []));
   const arrow = `arrow-${index}`;
   const arrowWf = `arrow-wf-${index}`;
 
@@ -272,11 +273,11 @@ const renderPage = async (
       : `<section class="questions" aria-label="未決事項">
     <h2>未決事項</h2>${sectionLead("未決事項")}
     <ol>${graph.questions
-      .map((q) => `<li><span class="ask">${esc(q.ask)}</span><span class="target">${esc(questionTarget(spec, q, labelOf))}</span>${q.note === null ? "" : `<span class="note">${esc(q.note)}</span>`}</li>`)
+      .map((q, i) => `<li id="${questionId(index, i + 1)}"><span class="ask">${esc(q.ask)}</span><span class="target">${esc(questionTarget(spec, q, labelOf))}</span>${q.note === null ? "" : `<span class="note">${esc(q.note)}</span>`}</li>`)
       .join("")}</ol>
   </section>`
   }
-  ${reviewHtml(spec, graph)}
+  ${reviewHtml(spec, graph, index)}
   <section class="board" aria-label="状態遷移図" data-mode="states">
     <p class="hint">状態をクリックすると、その状態でできること・できないことを表示します。矢印のラベルや操作カードをクリックすると、その操作の遷移を強調します。Esc で解除。</p>
     ${
@@ -450,7 +451,10 @@ const sectionLead = (title: string) => (SECTION_LEAD[title] === undefined ? "" :
 
 const withCode = (text: string) => esc(text).replace(/`([^`]+)`/g, "<code>$1</code>");
 
-const reviewHtml = (spec: Spec, graph: Graph) => {
+// 未決事項の文は冒頭の一覧にだけ書き、判断待ちや操作カードからは番号で指す。同じ文が 3 か所に並ぶと長くなるため。
+const questionId = (index: number, n: number) => `q-${index}-${n}`;
+
+const reviewHtml = (spec: Spec, graph: Graph, index: number) => {
   const { pending, onHold, acknowledged } = reviewItems(spec, graph);
   if (pending.length + onHold.length + acknowledged.length === 0) return "";
   return `<section class="questions review${pending.length === 0 ? " done" : ""}" aria-label="${REVIEW_TITLE}">
@@ -463,7 +467,7 @@ const reviewHtml = (spec: Spec, graph: Graph) => {
     ${
       onHold.length === 0
         ? ""
-        : `<details class="acknowledged" open><summary>判断待ち（未決事項、${onHold.length} 件）</summary><ul>${onHold.map((i) => `<li>${withCode(i.message)} <code class="review-id">${esc(i.id)}</code><span class="muted"> — 未決事項 ${i.question}「${esc(i.ask)}」</span></li>`).join("")}</ul></details>`
+        : `<details class="acknowledged" open><summary>判断待ち（未決事項、${onHold.length} 件）</summary><ul>${onHold.map((i) => `<li>${withCode(i.message)} <code class="review-id">${esc(i.id)}</code><span class="muted"> — <a href="#${questionId(index, i.question)}">未決事項 ${i.question}</a> で判断を待っている</span></li>`).join("")}</ul></details>`
     }
     ${
       acknowledged.length === 0
@@ -475,7 +479,7 @@ const reviewHtml = (spec: Spec, graph: Graph) => {
 
 const actionCard = (
   a: ActionSummary,
-  asks: ReadonlyArray<string>,
+  asks: ReadonlyArray<{ readonly label: string; readonly href: string }>,
   links: ReadonlyArray<ProjectLink>,
   evidence: ReadonlyArray<string>,
   ensures: ReadonlyArray<EnsureCheck>,
@@ -534,7 +538,7 @@ const actionCard = (
                   })
                   .join("")}</ul></dd>`
           }
-          ${asks.length === 0 ? "" : `<dt>未決</dt><dd><ul>${asks.map((q) => `<li class="ask">${esc(q)}</li>`).join("")}</ul></dd>`}
+          ${asks.length === 0 ? "" : `<dt>未決</dt><dd><ul>${asks.map((q) => `<li class="ask"><a href="#${q.href}">${esc(q.label)}</a></li>`).join("")}</ul></dd>`}
         </dl>
       </article>`;
 };

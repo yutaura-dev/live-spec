@@ -87,7 +87,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...summarizeActions(spec, graph).flatMap((a) => [
       ...actionSection(a),
       ...((spec.evidence[a.name] ?? []).length === 0 ? [] : [`- **根拠**: ${spec.evidence[a.name]!.map(formatEvidence).join("、")}`]),
-      ...graph.questions.filter((q) => q.action === a.name).map((q) => `- **未決**: ${q.ask}`),
+      ...graph.questions.flatMap((q, i) => (q.action === a.name ? [`- **未決**: 未決事項 ${i + 1}`] : [])),
       ...ensureLines((graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed),
       "",
     ]),
@@ -121,7 +121,7 @@ const reviewSection = (spec: Spec, graph: Graph): Array<string> => {
     "",
     ...(onHold.length === 0
       ? []
-      : ["### 判断待ち（未決事項）", "", ...onHold.map((i) => `- ${i.message}（\`${i.id}\`）— 未決事項 ${i.question}「${i.ask}」`), ""]),
+      : ["### 判断待ち（未決事項）", "", ...onHold.map((i) => `- ${i.message}（\`${i.id}\`）— 未決事項 ${i.question} で判断を待っている`), ""]),
     ...(acknowledged.length === 0 ? [] : ["### 確認済み", "", ...acknowledged.map((i) => `- \`${i.id}\`: ${i.note}`), ""]),
   ];
 };
