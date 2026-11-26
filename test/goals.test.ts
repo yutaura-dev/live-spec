@@ -48,6 +48,35 @@ describe("goals: 目指す状態にたどり着けない状態（袋小路）を
     ]);
   });
 
+  it("入る手順には、操作の入力の例の名前を添える", () => {
+    const begin = (j: Job, _u: object, last: boolean): Job => {
+      ensure(j.status === "待機", "待機のときだけ");
+      ensure(!j.exhausted, "試行の上限に届いていないときだけ");
+      return { status: "実行中", exhausted: last };
+    };
+    const pause = (j: Job): Job => {
+      ensure(j.status === "実行中", "実行中のときだけ");
+      return { ...j, status: "中断" };
+    };
+    const spec = loadSpec("job", {
+      initial: { status: "待機", exhausted: false },
+      actors: { 人: {} },
+      inputs: { begin: { まだ残る: [false], 最後の試行になる: [true] } },
+      goals: { 成功: (j: Job) => j.status === "成功" },
+      begin,
+      succeed,
+      pause,
+      resume,
+      fail,
+    });
+
+    const messages = findOmissionHints(spec, explore(spec))
+      .filter((h) => h.kind === "cannot-reach-goal")
+      .map((h) => h.message);
+
+    expect(messages.join("\n")).toContain("入る手順: begin（人、最後の試行になる） → pause（人）");
+  });
+
   it("goals を書かなければ、袋小路を調べない", () => {
     const spec = specWith({});
 

@@ -175,21 +175,24 @@ const deadEnds = (spec: Spec, graph: Graph): Array<OmissionHint> => {
       }
     }
   }
-  const parent = new Map<string, { from: string; action: string; actor: string }>();
+  // 遷移の一覧ではなく入力ごとの可否からたどる理由: 同じ操作でも入力の例によって行き先が違うことがあり、
+  // 手順に入力の例の名前が無いと、そのままシナリオに起こしたときに別の状態へ行ってしまう。
+  const steps = graph.availability.filter((r) => r.enabled && r.to !== null && r.to !== r.state);
+  const parent = new Map<string, { from: string; step: string }>();
   const queue = graph.states.filter((s) => s.initial).map((s) => s.id);
   const seen = new Set(queue);
   for (let i = 0; i < queue.length; i++) {
-    for (const t of moves.filter((m) => m.from === queue[i])) {
-      if (seen.has(t.to)) continue;
-      seen.add(t.to);
-      parent.set(t.to, { from: t.from, action: t.action, actor: t.actors[0] ?? "" });
-      queue.push(t.to);
+    for (const r of steps.filter((x) => x.state === queue[i])) {
+      if (seen.has(r.to!)) continue;
+      seen.add(r.to!);
+      parent.set(r.to!, { from: r.state, step: `${r.action}（${r.input === null ? r.actor : `${r.actor}、${r.input}`}）` });
+      queue.push(r.to!);
     }
   }
   const pathTo = (id: string) => {
-    const steps: Array<string> = [];
-    for (let p = parent.get(id); p !== undefined; p = parent.get(p.from)) steps.unshift(`${p.action}（${p.actor}）`);
-    return steps.join(" → ");
+    const path: Array<string> = [];
+    for (let p = parent.get(id); p !== undefined; p = parent.get(p.from)) path.unshift(p.step);
+    return path.join(" → ");
   };
   const goalNames = spec.goals.map(([name]) => name).join("、");
   return graph.states
