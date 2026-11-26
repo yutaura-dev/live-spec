@@ -60,7 +60,9 @@ export const parseCliArgs = (argv: ReadonlyArray<string>): CliOptions => {
   return { paths: positionals, format, out, watch, serve, port, title: values.title ?? null };
 };
 
-const USAGE = "usage: pnpm spec <file.spec.ts | dir>... [--html | --json] [--out <file | dir>] [--watch] [--serve [--port <n>]] [--title <名前>]";
+const USAGE = "usage: live-spec <file.spec.ts | dir>... [--html | --json] [--out <file | dir>] [--watch] [--serve [--port <n>]] [--title <名前>]";
+
+const wantsHelp = (argv: ReadonlyArray<string>) => argv.includes("--help") || argv.includes("-h");
 
 export interface CliIo {
   readonly stdout: (text: string) => void;
@@ -75,6 +77,10 @@ const DIFF_USAGE =
   "usage: live-spec diff <file.spec.ts | dir>... [--base <リビジョン>]（既定は HEAD） [--head <リビジョン>]（省くと作業ツリー） [--html | --json] [--out <file>]";
 
 const runDiff = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number> => {
+  if (wantsHelp(argv)) {
+    io.stdout(`${DIFF_USAGE}\n`);
+    return 0;
+  }
   let parsed;
   try {
     parsed = parseArgs({
@@ -122,6 +128,10 @@ const runDiff = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number> 
 const SKILLS_USAGE = "usage: live-spec skills install [--dir <path>]（既定は .claude/skills） [--force]";
 
 const runSkills = (argv: ReadonlyArray<string>, io: CliIo): number => {
+  if (wantsHelp(argv)) {
+    io.stdout(`${SKILLS_USAGE}\n`);
+    return 0;
+  }
   let parsed;
   try {
     parsed = parseArgs({
@@ -147,6 +157,10 @@ const runSkills = (argv: ReadonlyArray<string>, io: CliIo): number => {
 export const runCli = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number | null> => {
   if (argv[0] === "diff") return runDiff(argv.slice(1), io);
   if (argv[0] === "skills") return runSkills(argv.slice(1), io);
+  if (wantsHelp(argv)) {
+    io.stdout(`${[USAGE, DIFF_USAGE, SKILLS_USAGE].join("\n")}\n`);
+    return 0;
+  }
   let options: CliOptions;
   try {
     options = parseCliArgs(argv);

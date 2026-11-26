@@ -15,6 +15,7 @@ export type Invocation = {
     | "ポートが使えず終了"
     | "差分を取れずに終了"
     | "skill を置いて終了"
+    | "使い方を出して終了"
     | "Ctrl+C で終了";
 };
 
@@ -23,6 +24,7 @@ type User = { kind: "user" };
 /** 引数の組み合わせ。環境（spec が壊れている、ポートが使用中）も入力として表す。 */
 type Args = {
   paths: number;
+  help?: boolean;
   html?: boolean;
   json?: boolean;
   out?: boolean;
@@ -57,6 +59,7 @@ export const inputs = {
     "--port 5000（--serve なし）": [{ paths: 1, port: "ok" }],
     "--serve --port \"\"": [{ paths: 1, serve: true, port: "empty" }],
     "パスなし": [{ paths: 0 }],
+    "--help": [{ paths: 0, help: true }],
     "壊れた spec": [{ paths: 1, brokenSpec: true }],
     "--serve（ポートが使用中）": [{ paths: 1, serve: true, portInUse: true }],
   } satisfies Record<string, [Args]>,
@@ -79,6 +82,8 @@ export const inputs = {
  */
 export function start(inv: Invocation, _user: User, args: Args): Invocation {
   ensure(inv.status === "起動前", "起動前のときだけ");
+  // 根拠: src/cli.ts runCli（--help / -h はほかの引数より先に見て、使い方を出して終了コード 0）
+  if (args.help) return { status: "使い方を出して終了" };
   // 根拠: src/cli.ts parseCliArgs（spec のパスが必須）
   ensure(args.paths > 0, "spec ファイルかディレクトリのパスが必要");
   // 根拠: src/cli.ts parseCliArgs（組み合わせのエラー）
@@ -143,6 +148,7 @@ export const scenarios = {
     { do: diff, by: "利用者", input: "--html --json", denied: "--html と --json は同時に指定できない" },
     { do: installSkills, by: "利用者", input: "install 以外", denied: "サブコマンドは install だけ" },
   ],
+  使い方を見る: [{ do: start, by: "利用者", input: "--help", expect: { status: "使い方を出して終了" } }],
   ブランチ間の仕様の差分を見る: [{ do: diff, by: "利用者", input: "specs/ --base main --head feature", expect: { status: "書き出して終了" } }],
   存在しないリビジョンとは比べられない: [{ do: diff, by: "利用者", input: "存在しないリビジョン", expect: { status: "差分を取れずに終了" } }],
   "skill を入れる": [{ do: installSkills, by: "利用者", input: "install", expect: { status: "skill を置いて終了" } }],
@@ -188,6 +194,8 @@ export function surface(inv: Invocation) {
       return cli.output("差分を取れませんでした: リビジョン nope が見つかりません\n（終了コード 1）");
     case "skill を置いて終了":
       return cli.output(".claude/skills に live-spec の skill を置きました。Claude Code を起動し直すと使えます。");
+    case "使い方を出して終了":
+      return cli.output("usage: live-spec <file.spec.ts | dir>... [--html | --json] ...\nusage: live-spec diff ...\nusage: live-spec skills install ...");
     case "Ctrl+C で終了":
       return cli.output("^C");
   }

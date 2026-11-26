@@ -301,3 +301,31 @@ describe("renderErrorHtml: 生成に失敗したときのページ", () => {
     expect(html).not.toContain("<script>alert(1)");
   });
 });
+
+describe("runCli: 使い方の表示", () => {
+  const io = () => {
+    const out: Array<string> = [];
+    const err: Array<string> = [];
+    return { out, err, io: { stdout: (s: string) => out.push(s), stderr: (s: string) => err.push(s) } };
+  };
+
+  it.each([[["--help"]], [["-h"]], [["diff", "--help"]], [["diff", "-h"]], [["skills", "--help"]], [["skills", "-h"]]])(
+    "%j で使い方を標準出力に出し、終了コード 0 を返す",
+    async (argv) => {
+      const t = io();
+
+      expect(await runCli(argv, t.io)).toBe(0);
+      expect(t.out.join("")).toContain("usage: live-spec");
+      expect(t.err).toEqual([]);
+    },
+  );
+
+  it("使い方のコマンド名は、利用者が打つ live-spec にする", async () => {
+    const t = io();
+
+    await runCli(["--html"], t.io);
+
+    expect(t.err.join("")).toContain("usage: live-spec <file.spec.ts | dir>...");
+    expect(t.err.join("")).not.toContain("pnpm spec");
+  });
+});
