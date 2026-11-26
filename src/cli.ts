@@ -2,7 +2,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { findTsc, typecheck } from "./check.ts";
 import { updateEvidenceLock } from "./evidence.ts";
 import { expandSpecPaths, generateProject, loadObject, resolveLinks, specNameOf, writeOutput, writeProjectOutput, type OutputFormat } from "./generate.ts";
@@ -219,7 +219,7 @@ const runEvidence = async (argv: ReadonlyArray<string>, io: CliIo): Promise<numb
     const r = updateEvidenceLock(spec, path);
     io.stdout(
       [
-        `${spec.name}: ${r.lockPath} に根拠を ${r.recorded} 件記録した`,
+        `${spec.name}: ${relative(process.cwd(), r.lockPath)} に根拠を ${r.recorded} 件記録した`,
         ...(r.moved === 0 ? [] : [`  行がずれた根拠を直した: ${r.moved} 件（spec の「// 根拠:」の行番号を書き換えた）`]),
         ...(r.changed === 0 ? [] : [`  中身が変わった根拠を記録し直した: ${r.changed} 件`]),
       ].join("\n") + "\n",

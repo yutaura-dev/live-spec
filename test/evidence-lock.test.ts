@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli } from "../src/cli.ts";
 import { loadObject } from "../src/generate.ts";
@@ -102,5 +102,32 @@ describe("根拠の lock: 根拠の範囲のコードが変わったことを知
     const t = io();
     expect(await runCli(["check", p.spec, "--cwd", p.dir], t.io)).toBe(1);
     expect(t.out.join("")).toContain("根拠のコードの中身が変わった");
+  });
+
+  it("evidence --update は、lock の場所を作業ディレクトリからの相対パスで出す（CI のログに手元の絶対パスを出さない）", async () => {
+    const p = project();
+    const o = io();
+
+    await runCli(["evidence", "--update", p.spec], o.io);
+
+    expect(o.out.join("")).toContain(`${relative(process.cwd(), p.lock)} に根拠を 1 件記録した`);
+    expect(o.out.join("")).not.toMatch(/^go: \//);
+  });
+
+  it("1 行だけの根拠は、lock のキーでも spec と同じく行番号 1 つで書く", async () => {
+    const p = project("3");
+
+    await runCli(["evidence", "--update", p.spec], io().io);
+
+    expect(readFileSync(p.lock, "utf8")).toMatch(/"go go src\/job\.ts:3": "[0-9a-f]{16}"/);
+    expect(await lockFindings(p.spec)).toEqual([]);
+  });
+
+  it("0.4.0 の書き方（1 行の根拠を 3-3 と書いたキー）の lock も照合できる", async () => {
+    const p = project("3");
+    await runCli(["evidence", "--update", p.spec], io().io);
+    writeFileSync(p.lock, readFileSync(p.lock, "utf8").replace("src/job.ts:3", "src/job.ts:3-3"));
+
+    expect(await lockFindings(p.spec)).toEqual([]);
   });
 });

@@ -102,8 +102,11 @@ const findMoved = (lines: ReadonlyArray<string>, hash: string, start: number, le
 };
 
 const rangeText = (start: number, end: number | null) => (end === null ? `${start}` : `${start}-${end}`);
-const lockKey = (spec: Spec, action: string, path: string, start: number, end: number | null) =>
-  `${spec.name} ${action} ${path}:${start}-${end ?? start}`;
+const lockKey = (spec: Spec, action: string, path: string, start: number, end: number | null) => `${spec.name} ${action} ${path}:${rangeText(start, end)}`;
+
+// 0.4.0 は 1 行の根拠も「66-66」と書いていた。その lock を作り直さずに照合できるよう、古いキーも引く。
+const recordedHash = (lock: Record<string, string>, spec: Spec, action: string, path: string, start: number, end: number | null) =>
+  lock[lockKey(spec, action, path, start, end)] ?? (end === null ? lock[lockKey(spec, action, path, start, start)] : undefined);
 
 interface ResolvedLocation extends Location {
   readonly action: string;
@@ -138,7 +141,7 @@ export const checkEvidence = (spec: Spec, specPath: string, options: CheckEviden
     if (start === null) return [];
     const location = `${path}:${rangeText(start, end)}`;
     if (lock !== null) {
-      const recorded = lock[lockKey(spec, action, path, start, end)];
+      const recorded = recordedHash(lock, spec, action, path, start, end);
       if (recorded === undefined) return [{ kind: "evidence-unlocked", action, evidence, location }];
       const lines = normalizedLines(file);
       const length = (end ?? start) - start + 1;
@@ -175,7 +178,7 @@ export const updateEvidenceLock = (spec: Spec, specPath: string): EvidenceUpdate
     const lines = normalizedLines(loc.file);
     const length = (loc.end ?? loc.start) - loc.start + 1;
     let start = loc.start;
-    const old = previous[lockKey(spec, loc.action, loc.path, loc.start, loc.end)];
+    const old = recordedHash(previous, spec, loc.action, loc.path, loc.start, loc.end);
     const current = loc.last <= lines.length ? blockHash(lines, loc.start, loc.end ?? loc.start) : null;
     if (old !== undefined && old !== current) {
       const to = findMoved(lines, old, loc.start, length);

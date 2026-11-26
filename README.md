@@ -171,7 +171,7 @@ spec ファイルは素の TypeScript です。export の名前で役割が決�
 `// 根拠: path:line` の行番号は、コードが少し変わるだけでずれる。`npx live-spec evidence --update specs/` を実行すると、根拠の範囲のコードを spec のディレクトリの `live-spec.evidence.lock` に記録する（空白の違いは無視する）。lock があると、仕様書と `live-spec check` が根拠のコードと照らし合わせて、次を検査結果に出す。
 
 - **行がずれた**: 同じコードが別の行にある。`evidence --update` が spec の根拠の行番号を書き換える
-- **中身が変わった**: spec を見直してから、`evidence --update` で記録し直す
+- **中身が変わった**: spec を見直してから、`evidence --update` で記録し直す。範囲の中にコメントを足しただけでも「変わった」と出る（コメントにも条件の意図が書かれることがあるので、見直す側に倒している）
 - **lock に無い**: 新しく書いた根拠。`evidence --update` で記録する
 
 lock は生成物ではなく「spec を確かめた時点の根拠のコード」の記録なので、spec と一緒にコミットする。lock が無い spec は照合しない。
