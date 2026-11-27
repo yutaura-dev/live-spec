@@ -10,6 +10,20 @@ export interface StaticInfo {
   readonly stateDoc: string | null;
   readonly fieldDocs: Readonly<Record<string, string>>;
   readonly ensures: Readonly<Record<string, ReadonlyArray<EnsureCall>>>;
+  /** 状態の型の名前（initial に付けた型） */
+  readonly stateType: string | null;
+  /** 状態の型の項目のうち、ほかのドメインオブジェクトを指すかもしれないもの */
+  readonly refs: ReadonlyArray<FieldRef>;
+}
+
+export interface FieldRef {
+  readonly field: string;
+  /** 相手の型の名前か、@ref で書いた spec の名前 */
+  readonly target: string;
+  readonly many: boolean;
+  readonly optional: boolean;
+  /** @ref で書いたもの（相手が見つからなければ検査結果に出す） */
+  readonly explicit: boolean;
 }
 
 export interface EnsureCall {
@@ -60,8 +74,52 @@ export const analyze = (source: string): StaticInfo => {
     stateDoc: stateType?.doc ?? null,
     fieldDocs: stateType === undefined ? {} : fieldDocsOf(stateType.members),
     ensures,
+    stateType: initialType,
+    refs: stateType === undefined ? [] : refsOf(stateType.members),
   };
 };
+
+const REF_TAG = /@ref\s+(\S+)/;
+const isNullish = (t: t.TSType) => t.type === "TSNullKeyword" || t.type === "TSUndefinedKeyword";
+
+// 項目の型から相手の型の名前と数を読む。ほかの spec の状態の型かどうかは、プロジェクト全体を読んでから決める
+// （型の名前だけでは、ただの値の型と見分けられないため）。
+const targetOf = (type: t.TSType): { readonly name: string; readonly many: boolean; readonly optional: boolean } | null => {
+  const members = type.type === "TSUnionType" ? type.types : [type];
+  const rest = members.filter((m) => !isNullish(m));
+  if (rest.length !== 1) return null;
+  const optional = rest.length !== members.length;
+  const only = rest[0]!;
+  const nameOf = (r: t.TSType) => (r.type === "TSTypeReference" && r.typeName.type === "Identifier" && r.typeArguments == null ? r.typeName.name : null);
+  if (only.type === "TSArrayType") {
+    const name = nameOf(only.elementType);
+    return name === null ? null : { name, many: true, optional };
+  }
+  if (only.type === "TSTypeReference" && only.typeName.type === "Identifier" && ["Array", "ReadonlyArray"].includes(only.typeName.name)) {
+    const inner = only.typeArguments?.params[0];
+    const name = inner === undefined ? null : nameOf(inner);
+    return name === null ? null : { name, many: true, optional };
+  }
+  const name = nameOf(only);
+  return name === null ? null : { name, many: false, optional };
+};
+
+const refsOf = (members: ReadonlyArray<t.TSTypeElement>): Array<FieldRef> =>
+  members.flatMap((m): Array<FieldRef> => {
+    if (m.type !== "TSPropertySignature" || m.typeAnnotation == null) return [];
+    const field = m.key.type === "Identifier" ? m.key.name : m.key.type === "StringLiteral" ? m.key.value : null;
+    if (field === null) return [];
+    const tag = m.leadingComments?.map((c) => REF_TAG.exec(c.value)?.[1]).find((x) => x !== undefined);
+    if (tag === "none") return [];
+    const type = m.typeAnnotation.typeAnnotation;
+    const optional = m.optional === true;
+    if (tag !== undefined) {
+      const many = type.type === "TSArrayType" || (type.type === "TSTypeReference" && type.typeName.type === "Identifier" && ["Array", "ReadonlyArray"].includes(type.typeName.name));
+      return [{ field, target: tag, many, optional, explicit: true }];
+    }
+    const found = targetOf(type);
+    return found === null ? [] : [{ field, target: found.name, many: found.many, optional: optional || found.optional, explicit: false }];
+  });
 
 // 理由が文字列リテラル（または式を含まないテンプレート）の ensure だけを集める。
 // 理由を式で組み立てている ensure は、どの理由のときに外せばよいかを実行前に決められないため。

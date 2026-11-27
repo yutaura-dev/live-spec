@@ -8,6 +8,7 @@ import type { Graph } from "../model.ts";
 import type { SurfaceNode } from "../surface.ts";
 import { isCollapsed } from "./collapse.ts";
 import { detailGroups, summaryGraph } from "./group.ts";
+import { projectRelations } from "../relations.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
 import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle, testsOf } from "./markdown.ts";
@@ -114,6 +115,38 @@ const relationsSvg = async (objects: ReadonlyArray<DomainObject>, links: Readonl
   </svg></div>`;
 };
 
+const multiplicity = (many: boolean) => (many ? "多" : "1");
+
+const entityRelationsHtml = async (objects: ReadonlyArray<DomainObject>) => {
+  const relations = projectRelations(objects);
+  if (relations.length === 0) return "";
+  const names = objects.map((o) => o.spec.name).filter((n) => relations.some((r) => r.from === n || r.to === n));
+  const idOf = (name: string) => `r${names.indexOf(name)}`;
+  const labelOf = (r: (typeof relations)[number]) =>
+    `${r.fields.join(", ")}（${multiplicity(r.toMany)}）${r.back.length === 0 || r.fromMany === null ? "" : `／ ${r.back.join(", ")}（${multiplicity(r.fromMany)}）`}`;
+  const l = await layout({
+    states: names.map((name, i) => ({ id: idOf(name), label: name, values: {}, initial: i === 0, terminal: false })),
+    transitions: relations.map((r) => ({ from: idOf(r.from), to: idOf(r.to), action: labelOf(r), actors: [] })),
+    availability: [],
+    findings: [],
+    surfaces: [],
+    decisions: [],
+    links: [],
+    questions: [],
+    scenarios: [],
+  });
+  const nodes = l.nodes
+    .map((n) => `<a href="#/${encodeURIComponent(n.label)}" class="rel-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></a>`)
+    .join("");
+  return `<section class="relations-section">
+    <h2>関連</h2>${sectionLead("関連")}
+    <div class="diagram relations"><svg viewBox="0 0 ${l.width} ${l.height}" width="${l.width}" height="${l.height}" role="img" aria-label="ドメインオブジェクトの関連">
+    <defs><marker id="arrow-er" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+    ${l.edges.map((e) => edgeSvg(e, "arrow-er")).join("")}${nodes}
+  </svg></div>
+  </section>`;
+};
+
 const overviewPage = async (objects: ReadonlyArray<DomainObject>, options: ProjectOptions, links: ReadonlyArray<ProjectLink>) => `<section class="page" data-page="" hidden>
 <header class="top">
   <div>
@@ -134,6 +167,7 @@ const overviewPage = async (objects: ReadonlyArray<DomainObject>, options: Proje
       )
       .join("\n    ")}
   </div>
+  ${await entityRelationsHtml(objects)}
   ${
     links.length === 0
       ? ""

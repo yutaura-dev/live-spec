@@ -1,6 +1,7 @@
 import type { EnsureCheck } from "../model.ts";
 import { describeEnsure } from "./ensures.ts";
 import { markdownSection } from "./sections.ts";
+import { projectRelations } from "../relations.ts";
 import { actionTitle, canOnlyWhen } from "../labels.ts";
 import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
 import type { Spec } from "../load.ts";
@@ -24,6 +25,36 @@ const endpoint = (objects: Objects, object: string, action: string | null) =>
 const allLinks = (objects: Objects) =>
   objects.flatMap(({ spec, graph }) => graph.links.map((l) => ({ ...l, source: spec.name })));
 
+const LEFT = { many: "}o", one: "||" } as const;
+const RIGHT = { many: "o{", one: "||" } as const;
+
+const relationsSection = (objects: Objects): Array<string> => {
+  const relations = projectRelations(objects);
+  if (relations.length === 0) return [];
+  const names = objects.map((o) => o.spec.name);
+  const id = (name: string) => `e${names.indexOf(name)}`;
+  const involved = names.filter((n) => relations.some((r) => r.from === n || r.to === n));
+  const attribute = (spec: Spec, field: string) =>
+    spec.refs.some((r) => r.field === field) ? `ref ${field}` : spec.fields[field]?.every((v) => typeof v === "boolean") ? `bool ${field}` : `enum ${field}`;
+  return [
+    ...markdownSection("関連"),
+    "```mermaid",
+    "erDiagram",
+    ...involved.flatMap((name) => {
+      const spec = objects.find((o) => o.spec.name === name)!.spec;
+      const fields = [...new Set([...Object.keys(spec.fields), ...spec.refs.map((r) => r.field)])];
+      return [`  ${id(name)}["${name}"] {`, ...fields.map((f) => `    ${attribute(spec, f)}`), "  }"];
+    }),
+    // 逆向きの項目が無ければ、相手 1 つにいくつ結びつくかは決まっていない（0 以上）として描く。
+    ...relations.map(
+      (r) =>
+        `  ${id(r.from)} ${r.fromMany === false ? LEFT.one : LEFT.many}--${r.toMany ? RIGHT.many : RIGHT.one} ${id(r.to)} : "${[r.fields.join(", "), ...(r.back.length === 0 ? [] : [r.back.join(", ")])].join(" / ")}"`,
+    ),
+    "```",
+    "",
+  ];
+};
+
 export const renderIndexMarkdown = (objects: Objects, title: string): string =>
   [
     `# ${title}`,
@@ -37,6 +68,7 @@ export const renderIndexMarkdown = (objects: Objects, title: string): string =>
         `| [${spec.name}](${spec.name}.md) | ${spec.stateDoc ?? ""} | ${graph.states.length} | ${spec.actions.length} | ${graph.questions.length} | ${graph.findings.length === 0 ? "OK" : `⚠ ${graph.findings.length}`} |`,
     ),
     "",
+    ...relationsSection(objects),
     ...(allLinks(objects).length === 0
       ? []
       : [
@@ -305,6 +337,8 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
       return `ルール「${f.decision}」の ${f.row} 行目で例外を投げた: ${f.message}`;
     case "test-link-unknown":
       return `テスト ${f.file}:${f.line} が、spec に無い項目を指している（${f.target}）。spec を先に変えたなら、テストと実装をそれに合わせる`;
+    case "ref-unresolved":
+      return `項目 ${f.field} の @ref で指した ${f.target} という spec（または状態の型）が無い`;
     case "question-scenario-unknown":
       return `未決事項「${f.ask}」が指すシナリオ「${f.scenario}」が無い`;
     case "question-unmatched":

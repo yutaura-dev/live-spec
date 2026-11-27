@@ -42,6 +42,7 @@ export const Finding = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("state-limit"), maxStates: Schema.Number }),
   Schema.Struct({ kind: Schema.Literal("missing-inputs"), action: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("question-unmatched"), ask: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("ref-unresolved"), field: Schema.String, target: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("test-link-unknown"), target: Schema.String, file: Schema.String, line: Schema.Number }),
   Schema.Struct({ kind: Schema.Literal("question-scenario-unknown"), ask: Schema.String, scenario: Schema.String }),
   Schema.Struct({

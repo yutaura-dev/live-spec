@@ -6,6 +6,7 @@ import { explore } from "./explore.ts";
 import { checkEnsures } from "./mutation.ts";
 import { findOmissionHints } from "./omission.ts";
 import { UNTESTED, unguardedId } from "./render/review.ts";
+import { unresolvedRefs } from "./relations.ts";
 import { linkTests } from "./test-links.ts";
 import { loadSpec } from "./load.ts";
 import { normalize } from "./model.ts";
@@ -102,10 +103,14 @@ export const resolveLinks = (objects: ReadonlyArray<DomainObject>): Array<Domain
       const target = objects.find((t) => t.spec.name === l.to);
       return target === undefined || (l.action !== null && !target.spec.actions.some(([n]) => n === l.action));
     });
-    if (unresolved.length === 0) return o;
+    const refs = unresolvedRefs(objects, o.spec);
+    if (unresolved.length + refs.length === 0) return o;
     return {
       spec: o.spec,
-      graph: { ...o.graph, findings: [...o.graph.findings, ...unresolved.map((l) => ({ kind: "link-unresolved" as const, to: l.to, action: l.action }))] },
+      graph: {
+        ...o.graph,
+        findings: [...o.graph.findings, ...unresolved.map((l) => ({ kind: "link-unresolved" as const, to: l.to, action: l.action })), ...refs],
+      },
     };
   });
 
