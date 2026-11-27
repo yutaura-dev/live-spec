@@ -21,6 +21,22 @@ const model = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("diffModels: 2 つの正規化モデルの振る舞いの違いを求める", () => {
+  it("遷移の不変条件の違反は、遷移の前後の状態を ID ではなくラベルで比べる（探索の順が変わっただけでは差分にしない）", () => {
+    const violation = (from: string, to: string) => ({ kind: "transition-invariant-violation", invariant: "終わったら変わらない", from, to, action: "reopen", actor: "editor", path: [] });
+    const before = model({ findings: [violation("s1", "s0")] });
+    const after = model({
+      states: [
+        { id: "s0", label: "published" },
+        { id: "s1", label: "draft" },
+      ],
+      findings: [violation("s0", "s1")],
+    });
+
+    const d = diffModels(before, after);
+
+    expect(d.findings).toEqual({ added: [], removed: [] });
+  });
+
   it("状態の増減を、ID ではなくラベルで比べる", () => {
     const after = model({
       states: [
