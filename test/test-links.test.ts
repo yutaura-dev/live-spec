@@ -50,7 +50,7 @@ describe(specOf(Todo.complete), () => {
 });
 it(specOf(reopen, "存在しない理由"), () => {});
 it(specOf(Todo, { scenario: "完了して取り消す" }), () => {});
-it(specOf(Todo, { invariant: "無い不変条件" }), () => {});
+it(specOf(Todo, { invariant: "ない不変条件" }), () => {});
 `;
 
 const project = (extra = "") => {
@@ -88,7 +88,7 @@ describe("specOf: テストの名前を spec の項目から作る", () => {
 
     expect(specOf(mod, { scenario: "完了して取り消す" })).toBe("シナリオ「完了して取り消す」");
     expect(specOf(mod, { invariant: "持ち主は変わらない" })).toBe("不変条件「持ち主は変わらない」");
-    expect(() => specOf(mod, { scenario: "無い" })).toThrow("シナリオ「無い」がない");
+    expect(() => specOf(mod, { scenario: "ない" })).toThrow("シナリオ「ない」がない");
   });
 });
 
@@ -105,7 +105,7 @@ describe("テストと spec の項目を結ぶ", { timeout: 60_000 }, () => {
     const { graph } = await linked();
 
     expect(graph.findings).toContainEqual(expect.objectContaining({ kind: "test-link-unknown", target: "ensure:reopen:存在しない理由", line: 10 }));
-    expect(graph.findings).toContainEqual(expect.objectContaining({ kind: "test-link-unknown", target: "invariant:無い不変条件", line: 12 }));
+    expect(graph.findings).toContainEqual(expect.objectContaining({ kind: "test-link-unknown", target: "invariant:ない不変条件", line: 12 }));
   });
 
   it("どのテストも指していない条件は、確かめてほしい点に出す", async () => {

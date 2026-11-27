@@ -100,7 +100,7 @@ describe("ensure のミューテーション: 1 つずつ外して探索し直�
     expect(md).toContain("。それを確かめている不変条件・シナリオ・画面がない");
     expect(md).toContain("「承認済みのときだけ」— 通るのは approved が true のとき。この条件がないと、");
     expect(md).toContain("（不変条件「公開した文書は承認済み」で確かめている）");
-    expect(md).toContain("この条件が無くても振る舞いは変わらない（ほかの条件と重なっている）");
+    expect(md).toContain("この条件がなくても振る舞いは変わらない（ほかの条件と重なっている）");
     expect(md).not.toContain("外すと");
   });
 

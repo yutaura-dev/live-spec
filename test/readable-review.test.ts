@@ -112,7 +112,7 @@ describe("仕様書の読みやすさ（第 2 弾）", { timeout: 60_000 }, () =
     expect(md).toContain("入る手順: 実行を始める（ワーカー、最後の試行） → 一時停止する（ワーカー）");
   });
 
-  it("検査結果が無くても、判断待ちや確かめてほしい点が残っていれば、そう添える", async () => {
+  it("検査結果がなくても、判断待ちや確かめてほしい点が残っていれば、そう添える", async () => {
     const { spec, graph } = await load();
 
     const md = renderMarkdown(spec, graph);

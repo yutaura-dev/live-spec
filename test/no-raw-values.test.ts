@@ -32,7 +32,7 @@ export function recur(t: Task, _a: object, period: "daily" | "weekly"): Task {
 }
 /** 元の項目を足す */
 export function addSource(t: Task): Task {
-  ensure(t.sourceItems.length === 0, "まだ無いときだけ");
+  ensure(t.sourceItems.length === 0, "まだないときだけ");
   return { ...t, sourceItems: [{ sourceItemId: "s1", role: "main" }] };
 }
 /** 終える */

@@ -56,7 +56,7 @@ const project = async () => {
 };
 
 describe("ドメインオブジェクトの関連: 状態の型の項目から読む", { timeout: 60_000 }, () => {
-  it("項目の型がほかの型なら 1 つ、配列なら複数、? や null があれば無くてもよい関連として読む", () => {
+  it("項目の型がほかの型なら 1 つ、配列なら複数、? や null があればなくてもよい関連として読む", () => {
     expect(analyze(POST).refs).toEqual([
       { field: "author", target: "User", many: false, optional: false, explicit: false },
       { field: "editor", target: "User", many: false, optional: true, explicit: false },

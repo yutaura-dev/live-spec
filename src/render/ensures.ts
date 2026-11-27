@@ -20,7 +20,7 @@ const effectOf = (e: EnsureCheck, acknowledged: boolean): string => {
     case "unguarded":
       return `この条件がないと、${effectText(e) ?? "振る舞いが変わる"}。それを確かめている不変条件・シナリオ・画面がない${acknowledged ? "（確認済み）" : ""}`;
     case "no-effect":
-      return e.narrowing ? "この条件が無くても振る舞いは変わらない（後の条件のために型を絞る条件）" : "この条件が無くても振る舞いは変わらない（ほかの条件と重なっている）";
+      return e.narrowing ? "この条件がなくても振る舞いは変わらない（後の条件のために型を絞る条件）" : "この条件がなくても振る舞いは変わらない（ほかの条件と重なっている）";
   }
 };
 
