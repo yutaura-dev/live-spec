@@ -21,7 +21,7 @@ const actionName = (objects: Objects, object: string, action: string) => {
 };
 
 const endpoint = (objects: Objects, object: string, action: string | null) =>
-  `[${object}](${object}.md)${action === null ? "" : ` の ${actionName(objects, object, action)}`}`;
+  `[${objects.find((o) => o.spec.name === object)?.spec.displayName ?? object}](${object}.md)${action === null ? "" : ` の ${actionName(objects, object, action)}`}`;
 
 const allLinks = (objects: Objects) =>
   objects.flatMap(({ spec, graph }) => graph.links.map((l) => ({ ...l, source: spec.name })));
@@ -66,7 +66,7 @@ export const renderIndexMarkdown = (objects: Objects, title: string): string =>
     "|---|---|---|---|---|---|",
     ...objects.map(
       ({ spec, graph }) =>
-        `| [${spec.name}](${spec.name}.md) | ${spec.stateDoc ?? ""} | ${graph.states.length} | ${spec.actions.length} | ${graph.questions.length} | ${graph.findings.length === 0 ? "OK" : `⚠ ${graph.findings.length}`} |`,
+        `| [${spec.displayName}](${spec.name}.md) | ${spec.stateDoc ?? ""} | ${graph.states.length} | ${spec.actions.length} | ${graph.questions.length} | ${graph.findings.length === 0 ? "OK" : `⚠ ${graph.findings.length}`} |`,
     ),
     "",
     ...relationsSection(objects),
@@ -86,7 +86,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
   const ownAction = (action: string | null) => (action === null ? "" : actionName(objects, spec.name, action));
   const labelOf = (id: string) => graph.states.find((s) => s.id === id)?.label ?? id;
   return [
-    `# ${spec.name}`,
+    `# ${spec.displayName}`,
     "",
     ...(spec.stateDoc === null ? [] : [spec.stateDoc, ""]),
     // 用語を未決事項より前に置く理由: 未決事項や判断待ちの文は状態の値や業務の言葉で書かれるので、その意味を知らないと読めないため。

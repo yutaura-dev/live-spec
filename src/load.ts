@@ -35,7 +35,10 @@ export interface ScenarioStep {
 }
 
 export interface Spec {
+  /** spec のファイル名から取った名前。URL・links の to・検査結果の出力に使う */
   readonly name: string;
+  /** 仕様書の見出しやタブに出す名前（export const displayName。無ければ name を Title Case にしたもの） */
+  readonly displayName: string;
   readonly initial: State;
   readonly actors: ReadonlyArray<readonly [name: string, actor: unknown]>;
   readonly actions: ReadonlyArray<readonly [name: string, fn: ActionFn]>;
@@ -92,6 +95,7 @@ const RESERVED = new Set([
   "goals",
   "diagram",
   "variants",
+  "displayName",
 ]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
@@ -100,6 +104,15 @@ const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
 export interface LoadOptions {
   readonly source?: string;
 }
+
+// ファイル名（action-item）から読みやすい名前（Action Item）を作る。仕様書の見出しやタブにファイル名がそのまま出ると、
+// 読み手にはコードの識別子に見えるため。略語や日本語の名前は displayName で上書きしてもらう。
+const titleCase = (name: string) =>
+  name
+    .split(/[-_\s]+/)
+    .filter((w) => w !== "")
+    .map((w) => w[0]!.toUpperCase() + w.slice(1))
+    .join(" ");
 
 export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, options: LoadOptions = {}): Spec => {
   const { initial, actors } = mod;
@@ -124,6 +137,7 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
     dataFields: info?.dataFields ?? [],
     creationFields: info?.creationFields ?? [],
     writtenFields: info?.writtenFields ?? [],
+    displayName: typeof mod.displayName === "string" && mod.displayName !== "" ? mod.displayName : titleCase(name),
     variants: Array.isArray(mod.variants) ? mod.variants.filter(isRecord) : [],
     groupBy: isRecord(mod.diagram) && typeof mod.diagram.groupBy === "string" ? mod.diagram.groupBy : null,
     goals: isRecord(mod.goals) ? Object.entries(mod.goals).filter((e): e is [string, InvariantFn] => typeof e[1] === "function") : [],

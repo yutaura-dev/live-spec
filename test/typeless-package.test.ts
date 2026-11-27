@@ -27,7 +27,7 @@ export function start(r: { status: string }) {
     const result = spawnSync(process.execPath, [CLI, join(dir, "specs", "run.spec.ts")], { cwd: dir, encoding: "utf8" });
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("# run");
+    expect(result.stdout).toContain("# Run");
     expect(result.stderr).not.toContain("MODULE_TYPELESS_PACKAGE_JSON");
   });
 });

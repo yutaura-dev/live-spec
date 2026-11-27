@@ -28,7 +28,7 @@ export interface ProjectOptions {
   readonly title: string;
 }
 
-export const renderHtml = (spec: Spec, graph: Graph): Promise<string> => renderProjectHtml([{ spec, graph }], { title: spec.name });
+export const renderHtml = (spec: Spec, graph: Graph): Promise<string> => renderProjectHtml([{ spec, graph }], { title: spec.displayName });
 
 // ドメインオブジェクトごとにページを分け、1 つの HTML にまとめる理由: 1 つの図に複数のオブジェクトの
 // 関心を詰め込むと、状態が組み合わせで増えて読めなくなる。オブジェクトごとのページなら図は小さく保てるうえ、
@@ -63,7 +63,7 @@ ${
     ? `<header class="site">
   <a class="site-title" href="#/">${esc(options.title)}</a>
   <nav class="tabs" aria-label="ドメインオブジェクト">${objects
-    .map((o) => `<a href="#/${encodeURIComponent(o.spec.name)}" data-tab="${esc(o.spec.name)}">${esc(o.spec.name)}</a>`)
+    .map((o) => `<a href="#/${encodeURIComponent(o.spec.name)}" data-tab="${esc(o.spec.name)}">${esc(o.spec.displayName)}</a>`)
     .join("")}</nav>
 </header>
 ${await overviewPage(objects, options, links)}`
@@ -85,7 +85,8 @@ const actionLabel = (objects: ReadonlyArray<DomainObject>, object: string, actio
   return doc === undefined ? action : `${doc.replace(/。$/, "")}（${action}）`;
 };
 
-const objectLink = (name: string) => `<a href="#/${encodeURIComponent(name)}">${esc(name)}</a>`;
+const objectLink = (objects: ReadonlyArray<DomainObject>, name: string) =>
+  `<a href="#/${encodeURIComponent(name)}">${esc(objects.find((o) => o.spec.name === name)?.spec.displayName ?? name)}</a>`;
 
 // つながりの図に状態遷移図と同じ layout を使う理由: 配置の仕組みを 2 つ持たずに済み、見た目もそろうため。
 const relationsSvg = async (objects: ReadonlyArray<DomainObject>, links: ReadonlyArray<ProjectLink>) => {
@@ -94,7 +95,7 @@ const relationsSvg = async (objects: ReadonlyArray<DomainObject>, links: Readonl
   if (known.length === 0) return "";
   const idOf = (name: string) => `o${names.indexOf(name)}`;
   const l = await layout({
-    states: names.map((name, i) => ({ id: idOf(name), label: name, values: {}, initial: i === 0, terminal: false })),
+    states: names.map((name, i) => ({ id: idOf(name), label: objects.find((o) => o.spec.name === name)?.spec.displayName ?? name, values: {}, initial: i === 0, terminal: false })),
     transitions: known.map((k) => ({ from: idOf(k.source), to: idOf(k.to), action: k.label, actors: [] })),
     availability: [],
     findings: [],
@@ -107,7 +108,7 @@ const relationsSvg = async (objects: ReadonlyArray<DomainObject>, links: Readonl
   const nodes = l.nodes
     .map(
       (n) =>
-        `<a href="#/${encodeURIComponent(n.label)}" class="rel-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></a>`,
+        `<a href="#/${encodeURIComponent(names[Number(n.id.slice(1))]!)}" class="rel-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></a>`,
     )
     .join("");
   return `<div class="diagram relations"><svg viewBox="0 0 ${l.width} ${l.height}" width="${l.width}" height="${l.height}" role="img" aria-label="ドメインオブジェクトのつながり">
@@ -126,7 +127,7 @@ const entityRelationsHtml = async (objects: ReadonlyArray<DomainObject>) => {
   const labelOf = (r: (typeof relations)[number]) =>
     `${r.fields.join(", ")}（${multiplicity(r.toMany)}）${r.back.length === 0 || r.fromMany === null ? "" : `／ ${r.back.join(", ")}（${multiplicity(r.fromMany)}）`}`;
   const l = await layout({
-    states: names.map((name, i) => ({ id: idOf(name), label: name, values: {}, initial: i === 0, terminal: false })),
+    states: names.map((name, i) => ({ id: idOf(name), label: objects.find((o) => o.spec.name === name)?.spec.displayName ?? name, values: {}, initial: i === 0, terminal: false })),
     transitions: relations.map((r) => ({ from: idOf(r.from), to: idOf(r.to), action: labelOf(r), actors: [] })),
     availability: [],
     findings: [],
@@ -137,7 +138,7 @@ const entityRelationsHtml = async (objects: ReadonlyArray<DomainObject>) => {
     scenarios: [],
   }, { mergePairs: false });
   const nodes = l.nodes
-    .map((n) => `<a href="#/${encodeURIComponent(n.label)}" class="rel-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></a>`)
+    .map((n) => `<a href="#/${encodeURIComponent(names[Number(n.id.slice(1))]!)}" class="rel-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></a>`)
     .join("");
   return `<section class="relations-section">
     <h2>関連</h2>${sectionLead("関連")}
@@ -161,7 +162,7 @@ const overviewPage = async (objects: ReadonlyArray<DomainObject>, options: Proje
     ${objects
       .map(
         ({ spec, graph }) => `<a class="card object-card" href="#/${encodeURIComponent(spec.name)}">
-      <h3>${esc(spec.name)}</h3>
+      <h3>${esc(spec.displayName)}</h3>
       ${spec.stateDoc === null ? "" : `<p class="object-doc">${esc(spec.stateDoc)}</p>`}
       <dl class="object-stats"><div><dt>状態</dt><dd>${graph.states.length}</dd></div><div><dt>操作</dt><dd>${spec.actions.length}</dd></div><div><dt>未決</dt><dd class="${graph.questions.length === 0 ? "" : "warn"}">${graph.questions.length}</dd></div><div><dt>検査</dt><dd class="${graph.findings.length === 0 ? "ok" : "warn"}">${graph.findings.length === 0 ? "OK" : graph.findings.length}</dd></div></dl>
     </a>`,
@@ -178,7 +179,7 @@ const overviewPage = async (objects: ReadonlyArray<DomainObject>, options: Proje
     <ul class="link-list">${links
       .map(
         (l) =>
-          `<li>${objectLink(l.source)}${l.from === null ? "" : ` の ${esc(actionLabel(objects, l.source, l.from))}`} → ${objectLink(l.to)}${l.action === null ? "" : ` の ${esc(actionLabel(objects, l.to, l.action))}`}<span class="sub">${esc(l.label)}</span></li>`,
+          `<li>${objectLink(objects, l.source)}${l.from === null ? "" : ` の ${esc(actionLabel(objects, l.source, l.from))}`} → ${objectLink(objects, l.to)}${l.action === null ? "" : ` の ${esc(actionLabel(objects, l.to, l.action))}`}<span class="sub">${esc(l.label)}</span></li>`,
       )
       .join("")}</ul>
   </section>`
@@ -202,12 +203,12 @@ const renderPage = async (
     <ul class="link-list">${outgoing
       .map(
         (l) =>
-          `<li>${l.from === null ? "" : `${esc(actionLabel(objects, spec.name, l.from))} `}→ ${objectLink(l.to)}${l.action === null ? "" : ` の ${esc(actionLabel(objects, l.to, l.action))}`}<span class="sub">${esc(l.label)}</span></li>`,
+          `<li>${l.from === null ? "" : `${esc(actionLabel(objects, spec.name, l.from))} `}→ ${objectLink(objects, l.to)}${l.action === null ? "" : ` の ${esc(actionLabel(objects, l.to, l.action))}`}<span class="sub">${esc(l.label)}</span></li>`,
       )
       .join("")}${incoming
       .map(
         (l) =>
-          `<li>${l.action === null ? "" : `${esc(actionLabel(objects, spec.name, l.action))} `}← ${objectLink(l.source)}${l.from === null ? "" : ` の ${esc(actionLabel(objects, l.source, l.from))}`}<span class="sub">${esc(l.label)}</span></li>`,
+          `<li>${l.action === null ? "" : `${esc(actionLabel(objects, spec.name, l.action))} `}← ${objectLink(objects, l.source)}${l.from === null ? "" : ` の ${esc(actionLabel(objects, l.source, l.from))}`}<span class="sub">${esc(l.label)}</span></li>`,
       )
       .join("")}</ul>
   </section>`;
@@ -294,7 +295,7 @@ const renderPage = async (
 <header class="top">
   <div>
     <p class="eyebrow">ドメインオブジェクト</p>
-    <h1>${esc(spec.name)}</h1>
+    <h1>${esc(spec.displayName)}</h1>
     ${spec.stateDoc === null ? "" : `<p class="lead">${esc(spec.stateDoc)}</p>`}
   </div>
   <dl class="stats">
@@ -353,7 +354,7 @@ const renderPage = async (
   <section class="actions">
     <h2>操作</h2>${sectionLead("操作")}
     <div class="cards">
-      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), (graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed, (e) => testsOf(graph, e))).join("\n      ")}
+      ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), (graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed, (e) => testsOf(graph, e), objects)).join("\n      ")}
     </div>
   </section>
   ${
@@ -586,6 +587,7 @@ const actionCard = (
   ensures: ReadonlyArray<EnsureCheck>,
   reviewed: Spec["reviewed"],
   testsFor: (e: EnsureCheck) => ReadonlyArray<string>,
+  objects: ReadonlyArray<DomainObject>,
 ) => {
   const others =
     a.othersReasons.length === 0 ? "" : `<span class="muted">ほかの人は「${a.othersReasons.map(esc).join("」「")}」</span>`;
@@ -614,7 +616,7 @@ const actionCard = (
           ${a.inputOutcomes.length === 0 ? "" : `<dt>入力ごとの結果</dt><dd><ul>${a.inputOutcomes.map((o) => `<li><span class="reason">${esc(o.input)}</span> ${o.transitions.length > 0 ? o.transitions.map((t) => `<span class="flow">${esc(formatTransition(t))}</span>`).join("") : `<span class="state">❌ ${esc(o.reasons.map(canOnlyWhen).join("、"))}</span>`}</li>`).join("")}</ul></dd>`}
           ${effect === "" ? "" : `<dt>結果</dt><dd>${esc(effect)}</dd>`}
           ${a.summary === null ? "" : `<dt>関数名</dt><dd><code>${esc(a.name)}</code></dd>`}
-          ${links.length === 0 ? "" : `<dt>つながり</dt><dd>${links.map((l) => `<span class="flow">→ ${objectLink(l.to)}${l.action === null ? "" : ` の ${esc(l.action)}`}</span>`).join("")}<span class="muted">${esc(links.map((l) => l.label).join(" / "))}</span></dd>`}
+          ${links.length === 0 ? "" : `<dt>つながり</dt><dd>${links.map((l) => `<span class="flow">→ ${objectLink(objects, l.to)}${l.action === null ? "" : ` の ${esc(l.action)}`}</span>`).join("")}<span class="muted">${esc(links.map((l) => l.label).join(" / "))}</span></dd>`}
           ${
             ensures.length === 0
               ? ""

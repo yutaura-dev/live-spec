@@ -54,9 +54,9 @@ describe("links: ドメインオブジェクトどうしのつながり", { time
     const out = await generateProject(project(valid), "markdown");
     const files = out.kind === "files" ? out.files : {};
 
-    expect(files["README.md"]).toContain("- [order](order.md) の 注文する（place） → [payment](payment.md) の 支払いを確定する（pay）: 注文したら支払いを確定する");
+    expect(files["README.md"]).toContain("- [Order](order.md) の 注文する（place） → [Payment](payment.md) の 支払いを確定する（pay）: 注文したら支払いを確定する");
     expect(files["order.md"]).toContain("## つながり");
-    expect(files["payment.md"]).toContain("[order](order.md) の 注文する（place）から: 注文したら支払いを確定する");
+    expect(files["payment.md"]).toContain("[Order](order.md) の 注文する（place）から: 注文したら支払いを確定する");
   });
 
   it("存在しないドメインオブジェクトや操作へのつながりを検出する", async () => {

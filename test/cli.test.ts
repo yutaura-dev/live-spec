@@ -149,8 +149,8 @@ describe("generateProject: 複数のドメインオブジェクトから仕様�
     expect(out.kind).toBe("files");
     if (out.kind !== "files") return;
     expect(Object.keys(out.files)).toEqual(["README.md", "order.md", "payment.md"]);
-    expect(out.files["README.md"]).toContain("[order](order.md)");
-    expect(out.files["order.md"]).toContain("# order");
+    expect(out.files["README.md"]).toContain("[Order](order.md)");
+    expect(out.files["order.md"]).toContain("# Order");
   });
 
   it("HTML は、すべてのドメインオブジェクトを 1 つのファイルにまとめる", async () => {
@@ -187,7 +187,7 @@ describe("generateProject: 複数のドメインオブジェクトから仕様�
   it("spec が 1 つなら、これまでどおり 1 つのテキストにする", async () => {
     const out = await generateProject(project().slice(0, 1), "markdown");
 
-    expect(out.kind === "text" && out.content.startsWith("# order")).toBe(true);
+    expect(out.kind === "text" && out.content.startsWith("# Order")).toBe(true);
   });
 
   it("複数の Markdown を --out なしで出そうとしたら、ディレクトリを指定するよう案内する", async () => {
@@ -205,7 +205,7 @@ describe("generateProject: 複数のドメインオブジェクトから仕様�
     const code = await runCli([...project(), "--out", dir], { stdout: () => {}, stderr: () => {} });
 
     expect(code).toBe(0);
-    expect(readFileSync(join(dir, "payment.md"), "utf8")).toContain("# payment");
+    expect(readFileSync(join(dir, "payment.md"), "utf8")).toContain("# Payment");
   });
 });
 

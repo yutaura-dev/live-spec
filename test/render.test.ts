@@ -16,7 +16,7 @@ const section = (action: string) =>
 
 describe("renderMarkdown: 見出し", () => {
   it("状態の型の JSDoc を、仕様書の冒頭の説明にする", () => {
-    expect(doc).toContain("# article\n\nブログ記事");
+    expect(doc).toContain("# Article\n\nブログ記事");
   });
 
   it("操作の見出しは JSDoc の説明文にし、関数名は「関数名」の欄に出す", () => {
