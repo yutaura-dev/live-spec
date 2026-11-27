@@ -86,4 +86,17 @@ describe("プロパティの表の不具合", { timeout: 60_000 }, () => {
 
     expect(md).toContain("| noteId | `string` | 元になったメモ | 参照（note） |");
   });
+
+  it("@ref に書いた文字は、HTML ではエスケープし、Markdown では表の区切りを崩さない", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "live-spec-table-"));
+    writeFileSync(join(dir, "item.spec.ts"), SOURCE.replace("@ref note", "@ref <img|src=x>"));
+    const { spec, graph } = await loadObject(join(dir, "item.spec.ts"));
+
+    const html = await renderHtml(spec, graph);
+    const md = renderMarkdown(spec, graph);
+
+    expect(html).not.toContain("<img|src=x>");
+    expect(html).toContain("参照（&lt;img|src=x&gt;）");
+    expect(md).toContain("| 参照（<img\\|src=x>） |");
+  });
 });

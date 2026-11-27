@@ -263,7 +263,7 @@ const propertiesSection = (spec: Spec, targetOf: (name: string) => string | null
     "| 項目 | 型 | 説明 | 扱い |",
     "|---|---|---|---|",
     ...rows.map(
-      (r) => `| ${"　".repeat(r.depth)}${r.row === "value" ? code(r.field) : r.field} | ${r.type === "" ? "" : code(r.type)} | ${r.doc} | ${r.kind} |`,
+      (r) => `| ${"　".repeat(r.depth)}${r.row === "value" ? code(r.field) : r.field} | ${r.type === "" ? "" : code(r.type)} | ${r.doc.replace(/\|/g, "\\|")} | ${r.kind.replace(/\|/g, "\\|")} |`,
     ),
     "",
   ];

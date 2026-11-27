@@ -445,7 +445,7 @@ const propertiesHtml = (spec: Spec, targetOf: (name: string) => string | null) =
   return `<section class="properties"><h2>プロパティ</h2>${sectionLead("プロパティ")}<table class="decision props"><thead><tr><th>項目</th><th>型</th><th>説明</th><th>扱い</th></tr></thead><tbody>${rows
     .map((r) => {
       const name = r.row === "value" ? `<span class="value">${esc(r.field)}</span>` : r.row === "variant" ? esc(r.field) : `<code>${esc(r.field)}</code>`;
-      return `<tr class="depth-${r.depth}${r.row === "field" ? "" : ` ${r.row === "variant" ? "case" : "value-row"}`}${r.kind === "データ" ? " data" : ""}"><td style="padding-left:${14 + r.depth * 18}px">${name}</td><td>${r.type === "" ? "" : `<code>${esc(r.type)}</code>`}</td><td>${esc(r.doc)}</td><td>${r.kind}</td></tr>`;
+      return `<tr class="depth-${r.depth}${r.row === "field" ? "" : ` ${r.row === "variant" ? "case" : "value-row"}`}${r.kind === "データ" ? " data" : ""}"><td style="padding-left:${14 + r.depth * 18}px">${name}</td><td>${r.type === "" ? "" : `<code>${esc(r.type)}</code>`}</td><td>${esc(r.doc)}</td><td>${esc(r.kind)}</td></tr>`;
     })
     .join("")}</tbody></table></section>`;
 };
