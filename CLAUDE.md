@@ -87,4 +87,4 @@ spec の概念は DDD の語彙に対応づけている（[ADR-0006](docs/decisi
 - 実装は TypeScript + Effect。正本のモデルは `effect/Schema` で定義し、型・検証・JSON Schema をそこから導く（[ADR-0003](docs/decisions/0003-adopt-effect-ts.md)）
 - 正本は TypeScript DSL で書き、評価した正規化モデルを正とする（[ADR-0004](docs/decisions/0004-spec-format-typescript-dsl.md)）
 - 仕様は素の TS の型と関数で書き、状態遷移は実行して計算する（[ADR-0005](docs/decisions/0005-domain-object-centric-model.md)）
-- spec の概念を DDD の語彙で定義し、作る操作と遷移の不変条件で集約のライフサイクルを書けるようにする（[ADR-0006](docs/decisions/0006-ddd-vocabulary.md)、Proposed）
+- spec の概念を DDD の語彙で定義し、作る操作と遷移の不変条件で集約のライフサイクルを書けるようにする（[ADR-0006](docs/decisions/0006-ddd-vocabulary.md)）

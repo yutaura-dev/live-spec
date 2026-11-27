@@ -1,6 +1,6 @@
 # ADR-0006: spec の概念を DDD の語彙で定義し、集約のライフサイクルを書けるようにする
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-11-28
 - **Deciders**: YutaUra
 

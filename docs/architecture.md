@@ -54,7 +54,7 @@
 - [ADR-0003: 実装スタックに Effect（TypeScript）を採用する](decisions/0003-adopt-effect-ts.md)
 - [ADR-0004: 仕様の正本を TypeScript DSL で書く](decisions/0004-spec-format-typescript-dsl.md)
 - [ADR-0005: 仕様は素の TypeScript の型と関数で書き、状態遷移は実行して計算する](decisions/0005-domain-object-centric-model.md)
-- [ADR-0006: spec の概念を DDD の語彙で定義し、集約のライフサイクルを書けるようにする](decisions/0006-ddd-vocabulary.md)（Proposed）
+- [ADR-0006: spec の概念を DDD の語彙で定義し、集約のライフサイクルを書けるようにする](decisions/0006-ddd-vocabulary.md)
 
 ### 設計で押さえるポイント（調査から）
 
