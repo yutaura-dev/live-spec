@@ -218,7 +218,7 @@ const deadEnds = (spec: Spec, graph: Graph): Array<OmissionHint> => {
     }
   }
   // 遷移の一覧ではなく入力ごとの可否からたどる理由: 同じ操作でも入力の例によって行き先が違うことがあり、
-  // 手順に入力の例の名前が無いと、そのままシナリオに起こしたときに別の状態へ行ってしまう。
+  // 手順に入力の例の名前がないと、そのままシナリオに起こしたときに別の状態へ行ってしまう。
   const steps = graph.availability.filter((r) => r.enabled && r.to !== null && r.to !== r.state);
   const parent = new Map<string, { from: string; step: string }>();
   const queue = graph.states.filter((s) => s.initial).map((s) => s.id);

@@ -650,7 +650,7 @@ const actionCard = (
                     // 確かめるもののない条件だけ開いて見せ、ほかは畳む。全部開くと、カードが検査の説明で埋まるため。
                     const body = p.warn
                       ? `⚠ ${esc(p.head)}。${esc(p.effect)}`
-                      : `${esc(p.head)}。<details class="ensure-effect"><summary>この条件が無いと</summary>${esc(p.effect)}</details>`;
+                      : `${esc(p.head)}。<details class="ensure-effect"><summary>この条件がないと</summary>${esc(p.effect)}</details>`;
                     const tests = testsFor(e);
                     return `<li class="ensure ${e.verdict}${acknowledged ? " acknowledged" : ""}">${body}${tests.length === 0 ? "" : `<span class="ensure-tests">テスト: ${tests.map((t) => `<span class="test-loc" title="${esc(t)}">${esc(t.split("/").pop()!)}</span>`).join("、")}</span>`}</li>`;
                   })
@@ -949,7 +949,7 @@ const CLIENT = `
   function setMode(mode) {
     var board = current && current.el.querySelector(".board");
     if (!board) return;
-    // 図を切り替えたら強調とパネルを外す。要約の図の線は詳細の図には無いので、残すとすべてが薄く描かれるため。
+    // 図を切り替えたら強調とパネルを外す。要約の図の線は詳細の図にはないので、残すとすべてが薄く描かれるため。
     reset();
     board.dataset.mode = mode;
     within(".modes button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.mode === mode)); });

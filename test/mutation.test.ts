@@ -96,9 +96,9 @@ describe("ensure のミューテーション: 1 つずつ外して探索し直�
     const md = renderMarkdown(spec, graph);
 
     expect(md).toContain("- **条件**:");
-    expect(md).toContain("⚠ 「編集者だけ」— 通るのは 編集者eve のとき。この条件が無いと、著者alice が");
+    expect(md).toContain("⚠ 「編集者だけ」— 通るのは 編集者eve のとき。この条件がないと、著者alice が");
     expect(md).toContain("。それを確かめている不変条件・シナリオ・画面がない");
-    expect(md).toContain("「承認済みのときだけ」— 通るのは approved が true のとき。この条件が無いと、");
+    expect(md).toContain("「承認済みのときだけ」— 通るのは approved が true のとき。この条件がないと、");
     expect(md).toContain("（不変条件「公開した文書は承認済み」で確かめている）");
     expect(md).toContain("この条件が無くても振る舞いは変わらない（ほかの条件と重なっている）");
     expect(md).not.toContain("外すと");
@@ -113,12 +113,12 @@ describe("ensure のミューテーション: 1 つずつ外して探索し直�
     expect(html).toContain('class="ensure unguarded"');
   });
 
-  it("HTML では、確かめられている条件の「無いと起きること」を畳み、確かめるもののない条件だけ開いて見せる", async () => {
+  it("HTML では、確かめられている条件の「ないと起きること」を畳み、確かめるもののない条件だけ開いて見せる", async () => {
     const { spec, graph } = await object;
 
     const html = await renderHtml(spec, graph);
 
-    expect(html).toMatch(/<li class="ensure caught">「承認済みのときだけ」— 通るのは approved が true のとき。<details class="ensure-effect"><summary>この条件が無いと<\/summary>/);
-    expect(html).toMatch(/<li class="ensure unguarded">⚠ 「編集者だけ」— 通るのは 編集者eve のとき。この条件が無いと、/);
+    expect(html).toMatch(/<li class="ensure caught">「承認済みのときだけ」— 通るのは approved が true のとき。<details class="ensure-effect"><summary>この条件がないと<\/summary>/);
+    expect(html).toMatch(/<li class="ensure unguarded">⚠ 「編集者だけ」— 通るのは 編集者eve のとき。この条件がないと、/);
   });
 });

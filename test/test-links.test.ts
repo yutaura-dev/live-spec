@@ -79,16 +79,16 @@ describe("specOf: テストの名前を spec の項目から作る", () => {
     expect(specOf(complete, "作った人だけ")).toBe("complete「作った人だけ」");
   });
 
-  it("操作の関数に無い理由を渡すと、テストを定義する時点で失敗する", () => {
-    expect(() => specOf(complete, "編集者だけ")).toThrow("complete に「編集者だけ」という条件が無い");
+  it("操作の関数にない理由を渡すと、テストを定義する時点で失敗する", () => {
+    expect(() => specOf(complete, "編集者だけ")).toThrow("complete に「編集者だけ」という条件がない");
   });
 
-  it("spec のモジュールとシナリオ・不変条件の名前から、テストの名前を作り、無い名前なら失敗する", () => {
+  it("spec のモジュールとシナリオ・不変条件の名前から、テストの名前を作り、存在しない名前なら失敗する", () => {
     const mod = { scenarios: { 完了して取り消す: [] }, invariants: { 持ち主は変わらない: () => true } };
 
     expect(specOf(mod, { scenario: "完了して取り消す" })).toBe("シナリオ「完了して取り消す」");
     expect(specOf(mod, { invariant: "持ち主は変わらない" })).toBe("不変条件「持ち主は変わらない」");
-    expect(() => specOf(mod, { scenario: "無い" })).toThrow("シナリオ「無い」が無い");
+    expect(() => specOf(mod, { scenario: "無い" })).toThrow("シナリオ「無い」がない");
   });
 });
 
@@ -101,7 +101,7 @@ describe("テストと spec の項目を結ぶ", { timeout: 60_000 }, () => {
     expect(graph.tests).toContainEqual(expect.objectContaining({ target: "scenario:完了して取り消す", line: 11 }));
   });
 
-  it("spec に無い項目を指すテストは、検査結果に出す", async () => {
+  it("spec にない項目を指すテストは、検査結果に出す", async () => {
     const { graph } = await linked();
 
     expect(graph.findings).toContainEqual(expect.objectContaining({ kind: "test-link-unknown", target: "ensure:reopen:存在しない理由", line: 10 }));
@@ -135,7 +135,7 @@ describe("テストと spec の項目を結ぶ", { timeout: 60_000 }, () => {
     expect(md).toMatch(/「作った人だけ」— 通るのは [^\n]*（テスト: [^\n]*tests\/todo\.test\.ts:7）/);
   });
 
-  it("live-spec check --tests は、テストのない条件と spec に無い項目を指すテストがあれば 1 で終わる", async () => {
+  it("live-spec check --tests は、テストのない条件と spec にない項目を指すテストがあれば 1 で終わる", async () => {
     const p = project();
     const out: Array<string> = [];
 
@@ -143,7 +143,7 @@ describe("テストと spec の項目を結ぶ", { timeout: 60_000 }, () => {
 
     expect(code).toBe(1);
     expect(out.join("")).toContain("untested:reopen:作った人だけ");
-    expect(out.join("")).toContain("spec に無い項目を指している");
+    expect(out.join("")).toContain("spec にない項目を指している");
   });
 
   it("HTML の条件にも、確かめているテストの場所を添える", async () => {

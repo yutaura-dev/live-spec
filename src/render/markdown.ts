@@ -144,7 +144,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
   ].join("\n");
 };
 
-// 検査結果が無いときも、判断待ちや確かめてほしい点が残っていれば添える。「問題は見つかりませんでした」だけだと、
+// 検査結果がないときも、判断待ちや確かめてほしい点が残っていれば添える。「問題は見つかりませんでした」だけだと、
 // 上に挙げた点が解消済みなのかと迷わせるため。
 const mermaidSource = (graph: Graph, id: string) =>
   `any${[...new Set(collapseTransitions(graph).map((t) => t.from).filter(isCollapsed))].indexOf(id)}`;
@@ -386,11 +386,11 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
     case "decision-error":
       return `ルール「${f.decision}」の ${f.row} 行目で例外を投げた: ${f.message}`;
     case "test-link-unknown":
-      return `テスト ${f.file}:${f.line} が、spec に無い項目を指している（${f.target}）。spec を先に変えたなら、テストと実装をそれに合わせる`;
+      return `テスト ${f.file}:${f.line} が、spec にない項目を指している（${f.target}）。spec を先に変えたなら、テストと実装をそれに合わせる`;
     case "ref-unresolved":
-      return `項目 ${f.field} の @ref で指した ${f.target} という spec（または状態の型）が無い`;
+      return `項目 ${f.field} の @ref で指した ${f.target} という spec（または状態の型）がない`;
     case "question-scenario-unknown":
-      return `未決事項「${f.ask}」が指すシナリオ「${f.scenario}」が無い`;
+      return `未決事項「${f.ask}」が指すシナリオ「${f.scenario}」がない`;
     case "question-unmatched":
       return `未決事項「${f.ask}」の対象の状態が、到達できるどの状態にも当てはまらない`;
     case "scenario-failed":

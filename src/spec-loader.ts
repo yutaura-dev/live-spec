@@ -11,7 +11,7 @@ export const isSpecModuleUrl = (url: string): boolean => {
 let registered = false;
 
 // spec を TypeScript の ES module として読むよう Node に伝える。
-// 伝えないと、package.json に "type": "module" が無いプロジェクト（pnpm workspace のルートなど）では、
+// 伝えないと、package.json に "type": "module" がないプロジェクト（pnpm workspace のルートなど）では、
 // Node が CommonJS として読もうとして失敗し、spec ごとに MODULE_TYPELESS_PACKAGE_JSON の警告を出す。
 // 利用者に package.json を足してもらう回避策にしない理由: ルートに "type" を足すと、既存の CommonJS の設定ファイルを壊しうる。
 export const registerSpecLoader = (): void => {
