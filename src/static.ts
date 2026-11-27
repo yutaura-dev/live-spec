@@ -309,6 +309,32 @@ const readFieldNames = (body: ReadonlyArray<t.Statement>): Set<string> => {
     if (n.type === "ObjectPattern") {
       for (const p of n.properties) if (p.type === "ObjectProperty" && p.key.type === "Identifier") names.add(p.key.name);
     }
+    // history: [...item.history, 出来事] のように、同じ項目へ写すためだけに読むのは、条件で読むことにしない。
+    // 書き足すだけの履歴が「条件で読む項目」になると、データとして扱われず、要素の数だけ状態が増えるため。
+    if (n.type === "ObjectProperty" && !n.computed && n.key.type === "Identifier") {
+      const key = n.key.name;
+      const copied = (e: t.Node): t.Node | null =>
+        (e.type === "MemberExpression" || e.type === "OptionalMemberExpression") && !e.computed && e.property.type === "Identifier" && e.property.name === key
+          ? e.object
+          : null;
+      const v = n.value;
+      const self = copied(v);
+      if (self !== null) return visit(self);
+      if (v.type === "ArrayExpression") {
+        for (const el of v.elements) {
+          const spread = el?.type === "SpreadElement" ? copied(el.argument) : null;
+          visit(spread ?? el);
+        }
+        return;
+      }
+      if (v.type === "ObjectExpression") {
+        for (const p of v.properties) {
+          const spread = p.type === "SpreadElement" ? copied(p.argument) : null;
+          visit(spread ?? p);
+        }
+        return;
+      }
+    }
     for (const [key, value] of Object.entries(n)) if (key !== "loc" && key !== "leadingComments" && key !== "trailingComments" && typeof value === "object") visit(value);
   };
   for (const node of body) {
