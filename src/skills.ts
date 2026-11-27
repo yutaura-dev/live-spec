@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 // このリポジトリで直接動かすときは原本の .claude/skills から読む。src/ からも dist/ からも 1 つ上がルート。
 const candidates = ["../skills/", "../.claude/skills/"].map((p) => fileURLToPath(new URL(p, import.meta.url)));
 const SKILLS_DIR = candidates.find((dir) => existsSync(dir)) ?? candidates[1]!;
+/** 同梱している skill の置き場所 */
+export const skillsDir = SKILLS_DIR;
 
 export const bundledSkills = (): Array<string> =>
   readdirSync(SKILLS_DIR, { withFileTypes: true })
@@ -15,13 +17,16 @@ export const bundledSkills = (): Array<string> =>
 
 export interface InstallResult {
   readonly name: string;
-  readonly status: "installed" | "updated" | "skipped";
+  readonly status: "installed" | "updated" | "skipped" | "linked";
 }
 
 export const installSkills = (targetDir: string, options: { readonly force?: boolean } = {}): Array<InstallResult> =>
   bundledSkills().map((name) => {
     const dest = join(targetDir, name, "SKILL.md");
     const exists = existsSync(dest);
+    // pnpm の permissions などで、置き場所がパッケージの中の skill への symlink になっていることがある。そのときは
+    // コピー元とコピー先が同じファイルで、コピーすると失敗する。パッケージを上げれば skill も上がるので、何もしない。
+    if (exists && realpathSync(dest) === realpathSync(join(SKILLS_DIR, name, "SKILL.md"))) return { name, status: "linked" };
     if (exists && options.force !== true) return { name, status: "skipped" };
     mkdirSync(join(targetDir, name), { recursive: true });
     cpSync(join(SKILLS_DIR, name, "SKILL.md"), dest);

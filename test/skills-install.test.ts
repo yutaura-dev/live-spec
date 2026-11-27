@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli } from "../src/cli.ts";
-import { bundledSkills, installSkills } from "../src/skills.ts";
+import { bundledSkills, installSkills, skillsDir } from "../src/skills.ts";
 
 describe("skills: 同梱した skill を対象のリポジトリに入れる", () => {
   it("同梱している skill の一覧を返す", () => {
@@ -48,5 +48,15 @@ describe("skills: 同梱した skill を対象のリポジトリに入れる", (
 
     expect(code).toBe(0);
     expect(out.join("")).toContain("live-spec-from-code");
+  });
+
+  it("skill がパッケージの中の skill への symlink なら（pnpm の permissions で入れたとき）、--force でもコピーせずに飛ばす", () => {
+    const dir = mkdtempSync(join(tmpdir(), "live-spec-skills-"));
+    symlinkSync(join(skillsDir, "live-spec-authoring"), join(dir, "live-spec-authoring"), "dir");
+
+    const result = installSkills(dir, { force: true });
+
+    expect(result.find((r) => r.name === "live-spec-authoring")!.status).toBe("linked");
+    expect(result.find((r) => r.name === "live-spec-review")!.status).toBe("installed");
   });
 });

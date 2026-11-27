@@ -224,7 +224,9 @@ const runSkills = (argv: ReadonlyArray<string>, io: CliIo): number => {
     return 2;
   }
   const dir = parsed.values.dir ?? ".claude/skills";
-  const label = { installed: "入れました", updated: "上書きしました", skipped: "すでにあるので飛ばしました（--force で上書き）" };
+  const label = { installed: "入れました", updated: "上書きしました", skipped: "すでにあるので飛ばしました（--force で上書き）",
+    linked: "パッケージの中の skill を指しているので、そのままにしました（パッケージを上げれば skill も上がります）",
+  };
   for (const r of installSkills(dir, { force: parsed.values.force ?? false })) io.stdout(`${r.name}: ${label[r.status]}\n`);
   io.stdout(`${dir} に live-spec の skill を置きました。Claude Code を起動し直すと使えます。\n`);
   return 0;
