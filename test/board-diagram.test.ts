@@ -1,10 +1,12 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Script } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { loadObject } from "../src/generate.ts";
-import { collapseTransitions, isCollapsed, sourceLabel, sourceTitle } from "../src/render/collapse.ts";
+import { collapseTransitions, isCollapsed } from "../src/render/collapse.ts";
 import { renderHtml } from "../src/render/html.ts";
+import { layout } from "../src/render/layout.ts";
 
 const INDEX = new URL("../src/index.ts", import.meta.url).pathname;
 
@@ -43,31 +45,48 @@ const load = async (extra = "") => {
 };
 
 describe("列をどこへでも移せる操作の図と、振る舞いの同じ状態", { timeout: 60_000 }, () => {
-  it("出どころの組み合わせが同じ線は、行き先が違っても 1 つの「N つの状態から」にまとめる", async () => {
+  it("一部の状態からだけ出る線は「N つの状態から」にまとめず、どこから来るのかが分かるように描く", async () => {
     const { graph } = await load();
 
     const moves = collapseTransitions(graph).filter((t) => t.action === "move");
 
-    expect(moves.length).toBe(4);
-    expect(new Set(moves.map((t) => t.from)).size).toBe(1);
-    expect(isCollapsed(moves[0]!.from)).toBe(true);
+    expect(moves.every((t) => !isCollapsed(t.from))).toBe(true);
   });
 
-  it("まとめた線の出どころの箱には、状態の名前を書き、除いた状態のほうが少なければ「〜以外から」と書く", async () => {
+  it("状態の組ごとに線を 1 本にし、行き来できる組は両端矢印、一方通行の組は片側矢印にする", async () => {
     const { graph } = await load();
+    const label = (id: string) => graph.states.find((s) => s.id === id)!.label;
 
-    const from = collapseTransitions(graph).find((t) => t.action === "move")!.from;
+    const l = await layout(graph);
+    const between = (a: string, b: string) =>
+      l.edges.filter((e) => [label(e.from), label(e.to)].sort().join("|") === [a, b].sort().join("|"));
 
-    expect(sourceLabel(graph, from)).toBe("処理中・アーカイブ 以外から");
-    expect(sourceTitle(graph, from)).toBe("要確認・todo・進行中・完了 から");
+    expect(between("要確認", "todo")).toHaveLength(1);
+    expect(between("要確認", "todo")[0]!.bidirectional).toBe(true);
+    expect(between("完了", "処理中")).toHaveLength(1);
+    expect(between("完了", "処理中")[0]!.bidirectional).toBe(false);
   });
 
-  it("まとめた線の出どころの箱にカーソルを合わせると、出どころの状態の一覧が出る", async () => {
+  it("線をクリックしたときのために、線に向きごとの操作の一覧を持たせ、両端矢印は始点にも矢じりを付ける", async () => {
     const { spec, graph } = await load();
 
     const html = await renderHtml(spec, graph);
 
-    expect(html).toMatch(/<g class="any-node"><title>要確認・todo・進行中・完了 から<\/title>/);
+    const edge = html.match(/<g class="edge" data-action="move" data-actions="move" [^>]*data-bidir="true"[^>]*>\s*<path [^>]*>/)![0];
+
+    expect(edge).toContain("要確認 → todo");
+    expect(edge).toContain("todo → 要確認");
+    expect(edge).toContain("marker-start=");
+  });
+
+  it("生成した HTML のスクリプトは、構文として正しい", async () => {
+    const { spec, graph } = await load();
+
+    const html = await renderHtml(spec, graph);
+    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const s of scripts) expect(() => new Script(s)).not.toThrow();
   });
 
   it("どの操作・登場人物・入力でも、できる／できないと行き先が同じ状態を「確かめてほしい点」に出す", async () => {

@@ -61,7 +61,8 @@ const objectSection = async (o: ObjectDiff, index: number) => {
       questions: [],
       scenarios: [],
     },
-    { collapse: false },
+    // 状態の組ごとにもまとめない。増えた・消えた・変わった線を 1 本ずつ色分けして見せるため。
+    { collapse: false, mergePairs: false },
   );
   const statusOfNode = new Map(nodes.map((n) => [n.id, n.status]));
   const marker = `arrow-diff-${index}`;

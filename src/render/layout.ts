@@ -26,6 +26,12 @@ export interface LaidOutEdge {
   readonly action: string;
   /** この線の操作を実行できる登場人物 */
   readonly actors: ReadonlyArray<string>;
+  /** この線に載っている操作（状態の組ごとに 1 本にまとめたとき、複数になる） */
+  readonly actions: ReadonlyArray<string>;
+  /** 両方向の操作が載っている（両端矢印で描く） */
+  readonly bidirectional: boolean;
+  /** 線をクリックしたときに出す、向きごとの操作の一覧 */
+  readonly ops: ReadonlyArray<{ readonly from: string; readonly to: string; readonly action: string; readonly title: string; readonly actors: ReadonlyArray<string> }>;
   /** 矢印のラベルに出す文 */
   readonly text: string;
   readonly points: ReadonlyArray<Point>;
@@ -86,6 +92,8 @@ export interface LayoutOptions {
   /** 矢印のラベルに出す操作の名前。既定は関数名 */
   readonly actionLabel?: (action: string) => string;
   /** 状態を入れ子の枠に入れるとき、状態の id から属する枠と短い名前を返す */
+  /** false にすると、状態の組ごとに線をまとめない（差分の図のように、線ごとに意味が違うとき） */
+  readonly mergePairs?: boolean;
   readonly groupOf?: ((id: string) => { readonly key: string; readonly label: string; readonly short: string } | null) | null;
 }
 
@@ -122,6 +130,20 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
     // 初期状態と同じ最初の層に置くことになり、ELK が層の中の辺を扱えずに落ちるため。
     ...(s.initial && boxOf(s.id) === undefined ? { layoutOptions: { "elk.layered.layering.layerConstraint": "FIRST" } } : {}),
   });
+  // 状態の組ごとに線を 1 本にまとめる理由: 図で伝えたいのは状態どうしのつながりの全体像で、線 1 本が操作 1 つである必要はない。
+  // 操作ごとに描くと、どこへでも移せる操作で線が状態の数の 2 乗に増えて図が埋まる。向きは両端矢印か片側矢印で示し、
+  // 載っている操作の一覧は、線をクリックしたときに出す。
+  const titleOf = (id: string) => nodeList.find((n) => n.id === id)?.title ?? id;
+  const lines: Array<{ from: string; to: string; ops: Array<(typeof transitions)[number]> }> = [];
+  for (const t of transitions) {
+    const line = options.mergePairs === false ? undefined : lines.find((l) => (l.from === t.from && l.to === t.to) || (l.from === t.to && l.to === t.from));
+    if (line === undefined) lines.push({ from: t.from, to: t.to, ops: [t] });
+    else line.ops.push(t);
+  }
+  const textOf = (ops: ReadonlyArray<{ readonly action: string }>) => {
+    const actions = [...new Set(ops.map((o) => o.action))];
+    return actions.length === 1 ? labelOf(actions[0]!) : `${labelOf(actions[0]!)} ほか ${actions.length - 1}`;
+  };
   const input: ElkNode = {
     id: "root",
     layoutOptions: {
@@ -136,11 +158,11 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
         children: nodeList.filter((s) => b.ids.includes(s.id)).map(elkNode),
       })),
     ],
-    edges: transitions.map((t, i) => ({
+    edges: lines.map((t, i) => ({
       id: `e${i}`,
       sources: [t.from],
       targets: [t.to],
-      labels: [{ text: labelOf(t.action), width: textWidth(labelOf(t.action), 6.6) + 8, height: LABEL_HEIGHT }],
+      labels: [{ text: textOf(t.ops), width: textWidth(textOf(t.ops), 6.6) + 8, height: LABEL_HEIGHT }],
     })),
   };
   const result = await elk.layout(input);
@@ -154,16 +176,19 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
     const n = flat.find((c) => c.id === b.id)!;
     return { label: group(b.ids[0]!)!.label, key, x: n.x!, y: n.y!, width: n.width!, height: n.height! };
   });
-  const edges = transitions.map((t, i) => {
+  const edges = lines.map((t, i) => {
     const e = result.edges!.find((x) => x.id === `e${i}`)!;
     const section = e.sections![0]!;
     const label = e.labels![0]!;
     return {
       from: t.from,
       to: t.to,
-      action: t.action,
-      actors: t.actors,
-      text: labelOf(t.action),
+      action: t.ops[0]!.action,
+      actions: [...new Set(t.ops.map((o) => o.action))],
+      bidirectional: t.ops.some((o) => o.from === t.to),
+      ops: t.ops.map((o) => ({ from: titleOf(o.from), to: titleOf(o.to), action: o.action, title: labelOf(o.action), actors: o.actors })),
+      actors: [...new Set(t.ops.flatMap((o) => o.actors))],
+      text: textOf(t.ops),
       points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(({ x, y }) => ({ x, y })),
       label: { x: label.x!, y: label.y!, width: label.width!, height: label.height! },
     };

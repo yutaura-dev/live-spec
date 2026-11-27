@@ -56,13 +56,13 @@ describe("状態遷移図の見せ方", { timeout: 60_000 }, () => {
     expect(html).toContain('<button type="button" data-mode="summary" aria-pressed="true">要約</button><button type="button" data-mode="states" aria-pressed="false">詳細</button>');
   });
 
-  it("要約の図では、同じ箱の間の同じ操作の線を 1 本にし、箱の中で閉じる線は描かない", async () => {
+  it("要約の図では、同じ箱の組の間の線を 1 本にし、ラベルは先頭の操作とほかの数にする", async () => {
     const { spec, graph } = await load();
 
     const svg = summarySvg(await renderHtml(spec, graph));
 
-    expect(count(svg, 'data-action="start"')).toBe(1);
-    expect(count(svg, 'data-action="fail"')).toBe(1);
+    expect(count(svg, 'data-actions="start fail"')).toBe(1);
+    expect(svg).toContain(">始める ほか 1</text>");
   });
 
   it("spec の diagram.groupBy で、まとめる項目を選べる", async () => {

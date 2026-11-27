@@ -102,7 +102,7 @@ const relationsSvg = async (objects: ReadonlyArray<DomainObject>, links: Readonl
     links: [],
     questions: [],
     scenarios: [],
-  });
+  }, { mergePairs: false });
   const nodes = l.nodes
     .map(
       (n) =>
@@ -134,7 +134,7 @@ const entityRelationsHtml = async (objects: ReadonlyArray<DomainObject>) => {
     links: [],
     questions: [],
     scenarios: [],
-  });
+  }, { mergePairs: false });
   const nodes = l.nodes
     .map((n) => `<a href="#/${encodeURIComponent(n.label)}" class="rel-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></a>`)
     .join("");
@@ -522,10 +522,19 @@ const wireflowNodeSvg = (
   return `${f.initial ? startMarker(n, n.y + n.height / 2, markerId) : ""}<g class="${nodeClass(f, "wf-node")}" data-state="${esc(n.id)}" tabindex="0" role="button" aria-label="状態 ${esc(n.label)}"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/>${f.terminal ? terminalRect(n) : ""}<text class="wf-node-label" x="${n.x + 12}" y="${n.y + 16}">${esc(n.label)}</text><foreignObject x="${n.x + 8}" y="${n.y + 30}" width="${inner}" height="${n.height - 38}"><div class="thumb-frame">${thumbHtml}</div></foreignObject></g>`;
 };
 
+const opsByDirection = (e: LaidOutEdge) => {
+  const dirs = new Map<string, Array<{ action: string; title: string; actors: ReadonlyArray<string> }>>();
+  for (const o of e.ops) {
+    const key = `${o.from} → ${o.to}`;
+    dirs.set(key, [...(dirs.get(key) ?? []), { action: o.action, title: o.title, actors: o.actors }]);
+  }
+  return [...dirs].map(([dir, items]) => ({ dir, items }));
+};
+
 const edgeSvg = (e: LaidOutEdge, markerId: string) => {
   const d = e.points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
   const lb = e.label;
-  return `<g class="edge" data-action="${esc(e.action)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}" data-actors="${esc(e.actors.join("|"))}"><path d="${d}" marker-end="url(#${markerId})"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.text)}</text></g></g>`;
+  return `<g class="edge" data-action="${esc(e.action)}" data-actions="${esc(e.actions.join(" "))}" data-from="${esc(e.from)}" data-to="${esc(e.to)}" data-actors="${esc(e.actors.join("|"))}"${e.bidirectional ? ' data-bidir="true"' : ""} data-ops="${esc(JSON.stringify(opsByDirection(e)))}"><path d="${d}"${e.bidirectional ? ` marker-start="url(#${markerId})"` : ""} marker-end="url(#${markerId})"/><g class="edge-label"><rect x="${lb.x}" y="${lb.y}" width="${lb.width}" height="${lb.height}" rx="4"/><text x="${lb.x + lb.width / 2}" y="${lb.y + lb.height / 2}">${esc(e.text)}</text></g></g>`;
 };
 
 // 確かめてほしい点の文は Markdown と共通なので、バッククォートで囲んだ部分を HTML ではコードとして出す。
@@ -837,6 +846,10 @@ const CLIENT = `
       e.classList.add("is-active"); undim(e);
       nodes(e.dataset.to).forEach(undim);
     });
+    within(".edge[data-bidir]" + attr("data-to", id)).forEach(function (e) {
+      e.classList.add("is-active"); undim(e);
+      nodes(e.dataset.from).forEach(undim);
+    });
 
     panel.replaceChildren();
     panel.hidden = false;
@@ -874,7 +887,8 @@ const CLIENT = `
 
   function selectAction(name) {
     reset(); dimAll();
-    within(".edge" + attr("data-action", name)).forEach(function (e) {
+    within(".edge").forEach(function (e) {
+      if ((e.dataset.actions || "").split(" ").indexOf(name) === -1) return;
       e.classList.add("is-active"); undim(e);
       nodes(e.dataset.from).forEach(undim);
       nodes(e.dataset.to).forEach(undim);
@@ -912,14 +926,44 @@ const CLIENT = `
     if (parts[1] && current && current.name) selectState(parts[1]);
   }
 
+  // 線には状態の組ごとに操作がまとめて載っているので、クリックしたら向きごとの操作の一覧をパネルに出す。
+  function selectEdge(edge) {
+    clear(); dimAll();
+    edge.classList.add("is-active"); undim(edge);
+    nodes(edge.dataset.from).forEach(undim);
+    nodes(edge.dataset.to).forEach(undim);
+    var groups = JSON.parse(edge.dataset.ops || "[]");
+    panel.replaceChildren();
+    panel.hidden = false;
+    panel.append(el("p", "eyebrow", current.name + " の線"));
+    if (groups.length > 0) panel.append(el("h2", null, groups[0].dir.split(" → ").join(edge.dataset.bidir ? " ↔ " : " → ")));
+    groups.forEach(function (g) {
+      panel.append(el("h3", null, g.dir));
+      panel.append(list(g.items, function (o) {
+        var li = el("li");
+        var link = el("button", "goto", o.title);
+        link.type = "button";
+        link.dataset.gotoAction = o.action;
+        li.append(link, el("span", "sub", o.actors.join(", ")));
+        return li;
+      }));
+    });
+    var close = el("button", null, "閉じる");
+    close.type = "button";
+    close.dataset.clear = "";
+    panel.append(close);
+  }
+
   function selectScenario(name) {
     var page = current && data.pages[current.name];
     var steps = page && page.scenarios[name];
     if (!steps) return;
     reset(); dimAll();
     steps.forEach(function (st) {
-      within(".edge" + attr("data-from", st.from) + attr("data-to", st.to) + attr("data-action", st.action)).forEach(function (e) {
-        e.classList.add("is-active"); undim(e);
+      within(".edge").forEach(function (e) {
+        var forward = e.dataset.from === st.from && e.dataset.to === st.to;
+        var backward = e.dataset.bidir && e.dataset.from === st.to && e.dataset.to === st.from;
+        if ((forward || backward) && (e.dataset.actions || "").split(" ").indexOf(st.action) !== -1) { e.classList.add("is-active"); undim(e); }
       });
       nodes(st.from).forEach(undim);
       nodes(st.to).forEach(undim);
@@ -946,7 +990,16 @@ const CLIENT = `
     if (target.closest("[data-clear]")) return reset();
     var node = target.closest(".node");
     if (node) return selectState(node.dataset.state);
-    var action = target.closest(".edge,.card[data-action]");
+    var goto = target.closest("[data-goto-action]");
+    if (goto) {
+      selectAction(goto.dataset.gotoAction);
+      var card = current && current.el.querySelector(".card" + attr("data-action", goto.dataset.gotoAction));
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    var edge = target.closest(".edge");
+    if (edge) return selectEdge(edge);
+    var action = target.closest(".card[data-action]");
     if (action) return selectAction(action.dataset.action);
   }
 
