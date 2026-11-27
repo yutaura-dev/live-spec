@@ -2,6 +2,7 @@ import { isNotAllowed, withEnsureBypassed } from "./ensure.ts";
 import { formatValue } from "./format-value.ts";
 import type { Spec, State } from "./load.ts";
 import { canonical, type Finding, type Graph } from "./model.ts";
+import type { Property } from "./static.ts";
 import { buttonsOf, type SurfaceNode } from "./surface.ts";
 
 export interface ExploreOptions {
@@ -121,7 +122,17 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   // 見分けに残しておけば、操作の関数を別のファイルに置いて読み書きを見つけられなかったときにも、状態を誤ってまとめない。
   const dataFields = new Set(spec.dataFields);
   const unkeyed = new Set(spec.dataFields.filter((f) => spec.fields[f] === undefined));
-  const keyOf = (values: State) => JSON.stringify(Object.fromEntries(Object.entries(values).filter(([k]) => !unkeyed.has(k))));
+  // オブジェクトの中の項目（closure.reason など）も、値が決まっていない型で条件で読まないなら、見分けに使わない。
+  // 状態の名前ではすでに省いているので、見分けに残すと、同じ名前の状態が値の数だけ並ぶため。
+  const nestedUnkeyed = nestedDataFields(spec);
+  const stripNested = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.map(stripNested)
+      : typeof value === "object" && value !== null
+        ? Object.fromEntries(Object.entries(value).filter(([k]) => !nestedUnkeyed.has(k)).map(([k, v]) => [k, stripNested(v)]))
+        : value;
+  const keyOf = (values: State) =>
+    JSON.stringify(Object.fromEntries(Object.entries(values).filter(([k]) => !unkeyed.has(k)).map(([k, v]) => [k, stripNested(v)])));
   const register = (values: State, via?: { from: string; action: string; actor: string }): string | undefined => {
     const key = keyOf(values);
     const known = ids.get(key);
@@ -470,4 +481,19 @@ const labeler = (all: ReadonlyArray<State>, declared: ReadonlyArray<string>, exc
     });
     return parts.length > 0 ? parts.join(" · ") : "初期状態";
   };
+};
+
+// 項目は名前で照合する（条件で読む項目 readFields も名前で持つため）。同じ名前がどこかで値の一覧を持つか、
+// 子の項目を持つなら、見分けから外さない。取り違えて状態をまとめるより、まとめ損ねるほうが安全なため。
+const nestedDataFields = (spec: Spec): ReadonlySet<string> => {
+  const leaves = new Set<string>();
+  const kept = new Set<string>(spec.readFields);
+  const walk = (props: ReadonlyArray<Property>) => {
+    for (const p of props) {
+      if (p.variant !== true) (p.values === null && p.children.length === 0 ? leaves : kept).add(p.field);
+      walk(p.children);
+    }
+  };
+  for (const p of spec.properties) walk(p.children);
+  return new Set([...leaves].filter((f) => !kept.has(f)));
 };
