@@ -7,6 +7,7 @@ import { normalize, type EnsureCheck, type Graph } from "./model.ts";
 const caughtLabel = (f: Readonly<Record<string, unknown>>): string => {
   switch (f.kind) {
     case "invariant-violation":
+    case "transition-invariant-violation":
       return `不変条件「${String(f.invariant)}」`;
     case "scenario-failed":
       return `シナリオ「${String(f.scenario)}」`;

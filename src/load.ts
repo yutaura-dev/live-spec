@@ -1,8 +1,11 @@
+import { isNotAllowed } from "./ensure.ts";
 import { analyze, type EnsureCall, type FieldRef, type FieldValue, type Property } from "./static.ts";
 
 export type State = Readonly<Record<string, unknown>>;
 export type ActionFn = (state: never, actor: never) => unknown;
 export type InvariantFn = (state: never) => unknown;
+export type FactoryFn = (actor: never, ...input: never[]) => unknown;
+export type TransitionInvariantFn = (before: never, after: never) => unknown;
 export type SurfaceFn = (state: never, actor: never) => unknown;
 
 export interface Question {
@@ -39,10 +42,15 @@ export interface Spec {
   readonly name: string;
   /** 仕様書の見出しやタブに出す名前（export const displayName。無ければ name を Title Case にしたもの） */
   readonly displayName: string;
+  /** 初期状態。initial を関数（作る操作）で書いたときは、最初に作れた状態（状態の項目の並びと、ほかの検査の代表に使う） */
   readonly initial: State;
+  /** 作る操作（export function initial(登場人物, ...入力)）。initial をオブジェクトで書いたときは null */
+  readonly factory: FactoryFn | null;
   readonly actors: ReadonlyArray<readonly [name: string, actor: unknown]>;
   readonly actions: ReadonlyArray<readonly [name: string, fn: ActionFn]>;
   readonly invariants: ReadonlyArray<readonly [name: string, fn: InvariantFn]>;
+  /** 遷移の不変条件（invariants のうち、引数を 2 つとるもの）。集約のライフサイクルの決まり（終わったら変わらない、など） */
+  readonly transitionInvariants: ReadonlyArray<readonly [name: string, fn: TransitionInvariantFn]>;
   /** 目指す状態。たどり着けない状態（袋小路）を見つけるのに使う */
   readonly goals: ReadonlyArray<readonly [name: string, fn: InvariantFn]>;
   readonly inputs: Readonly<Record<string, ReadonlyArray<readonly [label: string, args: ReadonlyArray<unknown>]>>>;
@@ -118,20 +126,29 @@ const titleCase = (name: string) =>
     .join(" ");
 
 export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, options: LoadOptions = {}): Spec => {
-  const { initial, actors } = mod;
-  if (!isRecord(initial)) throw new Error(`${name}: 初期状態を表す \`export const initial\` が必要です`);
+  const { actors } = mod;
   if (!isRecord(actors)) throw new Error(`${name}: 登場人物を表す \`export const actors\` が必要です`);
+  const factory = typeof mod.initial === "function" ? (mod.initial as FactoryFn) : null;
+  const inputs = inputsOf(mod.inputs);
+  const initial = factory === null ? mod.initial : firstCreated(name, factory, Object.entries(actors), inputs.initial);
+  if (!isRecord(initial)) throw new Error(`${name}: 初期状態を表す \`export const initial\`（オブジェクトか、作る操作の関数）が必要です`);
   const info = options.source === undefined ? undefined : analyze(options.source);
   return {
     name,
     initial,
+    factory,
     actors: Object.entries(actors),
     actions: orderActions(
       Object.entries(mod).filter((e): e is [string, ActionFn] => !RESERVED.has(e[0]) && typeof e[1] === "function"),
       info?.order,
     ),
+    // 引数の数で見分ける理由: 1 つの状態についての条件と遷移の前後についての条件は、どちらも「いつも成り立つべきこと」で、
+    // 書き手が置き場所を迷わないよう同じ invariants に書けるようにするため。export を分けると、どちらに書くかの規約が増える。
     invariants: isRecord(mod.invariants)
-      ? Object.entries(mod.invariants).filter((e): e is [string, InvariantFn] => typeof e[1] === "function")
+      ? Object.entries(mod.invariants).filter((e): e is [string, InvariantFn] => typeof e[1] === "function" && e[1].length < 2)
+      : [],
+    transitionInvariants: isRecord(mod.invariants)
+      ? Object.entries(mod.invariants).filter((e): e is [string, TransitionInvariantFn] => typeof e[1] === "function" && e[1].length >= 2)
       : [],
     stateType: info?.stateType ?? null,
     refs: info?.refs ?? [],
@@ -145,7 +162,7 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
     variants: Array.isArray(mod.variants) ? mod.variants.filter(isRecord) : [],
     groupBy: isRecord(mod.diagram) && typeof mod.diagram.groupBy === "string" ? mod.diagram.groupBy : null,
     goals: isRecord(mod.goals) ? Object.entries(mod.goals).filter((e): e is [string, InvariantFn] => typeof e[1] === "function") : [],
-    inputs: inputsOf(mod.inputs),
+    inputs,
     surface: typeof mod.surface === "function" ? (mod.surface as SurfaceFn) : null,
     questions: Array.isArray(mod.questions)
       ? mod.questions.filter((q): q is Question => isRecord(q) && typeof q.ask === "string")
@@ -177,6 +194,31 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
     fields: info?.fields ?? {},
     stateDoc: info?.stateDoc ?? null,
   };
+};
+
+// 作る操作を読み込むときに一度実行する理由: 状態の項目の並び（状態の名前の順）や、ensure の効く範囲の計算は、
+// 代表の初期状態を 1 つ必要とする。探索のたびに選び直すと、探索の結果によって名前の順が変わってしまう。
+const firstCreated = (
+  name: string,
+  factory: FactoryFn,
+  actors: ReadonlyArray<readonly [string, unknown]>,
+  examples: ReadonlyArray<readonly [string, ReadonlyArray<unknown>]> | undefined,
+): unknown => {
+  if (factory.length > 1 && examples === undefined) {
+    throw new Error(`${name}: initial は登場人物のあとに入力をとるので、inputs.initial に入力の例を書く`);
+  }
+  const reasons: Array<string> = [];
+  for (const [, actor] of actors) {
+    for (const [, args] of examples ?? [["", []]]) {
+      try {
+        const created = (factory as (a: unknown, ...rest: Array<unknown>) => unknown)(structuredClone(actor), ...structuredClone(args));
+        if (isRecord(created)) return created;
+      } catch (e) {
+        if (isNotAllowed(e) && !reasons.includes(e.message)) reasons.push(e.message);
+      }
+    }
+  }
+  throw new Error(`${name}: どの登場人物・入力の例でも作れない（initial が「${reasons.join("」「")}」で止まる）`);
 };
 
 // ソースの順で並べる理由: ES のモジュール名前空間オブジェクトはキーを名前順に並べるので、

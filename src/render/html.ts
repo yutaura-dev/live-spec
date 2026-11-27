@@ -13,7 +13,7 @@ import { propertyRows } from "./properties.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
 import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle, testsOf } from "./markdown.ts";
-import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
+import { formatTransition, presentBlocked, summarizeActions, summarizeCreation, summarizeStates, type ActionSummary, type CreationSummary } from "./summary.ts";
 import { surfaceToHtml } from "./wireframe.ts";
 
 const WIREFLOW_NODE = { width: 260, height: 220 };
@@ -255,7 +255,7 @@ const renderPage = async (
               st.ok && st.denied
                 ? `<p class="flow">この操作はできない（${esc(canOnlyWhen(st.reason ?? ""))}）</p>`
                 : st.ok
-                ? scenarioFlow({ from: labelOf(st.from ?? ""), to: labelOf(st.to ?? "") })
+                ? scenarioFlow({ from: st.from === null ? "作る前" : labelOf(st.from), to: labelOf(st.to ?? "") })
                 : `<p class="reason">❌ ${esc(st.reason ?? "")}</p>`
             }${shown === undefined ? "" : `<div class="frame"><div class="frame-inner">${surfaceToHtml(shown.surface as SurfaceNode, notAllowed(st.to!, [st.actor]))}</div></div>`}</li>`;
           })
@@ -355,6 +355,7 @@ const renderPage = async (
   <section class="actions">
     <h2>操作</h2>${sectionLead("操作")}
     <div class="cards">
+      ${creationCard(summarizeCreation(spec, graph))}
       ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), (graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed, (e) => testsOf(graph, e), objects)).join("\n      ")}
     </div>
   </section>
@@ -579,6 +580,29 @@ const reviewHtml = (spec: Spec, graph: Graph, index: number) => {
   </section>`;
 };
 
+const creationCard = (c: CreationSummary | null) => {
+  if (c === null) return "";
+  const others = c.othersReasons.length === 0 ? "" : `<span class="muted">ほかの人は「${c.othersReasons.map(esc).join("」「")}」</span>`;
+  const who = `${c.capable.map((a) => `<span class="chip">${esc(a)}</span>`).join("")}${others}`;
+  const results =
+    c.inputOutcomes.length === 0
+      ? `<dt>作られる状態</dt><dd>${c.results.map((r) => `<span class="state">${esc(r)}</span>`).join("")}</dd>`
+      : `<dt>入力ごとの結果</dt><dd><ul>${c.inputOutcomes
+          .map(
+            (o) =>
+              `<li><span class="reason">${esc(o.input)}</span> ${o.to.length > 0 ? o.to.map((t) => `<span class="flow">→ ${esc(t)}</span>`).join("") : `<span class="state">❌ ${esc(o.reasons.map(canOnlyWhen).join("、"))}</span>`}</li>`,
+          )
+          .join("")}</ul></dd>`;
+  return `<article class="card creation" data-action="initial" tabindex="0">
+        <h3>${esc(c.summary === null ? "作る" : c.summary.replace(/。$/, ""))} <span class="muted">（作る）</span></h3>
+        <dl>
+          <dt>できる人</dt><dd>${who}</dd>
+          ${results}
+          <dt>関数名</dt><dd><code>initial</code></dd>
+        </dl>
+      </article>`;
+};
+
 const actionCard = (
   a: ActionSummary,
   asks: ReadonlyArray<{ readonly label: string; readonly href: string }>,
@@ -626,7 +650,7 @@ const actionCard = (
                     // 確かめるもののない条件だけ開いて見せ、ほかは畳む。全部開くと、カードが検査の説明で埋まるため。
                     const body = p.warn
                       ? `⚠ ${esc(p.head)}。${esc(p.effect)}`
-                      : `${esc(p.head)}。<details class="ensure-effect"><summary>この条件が無いと</summary>${esc(p.effect)}</details>`;
+                      : `${esc(p.head)}。<details class="ensure-effect"><summary>この条件がないと</summary>${esc(p.effect)}</details>`;
                     const tests = testsFor(e);
                     return `<li class="ensure ${e.verdict}${acknowledged ? " acknowledged" : ""}">${body}${tests.length === 0 ? "" : `<span class="ensure-tests">テスト: ${tests.map((t) => `<span class="test-loc" title="${esc(t)}">${esc(t.split("/").pop()!)}</span>`).join("、")}</span>`}</li>`;
                   })
@@ -925,7 +949,7 @@ const CLIENT = `
   function setMode(mode) {
     var board = current && current.el.querySelector(".board");
     if (!board) return;
-    // 図を切り替えたら強調とパネルを外す。要約の図の線は詳細の図には無いので、残すとすべてが薄く描かれるため。
+    // 図を切り替えたら強調とパネルを外す。要約の図の線は詳細の図にはないので、残すとすべてが薄く描かれるため。
     reset();
     board.dataset.mode = mode;
     within(".modes button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.mode === mode)); });

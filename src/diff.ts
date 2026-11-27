@@ -127,12 +127,15 @@ export const diffModels = (beforeRaw: unknown, afterRaw: unknown): ModelDiff => 
 
   // 最短の手順（path）を除いて突き合わせる理由: 違反そのものが同じでも、権限を変えると探索の順が変わり、
   // 手順に出てくる人が入れ替わることがある。それを「違反が消えて別の違反が出た」と見せると誤解を招く。
+  // 状態を指す項目（state、遷移の不変条件の from と to）は、ID ではなくラベルにして比べる。ID は探索の順で振り直されるため。
+  const STATE_KEYS = ["state", "from", "to"] as const;
+  const withLabels = (f: Readonly<Record<string, unknown>>, l: (id: string | null) => string) =>
+    Object.fromEntries(Object.entries(f).map(([k, v]) => [k, (STATE_KEYS as ReadonlyArray<string>).includes(k) && typeof v === "string" ? l(v) : v]));
   const findingKeyOf = (f: Readonly<Record<string, unknown>>, l: (id: string | null) => string) => {
     const { path: _path, ...rest } = f;
-    return JSON.stringify(typeof rest.state === "string" ? { ...rest, state: l(rest.state) } : rest);
+    return JSON.stringify(withLabels(rest, l));
   };
-  const findingsOf = (m: Model, l: (id: string | null) => string) =>
-    new Map(m.findings.map((f) => [findingKeyOf(f, l), typeof f.state === "string" ? { ...f, state: l(f.state) } : f]));
+  const findingsOf = (m: Model, l: (id: string | null) => string) => new Map(m.findings.map((f) => [findingKeyOf(f, l), withLabels(f, l)]));
   const fb = findingsOf(before, lb);
   const fa = findingsOf(after, la);
   const fd = setDiff([...fb.keys()], [...fa.keys()]);

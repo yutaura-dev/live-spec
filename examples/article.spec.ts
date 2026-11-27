@@ -6,7 +6,7 @@ export type Article = {
   status: "draft" | "inReview" | "published" | "archived";
   /** トップページに固定しているか */
   pinned: boolean;
-  /** 書いた著者のユーザー ID（「自分の記事だけ」の判定に使う） */
+  /** 著者のユーザー ID（「自分の記事だけ」の判定に使う） */
   authorId: string;
 };
 

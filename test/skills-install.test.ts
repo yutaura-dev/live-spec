@@ -7,7 +7,7 @@ import { bundledSkills, installSkills, skillsDir } from "../src/skills.ts";
 
 describe("skills: 同梱した skill を対象のリポジトリに入れる", () => {
   it("同梱している skill の一覧を返す", () => {
-    expect(bundledSkills()).toEqual(["live-spec-authoring", "live-spec-from-code", "live-spec-review"]);
+    expect(bundledSkills()).toEqual(["live-spec-authoring", "live-spec-domain-modeling", "live-spec-from-code", "live-spec-review"]);
   });
 
   it("指定したディレクトリに、skill ごとの SKILL.md をコピーする", () => {
@@ -15,7 +15,7 @@ describe("skills: 同梱した skill を対象のリポジトリに入れる", (
 
     const result = installSkills(dir);
 
-    expect(result.map((r) => r.status)).toEqual(["installed", "installed", "installed"]);
+    expect(result.map((r) => r.status)).toEqual(["installed", "installed", "installed", "installed"]);
     expect(readFileSync(join(dir, "live-spec-authoring", "SKILL.md"), "utf8")).toContain("name: live-spec-authoring");
   });
 

@@ -318,10 +318,13 @@ const writtenFieldNames = (body: ReadonlyArray<t.Statement>): Set<string> => {
   for (const node of body) {
     if (node.type !== "ExportNamedDeclaration" || node.declaration == null) continue;
     const decl = node.declaration;
-    if (decl.type === "FunctionDeclaration" && decl.id?.name !== "surface") visit(decl.body);
+    // 作る操作（initial）は状態の項目をすべて書くので数えない。数えると、作ったときに決まる値（種類など）まで
+    // 「操作が書き換える項目」になり、値ごとの初期状態の探索や、データの見分けが効かなくなるため。
+    const skip = (name: string | undefined) => name === "surface" || name === "initial";
+    if (decl.type === "FunctionDeclaration" && !skip(decl.id?.name)) visit(decl.body);
     if (decl.type === "VariableDeclaration") {
       for (const d of decl.declarations) {
-        if (d.id.type === "Identifier" && d.id.name !== "surface" && (d.init?.type === "ArrowFunctionExpression" || d.init?.type === "FunctionExpression")) visit(d.init.body);
+        if (d.id.type === "Identifier" && !skip(d.id.name) && (d.init?.type === "ArrowFunctionExpression" || d.init?.type === "FunctionExpression")) visit(d.init.body);
       }
     }
   }
@@ -436,7 +439,11 @@ const narrowsType = (root: t.Node, call: t.CallExpression): boolean => {
 };
 
 const valueNamesOf = (decl: t.Node): ReadonlyArray<readonly [name: string, typeName: string | null]> => {
-  if (decl.type === "FunctionDeclaration" && decl.id != null) return [[decl.id.name, null]];
+  if (decl.type === "FunctionDeclaration" && decl.id != null) {
+    // 作る操作（export function initial(user): Article）は、戻り値の型が状態の型になる。
+    const ret = decl.returnType?.type === "TSTypeAnnotation" ? decl.returnType.typeAnnotation : null;
+    return [[decl.id.name, ret?.type === "TSTypeReference" && ret.typeName.type === "Identifier" ? ret.typeName.name : null]];
+  }
   if (decl.type !== "VariableDeclaration") return [];
   return decl.declarations.flatMap((d) => {
     if (d.id.type !== "Identifier") return [];

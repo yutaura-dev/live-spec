@@ -13,9 +13,17 @@ export const initial: Job = { status: "queued", ownerId: "c1" };
 // ワーカーも登場人物として並べる。クライアントからは起こせない遷移（開始・完了・失敗）は
 // ワーカーだけが起こせる、ということが「できる人」の欄にそのまま表れる。
 export const actors: Record<string, Caller> = {
-  作成したクライアント: { kind: "client", id: "c1" },
+  ジョブを作ったクライアント: { kind: "client", id: "c1" },
   別のクライアント: { kind: "client", id: "c2" },
   ワーカー: { kind: "worker" },
+};
+
+const isFinished = (job: Job) => job.status === "succeeded" || job.status === "cancelled";
+
+// 引数を 2 つとる不変条件は、遷移の前と後についての決まり（ライフサイクルの決まり）。
+// 失敗（failed）はやり直せるので「終わった」に入れない。
+export const invariants = {
+  成功か取り消しで終わったジョブは変わらない: (before: Job, after: Job) => !isFinished(before) || before.status === after.status,
 };
 
 const isOwner = (job: Job, caller: Caller) => caller.kind === "client" && caller.id === job.ownerId;
@@ -27,7 +35,7 @@ export function start(job: Job, caller: Caller): Job {
   return { ...job, status: "running" };
 }
 
-/** ワーカーが実行を終える */
+/** ワーカーが実行を終えて成功にする */
 export function succeed(job: Job, caller: Caller): Job {
   ensure(caller.kind === "worker", "ワーカーだけ");
   ensure(job.status === "running", "実行中のときだけ");
@@ -44,7 +52,7 @@ export function fail(job: Job, caller: Caller): Job {
 /** DELETE /jobs/{id}: ジョブを取り消す */
 export function cancel(job: Job, caller: Caller): Job {
   ensure(isOwner(job, caller), "ジョブを作ったクライアントだけ");
-  ensure(job.status === "queued" || job.status === "running", "終わっていないときだけ");
+  ensure(job.status === "queued" || job.status === "running", "待機中か実行中のときだけ");
   return { ...job, status: "cancelled" };
 }
 
