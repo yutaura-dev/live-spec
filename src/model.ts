@@ -66,6 +66,17 @@ export const Finding = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("unknown-inputs"), action: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("reviewed-unmatched"), id: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("goal-unreachable"), goal: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("creation-error"), actor: Schema.String, input: Schema.NullOr(Schema.String), message: Schema.String }),
+  Schema.Struct({
+    kind: Schema.Literal("transition-invariant-violation"),
+    invariant: Schema.String,
+    from: Schema.String,
+    to: Schema.String,
+    action: Schema.String,
+    actor: Schema.String,
+    /** 初期状態から、破った遷移までの最短手順（破った遷移を含む） */
+    path: Schema.Array(Schema.Struct({ action: Schema.String, actor: Schema.String })),
+  }),
   Schema.Struct({
     kind: Schema.Literal("invariant-violation"),
     invariant: Schema.String,
@@ -143,6 +154,20 @@ export const Graph = Schema.Struct({
       action: Schema.NullOr(Schema.String),
       states: Schema.Array(Schema.String),
       scenario: Schema.optionalKey(Schema.String),
+    }),
+  ),
+  /** 作る操作（initial を関数で書いたとき）の、登場人物と入力の例ごとの結果 */
+  creation: Schema.optionalKey(
+    Schema.Struct({
+      outcomes: Schema.Array(
+        Schema.Struct({
+          actor: Schema.String,
+          input: Schema.NullOr(Schema.String),
+          enabled: Schema.Boolean,
+          to: Schema.NullOr(Schema.String),
+          reason: Schema.NullOr(Schema.String),
+        }),
+      ),
     }),
   ),
   ensures: Schema.optionalKey(Schema.Array(EnsureCheck)),

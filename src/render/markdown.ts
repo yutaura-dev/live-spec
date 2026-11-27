@@ -9,7 +9,7 @@ import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts
 import type { Spec } from "../load.ts";
 import type { Finding, Graph } from "../model.ts";
 import { collapseTransitions, isCollapsed, sourceLabel } from "./collapse.ts";
-import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
+import { formatTransition, presentBlocked, summarizeActions, summarizeCreation, summarizeStates, type ActionSummary, type CreationSummary } from "./summary.ts";
 import type { SurfaceNode } from "../surface.ts";
 import { surfaceToText } from "./wireframe.ts";
 
@@ -109,7 +109,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     "```mermaid",
     "stateDiagram-v2",
     ...graph.states.map((s) => `  state "${s.label}" as ${s.id}`),
-    ...graph.states.filter((s) => s.initial).map((s) => `  [*] --> ${s.id}`),
+    ...graph.states.filter((s) => s.initial).map((s) => `  [*] --> ${s.id}${creationLabel(spec, graph, s.id)}`),
     // 自分自身に戻る遷移は図に描かない（線が図を埋めるため）。操作の節の「できるとき」には残る。
     ...[...new Set(collapseTransitions(graph).map((t) => t.from).filter(isCollapsed))].map((id, i) => `  state "${sourceLabel(graph, id)}" as any${i}`),
     ...collapseTransitions(graph)
@@ -120,6 +120,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     "",
     ...propertiesSection(spec),
     ...markdownSection("操作"),
+    ...creationSection(summarizeCreation(spec, graph)),
     ...summarizeActions(spec, graph).flatMap((a) => [
       ...actionSection(a),
       ...graph.questions.flatMap((q, i) => (q.action === a.name ? [`- **未決**: 未決事項 ${i + 1}`] : [])),
@@ -180,6 +181,34 @@ const reviewSection = (spec: Spec, graph: Graph): Array<string> => {
       ? []
       : ["### 判断待ち（未決事項）", "", ...onHold.map((i) => `- ${i.message}（\`${i.id}\`）— 未決事項 ${i.question} で判断を待っている`), ""]),
     ...(acknowledged.length === 0 ? [] : ["### 確認済み", "", ...acknowledged.map((i) => `- \`${i.id}\`: ${i.note}`), ""]),
+  ];
+};
+
+// 初期状態への矢印に、作った人を添える（作る操作があるときだけ）。誰が作るのかも状態遷移の一部として読めるようにするため。
+const creationLabel = (spec: Spec, graph: Graph, state: string) => {
+  const actors = [...new Set((graph.creation?.outcomes ?? []).filter((o) => o.enabled && o.to === state).map((o) => o.actor))];
+  return actors.length === 0 ? "" : `: ${actionTitle(spec, "initial")} (${actors.join(", ")})`;
+};
+
+export const creationTitle = (c: CreationSummary) => (c.summary === null ? "作る" : `${c.summary.replace(/。$/, "")}（作る）`);
+
+const creationSection = (c: CreationSummary | null): Array<string> => {
+  if (c === null) return [];
+  const who = c.othersReasons.length === 0 ? c.capable.join(", ") : `${c.capable.join(", ")}（ほかの人は「${c.othersReasons.join("」「")}」）`;
+  return [
+    `### ${creationTitle(c)}`,
+    "",
+    `- **できる人**: ${who}`,
+    ...(c.inputOutcomes.length === 0
+      ? [`- **作られる状態**: ${c.results.join(" / ")}`]
+      : [
+          [
+            "- **入力ごとの結果**:",
+            ...c.inputOutcomes.map((o) => (o.to.length > 0 ? `  - ${o.input}: → ${o.to.join(" / ")}` : `  - ${o.input}: ❌ ${o.reasons.map(canOnlyWhen).join("、")}`)),
+          ].join("\n"),
+        ]),
+    "- **関数名**: `initial`",
+    "",
   ];
 };
 
@@ -308,7 +337,7 @@ const scenarioSection = (spec: Spec, s: Graph["scenarios"][number], labelOf: (id
     step.ok && step.denied
       ? `${i + 1}. ${describeStep(spec, step)}: この操作はできない（${canOnlyWhen(step.reason ?? "")}）`
       : step.ok
-      ? `${i + 1}. ${describeStep(spec, step)}: ${labelOf(step.from ?? "")} → ${labelOf(step.to ?? "")}`
+      ? `${i + 1}. ${describeStep(spec, step)}: ${step.from === null ? "作る前" : labelOf(step.from)} → ${labelOf(step.to ?? "")}`
       : `${i + 1}. ❌ ${describeStep(spec, step)}: ${step.reason}`,
   ),
 ];
@@ -329,6 +358,12 @@ export const describeFinding = (f: Finding, labelOf: (id: string) => string): st
     case "invariant-violation": {
       const path = f.path.length === 0 ? "初期状態" : f.path.map((p) => `${p.action} (${p.actor})`).join(" → ");
       return `不変条件「${f.invariant}」を ${labelOf(f.state)} で破る（${path}）`;
+    }
+    case "creation-error":
+      return `作る操作 initial が ${f.actor}${f.input === null ? "" : `（${f.input}）`} で例外を投げた: ${f.message}`;
+    case "transition-invariant-violation": {
+      const path = f.path.map((p) => `${p.action} (${p.actor})`).join(" → ");
+      return `不変条件「${f.invariant}」を ${f.action} (${f.actor}) の ${labelOf(f.from)} → ${labelOf(f.to)} で破る（${path}）`;
     }
     case "missing-inputs":
       return `操作 ${f.action} は 3 つ目以降の引数をとるが、inputs に例がないので実行していない`;

@@ -142,6 +142,38 @@ const inputOutcomesOf = (
     return { input, transitions, reasons };
   });
 
+export interface CreationSummary {
+  readonly summary: string | null;
+  readonly capable: ReadonlyArray<string>;
+  readonly othersReasons: ReadonlyArray<string>;
+  /** 入力の例ごとの、作られる状態（名前）か作れない理由。入力の例がなければ空 */
+  readonly inputOutcomes: ReadonlyArray<{ readonly input: string; readonly to: ReadonlyArray<string>; readonly reasons: ReadonlyArray<string> }>;
+  /** 作られる状態の名前 */
+  readonly results: ReadonlyArray<string>;
+}
+
+// 作る操作の要約。操作と同じく、一度でも作れた人を「担当者」とし、担当者が止められた理由を入力の条件、
+// 担当者以外が止められた理由を「誰が」の条件として分ける。
+export const summarizeCreation = (spec: Spec, graph: Graph): CreationSummary | null => {
+  if (graph.creation === undefined) return null;
+  const labelOf = labeler(graph);
+  const outcomes = graph.creation.outcomes;
+  const capable = unique(outcomes.filter((o) => o.enabled).map((o) => o.actor));
+  const reasonOf = (o: (typeof outcomes)[number]) => o.reason ?? ERROR_REASON;
+  return {
+    summary: spec.docs.initial ?? null,
+    capable,
+    othersReasons: unique(outcomes.filter((o) => !capable.includes(o.actor)).map(reasonOf)),
+    inputOutcomes: (spec.inputs.initial ?? []).map(([input]) => {
+      const mine = outcomes.filter((o) => o.input === input);
+      const to = unique(mine.filter((o) => o.enabled).map((o) => labelOf(o.to!)));
+      const byCapable = unique(mine.filter((o) => !o.enabled && capable.includes(o.actor)).map(reasonOf));
+      return { input, to, reasons: to.length > 0 ? [] : byCapable.length > 0 ? byCapable : unique(mine.map(reasonOf)) };
+    }),
+    results: unique(outcomes.filter((o) => o.enabled).map((o) => labelOf(o.to!))),
+  };
+};
+
 const REST_THRESHOLD = 3;
 
 // 一番多いまとまりを「それ以外」とまとめる理由: できないときの状態は、たいてい「できるとき」の補集合で、

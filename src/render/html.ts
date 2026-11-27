@@ -13,7 +13,7 @@ import { propertyRows } from "./properties.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
 import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle, testsOf } from "./markdown.ts";
-import { formatTransition, presentBlocked, summarizeActions, summarizeStates, type ActionSummary } from "./summary.ts";
+import { formatTransition, presentBlocked, summarizeActions, summarizeCreation, summarizeStates, type ActionSummary, type CreationSummary } from "./summary.ts";
 import { surfaceToHtml } from "./wireframe.ts";
 
 const WIREFLOW_NODE = { width: 260, height: 220 };
@@ -255,7 +255,7 @@ const renderPage = async (
               st.ok && st.denied
                 ? `<p class="flow">この操作はできない（${esc(canOnlyWhen(st.reason ?? ""))}）</p>`
                 : st.ok
-                ? scenarioFlow({ from: labelOf(st.from ?? ""), to: labelOf(st.to ?? "") })
+                ? scenarioFlow({ from: st.from === null ? "作る前" : labelOf(st.from), to: labelOf(st.to ?? "") })
                 : `<p class="reason">❌ ${esc(st.reason ?? "")}</p>`
             }${shown === undefined ? "" : `<div class="frame"><div class="frame-inner">${surfaceToHtml(shown.surface as SurfaceNode, notAllowed(st.to!, [st.actor]))}</div></div>`}</li>`;
           })
@@ -355,6 +355,7 @@ const renderPage = async (
   <section class="actions">
     <h2>操作</h2>${sectionLead("操作")}
     <div class="cards">
+      ${creationCard(summarizeCreation(spec, graph))}
       ${actions.map((a) => actionCard(a, asksOf(a.name), linksOf(a.name), (graph.ensures ?? []).filter((e) => e.action === a.name), spec.reviewed, (e) => testsOf(graph, e), objects)).join("\n      ")}
     </div>
   </section>
@@ -577,6 +578,29 @@ const reviewHtml = (spec: Spec, graph: Graph, index: number) => {
         : `<details class="acknowledged"><summary>確認済み（${acknowledged.length} 件）</summary><ul>${acknowledged.map((i) => `<li><code class="review-id">${esc(i.id)}</code> ${esc(i.note)}</li>`).join("")}</ul></details>`
     }
   </section>`;
+};
+
+const creationCard = (c: CreationSummary | null) => {
+  if (c === null) return "";
+  const others = c.othersReasons.length === 0 ? "" : `<span class="muted">ほかの人は「${c.othersReasons.map(esc).join("」「")}」</span>`;
+  const who = `${c.capable.map((a) => `<span class="chip">${esc(a)}</span>`).join("")}${others}`;
+  const results =
+    c.inputOutcomes.length === 0
+      ? `<dt>作られる状態</dt><dd>${c.results.map((r) => `<span class="state">${esc(r)}</span>`).join("")}</dd>`
+      : `<dt>入力ごとの結果</dt><dd><ul>${c.inputOutcomes
+          .map(
+            (o) =>
+              `<li><span class="reason">${esc(o.input)}</span> ${o.to.length > 0 ? o.to.map((t) => `<span class="flow">→ ${esc(t)}</span>`).join("") : `<span class="state">❌ ${esc(o.reasons.map(canOnlyWhen).join("、"))}</span>`}</li>`,
+          )
+          .join("")}</ul></dd>`;
+  return `<article class="card creation" data-action="initial" tabindex="0">
+        <h3>${esc(c.summary === null ? "作る" : c.summary.replace(/。$/, ""))} <span class="muted">（作る）</span></h3>
+        <dl>
+          <dt>できる人</dt><dd>${who}</dd>
+          ${results}
+          <dt>関数名</dt><dd><code>initial</code></dd>
+        </dl>
+      </article>`;
 };
 
 const actionCard = (

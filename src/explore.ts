@@ -51,7 +51,61 @@ const invariantHolds = (holds: Spec["invariants"][number][1], values: State): bo
   }
 };
 
+const transitionInvariantHolds = (holds: Spec["transitionInvariants"][number][1], before: State, after: State): boolean => {
+  try {
+    return Boolean((holds as (b: unknown, a: unknown) => unknown)(structuredClone(before), structuredClone(after)));
+  } catch {
+    return false;
+  }
+};
+
 type BypassFor = (action: string) => string | null;
+type Register = (values: State) => string | undefined;
+type CreationOutcome = NonNullable<Graph["creation"]>["outcomes"][number];
+
+const INITIAL = "initial";
+
+// 作る操作は、状態を受け取らない操作として runAction で実行する（ensure と例外の扱いを操作とそろえるため）。
+const runCreation = (factory: NonNullable<Spec["factory"]>, actor: unknown, args: ReadonlyArray<unknown>) =>
+  runAction(
+    ((_state: unknown, a: unknown, ...rest: Array<unknown>) => (factory as (a: unknown, ...r: Array<unknown>) => unknown)(a, ...rest)) as Spec["actions"][number][1],
+    {},
+    actor,
+    args,
+    null,
+  );
+
+// 作る操作があるときは、作ったときに決まる値の組み合わせや variants から初期状態を作らない。
+// どんな初期状態がありうるかは、作る操作とその入力の例が決めるため（DDD のファクトリ）。
+const createAll = (spec: Spec, register: Register, findings: Array<Finding>): Array<CreationOutcome> => {
+  const outcomes: Array<CreationOutcome> = [];
+  for (const [actor, actorValue] of spec.actors) {
+    for (const [input, args] of spec.inputs[INITIAL] ?? [[null, []] as const]) {
+      const outcome = runCreation(spec.factory!, actorValue, args);
+      if (outcome.kind === "ok") {
+        outcomes.push({ actor, input, enabled: true, to: register(outcome.next) ?? null, reason: null });
+        continue;
+      }
+      if (outcome.kind === "error") findings.push({ kind: "creation-error", actor, input, message: outcome.message });
+      if (outcome.kind === "invalid-return") findings.push({ kind: "creation-error", actor, input, message: "オブジェクトを返さなかった" });
+      outcomes.push({ actor, input, enabled: false, to: null, reason: outcome.kind === "not-allowed" ? outcome.reason : null });
+    }
+  }
+  return outcomes;
+};
+
+const registerInitials = (spec: Spec, register: Register) => {
+  register(canonical(spec.initial) as State);
+  // 作ったときに決まる値（種類・担当など、作ったあと変わらないが振る舞いを変える値）は、initial の 1 つの値だけでは
+  // ほかの値の振る舞いを確かめられない。項目ごとに 1 つずつ値を変えた初期状態も探索する。全部の組み合わせにしないのは、
+  // 項目が増えると掛け算で状態の数の上限を超えるため。組み合わせで振る舞いが変わるものは variants に書いてもらう。
+  for (const field of spec.creationFields) {
+    for (const value of spec.fields[field] ?? []) {
+      if (value !== (spec.initial as State)[field]) register(canonical({ ...spec.initial, [field]: value }) as State);
+    }
+  }
+  for (const variant of spec.variants) register(canonical({ ...spec.initial, ...variant }) as State);
+};
 
 export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   const maxStates = options.maxStates ?? DEFAULT_MAX_STATES;
@@ -101,16 +155,8 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   const runnable = spec.actions.filter(([name]) => !missingInputs.includes(name));
   const NO_INPUT: ReadonlyArray<readonly [string | null, ReadonlyArray<unknown>]> = [[null, []]];
 
-  register(canonical(spec.initial) as State);
-  // 作ったときに決まる値（種類・担当など、作ったあと変わらないが振る舞いを変える値）は、initial の 1 つの値だけでは
-  // ほかの値の振る舞いを確かめられない。項目ごとに 1 つずつ値を変えた初期状態も探索する。全部の組み合わせにしないのは、
-  // 項目が増えると掛け算で状態の数の上限を超えるため。組み合わせで振る舞いが変わるものは variants に書いてもらう。
-  for (const field of spec.creationFields) {
-    for (const value of spec.fields[field] ?? []) {
-      if (value !== (spec.initial as State)[field]) register(canonical({ ...spec.initial, [field]: value }) as State);
-    }
-  }
-  for (const variant of spec.variants) register(canonical({ ...spec.initial, ...variant }) as State);
+  const creation = spec.factory === null ? null : createAll(spec, register, findings);
+  if (creation === null) registerInitials(spec, register);
   const initials = new Set(valuesById.keys());
   // 幅優先探索の理由: 状態 ID と表の行の並びを「初期状態からの近さ」順に固定し、
   // spec の書き換えで出力の順序が揺れないようにするため（差分レビューの前提）。
@@ -154,6 +200,13 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   }));
 
   for (const v of violations) findings.push({ kind: "invariant-violation", ...v, path: pathTo(v.state) });
+  for (const [invariant, holds] of spec.transitionInvariants) {
+    for (const t of transitions.values()) {
+      if (transitionInvariantHolds(holds, valuesById.get(t.from)!, valuesById.get(t.to)!)) continue;
+      const actor = t.actors[0]!;
+      findings.push({ kind: "transition-invariant-violation", invariant, from: t.from, to: t.to, action: t.action, actor, path: [...pathTo(t.from), { action: t.action, actor }] });
+    }
+  }
   for (const [field, values] of Object.entries(spec.fields)) {
     if (dataFields.has(field)) continue;
     for (const value of values) {
@@ -165,6 +218,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   }
   for (const action of missingInputs) findings.push({ kind: "missing-inputs", action });
   for (const action of Object.keys(spec.inputs)) {
+    if (spec.factory !== null && action === INITIAL) continue;
     if (!spec.actions.some(([name]) => name === action)) findings.push({ kind: "unknown-inputs", action });
   }
   for (const [action] of runnable) {
@@ -208,7 +262,18 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   });
   const links = spec.links.map((l) => ({ from: l.from?.name ?? null, to: l.to, action: l.action ?? null, label: l.label }));
 
-  return { states, transitions: [...transitions.values()], availability, findings, surfaces, decisions, links, questions, scenarios };
+  return {
+    states,
+    transitions: [...transitions.values()],
+    availability,
+    findings,
+    surfaces,
+    decisions,
+    links,
+    questions,
+    scenarios,
+    ...(creation === null ? {} : { creation: { outcomes: creation } }),
+  };
 };
 
 
@@ -230,7 +295,9 @@ const runScenarios = (
     const invalid = Object.keys(given ?? {}).filter((k) => !spec.creationFields.includes(k));
     const describeGiven = (g: Readonly<Record<string, unknown>>) => Object.entries(g).map(([k, v]) => `${k}: ${formatValue(v)}`).join("、");
     const startError =
-      invalid.length > 0
+      spec.factory !== null && given !== undefined
+        ? "作る操作（initial）がある spec では given を書けない。最初の手順に作る操作を書く"
+        : invalid.length > 0
         ? `given に書けるのは、作ったときに決まる値（${spec.creationFields.join("・") || "なし"}）だけ。${invalid.join("・")} は書けない`
         : given !== undefined && idOf(values) === null
           ? `given の組み合わせ（${describeGiven(given)}）は探索していない。export const variants に足す`
@@ -239,15 +306,57 @@ const runScenarios = (
       findings.push({ kind: "scenario-failed", scenario: name, step: 0, reason: startError });
       return { name, passed: false, ...head, steps: [] };
     }
+    let created = true;
     for (const [i, step] of steps.entries()) {
-      const action = step.do.name;
+      const creating = spec.factory !== null && (step.do as unknown) === spec.factory;
+      const action = creating ? INITIAL : step.do.name;
       const fail = (reason: string) => {
-        records.push({ action, actor: step.by, input: step.input ?? null, from: idOf(values), to: null, ok: false, reason, denied: step.denied !== undefined });
+        records.push({ action, actor: step.by, input: step.input ?? null, from: creating || !created ? null : idOf(values), to: null, ok: false, reason, denied: step.denied !== undefined });
         findings.push({ kind: "scenario-failed", scenario: name, step: i + 1, reason });
       };
       const actor = spec.actors.find(([n]) => n === step.by);
       if (actor === undefined) {
         fail(`登場人物「${step.by}」は actors にない`);
+        break;
+      }
+      if (creating) {
+        if (i !== 0) {
+          fail("作る手順は、シナリオの最初にだけ書ける");
+          break;
+        }
+        const args = step.input === undefined ? [] : spec.inputs[INITIAL]?.find(([label]) => label === step.input)?.[1];
+        if (args === undefined) {
+          fail(`入力の例「${step.input}」は inputs.initial にない`);
+          break;
+        }
+        const outcome = runCreation(spec.factory!, actor[1], args);
+        if (step.denied !== undefined) {
+          if (outcome.kind === "ok") {
+            fail("断られるはずが、作れた");
+            break;
+          }
+          if (outcome.kind !== "not-allowed") {
+            fail(outcome.kind === "error" ? `例外: ${outcome.message}` : "オブジェクトを返さなかった");
+            break;
+          }
+          if (typeof step.denied === "string" && outcome.reason !== step.denied) {
+            fail(`断られる理由が違う: 期待「${step.denied}」、実際「${outcome.reason}」`);
+            break;
+          }
+          records.push({ action, actor: step.by, input: step.input ?? null, from: null, to: null, ok: true, reason: outcome.reason, denied: true });
+          created = false;
+          continue;
+        }
+        if (outcome.kind !== "ok") {
+          fail(outcome.kind === "not-allowed" ? outcome.reason : outcome.kind === "error" ? `例外: ${outcome.message}` : "オブジェクトを返さなかった");
+          break;
+        }
+        records.push({ action, actor: step.by, input: step.input ?? null, from: null, to: idOf(outcome.next), ok: true, reason: null, denied: false });
+        values = outcome.next;
+        continue;
+      }
+      if (!created) {
+        fail("作る手順が断られたので、続きの手順は実行できない");
         break;
       }
       if (!spec.actions.some(([n]) => n === action)) {
