@@ -1,5 +1,9 @@
 const DISCRIMINANTS = ["type", "kind", "tag"];
 
+/** オブジェクトの中の項目のうち、状態の名前に出すもの（判別子と、条件で読む項目） */
+export const isShownInside = (record: Readonly<Record<string, unknown>>, key: string, read: ReadonlySet<string>): boolean =>
+  (DISCRIMINANTS.find((k) => typeof record[k] === "string") === key) || read.has(key);
+
 // 項目の値を、状態の名前・チップ・「通るのは」・シナリオの食い違いの表示に出す文字にする。どこでも同じ書式にするため、
 // 値を文字にするときは必ずここを通す（String() では [object Object]、JSON では読めない文字になるため）。
 // オブジェクトは、判別子（type など）と、条件で読む項目（read）の値だけを短く出す。条件で読まない項目（データ）は省く。
