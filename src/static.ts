@@ -14,6 +14,20 @@ export interface StaticInfo {
   readonly stateType: string | null;
   /** 状態の型の項目のうち、ほかのドメインオブジェクトを指すかもしれないもの */
   readonly refs: ReadonlyArray<FieldRef>;
+  /** 状態の型のすべての項目（プロパティの表に出す） */
+  readonly properties: ReadonlyArray<Property>;
+  /** 値ごとの説明（as const のオブジェクトの項目に書いた JSDoc）。項目 → 値 → 説明 */
+  readonly valueDocs: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /** データの項目: 値が決まっていない型で、操作・不変条件・目指す状態のどこからも読まれない項目。状態の見分けに使わない */
+  readonly dataFields: ReadonlyArray<string>;
+}
+
+export interface Property {
+  readonly field: string;
+  /** 型を書いたとおりの文字 */
+  readonly type: string;
+  readonly doc: string | null;
+  readonly optional: boolean;
 }
 
 export interface FieldRef {
@@ -44,6 +58,8 @@ export const analyze = (source: string): StaticInfo => {
   const order: Array<string> = [];
   const docs: Record<string, string> = {};
   const types = new Map<string, { members: ReadonlyArray<t.TSTypeElement>; doc: string | null }>();
+  const aliases = new Map<string, t.TSType>();
+  const constObjects = new Map<string, Array<{ readonly value: string; readonly doc: string | null }>>();
   let initialType: string | null = null;
 
   for (const node of body) {
@@ -55,6 +71,13 @@ export const analyze = (source: string): StaticInfo => {
       types.set(decl.id.name, { members: decl.typeAnnotation.members, doc });
     }
     if (decl.type === "TSInterfaceDeclaration") types.set(decl.id.name, { members: decl.body.body, doc });
+    if (decl.type === "TSTypeAliasDeclaration" && decl.typeAnnotation.type !== "TSTypeLiteral") aliases.set(decl.id.name, decl.typeAnnotation);
+    if (decl.type === "VariableDeclaration") {
+      for (const d of decl.declarations) {
+        const values = d.id.type === "Identifier" && d.init != null ? constObjectOf(d.init) : null;
+        if (values !== null && d.id.type === "Identifier") constObjects.set(d.id.name, values);
+      }
+    }
 
     for (const [name, typeName] of valueNamesOf(decl)) {
       if (name === "initial") initialType = typeName;
@@ -66,17 +89,96 @@ export const analyze = (source: string): StaticInfo => {
     }
   }
 
+  // 型の別名と as const のオブジェクトをたどって、値の一覧を読む。値の一覧を 1 か所で決めて実装と共有する書き方
+  // （const Status = { … } as const と type Status = (typeof Status)[keyof typeof Status]）でも、状態の項目として扱えるようにするため。
+  const unwrap = (type: t.TSType): t.TSType => (type.type === "TSParenthesizedType" ? unwrap(type.typeAnnotation) : type);
+  const constObjectOfType = (type: t.TSType): string | null => {
+    const u = unwrap(type);
+    if (u.type !== "TSIndexedAccessType") return null;
+    const object = unwrap(u.objectType);
+    const index = unwrap(u.indexType);
+    if (object.type !== "TSTypeQuery" || object.exprName.type !== "Identifier") return null;
+    if (index.type !== "TSTypeOperator" || index.operator !== "keyof") return null;
+    return constObjects.has(object.exprName.name) ? object.exprName.name : null;
+  };
+  const resolve = (type: t.TSType, seen: ReadonlySet<string> = new Set()): { readonly values: ReadonlyArray<FieldValue> | null; readonly constObject: string | null } => {
+    const u = unwrap(type);
+    if (u.type === "TSTypeReference" && u.typeName.type === "Identifier" && u.typeArguments == null && !seen.has(u.typeName.name)) {
+      const alias = aliases.get(u.typeName.name);
+      if (alias !== undefined) return resolve(alias, new Set([...seen, u.typeName.name]));
+    }
+    const constName = constObjectOfType(u);
+    if (constName !== null) return { values: constObjects.get(constName)!.map((v) => v.value), constObject: constName };
+    return { values: finiteValuesOf(u), constObject: null };
+  };
+
   const stateType = initialType === null ? undefined : types.get(initialType);
+  const members = stateType?.members ?? [];
+  const fields: Record<string, ReadonlyArray<FieldValue>> = {};
+  const valueDocs: Record<string, Record<string, string>> = {};
+  const properties: Array<Property> = [];
+  for (const m of members) {
+    if (m.type !== "TSPropertySignature" || m.typeAnnotation == null) continue;
+    const key = m.key.type === "Identifier" ? m.key.name : m.key.type === "StringLiteral" ? m.key.value : null;
+    if (key === null) continue;
+    const annotation = m.typeAnnotation.typeAnnotation;
+    properties.push({ field: key, type: source.slice(annotation.start!, annotation.end!), doc: summaryOf(m.leadingComments), optional: m.optional === true });
+    const { values, constObject } = resolve(annotation);
+    if (values !== null) fields[key] = values;
+    if (constObject !== null) {
+      const docsOfValues = Object.fromEntries(constObjects.get(constObject)!.flatMap((v) => (v.doc === null ? [] : [[v.value, v.doc]])));
+      if (Object.keys(docsOfValues).length > 0) valueDocs[key] = docsOfValues;
+    }
+  }
+  const read = readFieldNames(body);
+  const dataFields = properties.map((p) => p.field).filter((f) => fields[f] === undefined && !read.has(f));
   return {
     order,
     docs,
-    fields: stateType === undefined ? {} : fieldsOf(stateType.members),
+    fields,
     stateDoc: stateType?.doc ?? null,
     fieldDocs: stateType === undefined ? {} : fieldDocsOf(stateType.members),
     ensures,
     stateType: initialType,
     refs: stateType === undefined ? [] : refsOf(stateType.members),
+    properties,
+    valueDocs,
+    dataFields,
   };
+};
+
+const constObjectOf = (init: t.Expression): Array<{ readonly value: string; readonly doc: string | null }> | null => {
+  if (init.type !== "TSAsExpression" || init.typeAnnotation.type !== "TSTypeReference") return null;
+  if (init.typeAnnotation.typeName.type !== "Identifier" || init.typeAnnotation.typeName.name !== "const") return null;
+  if (init.expression.type !== "ObjectExpression") return null;
+  const values = init.expression.properties.map((p) =>
+    p.type === "ObjectProperty" && p.value.type === "StringLiteral" ? { value: p.value.value, doc: summaryOf(p.leadingComments) } : null,
+  );
+  return values.every((v) => v !== null) ? values : null;
+};
+
+// 状態の項目を読んでいる名前を集める。画面（surface）は表示に使うだけなので数えない。
+// 状態以外のオブジェクトの同じ名前の項目も数えてしまうが、そのときは状態の項目として扱う側に倒れるだけなので害はない。
+const readFieldNames = (body: ReadonlyArray<t.Statement>): Set<string> => {
+  const names = new Set<string>();
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (typeof node !== "object" || node === null || typeof (node as { type?: unknown }).type !== "string") return;
+    const n = node as t.Node;
+    if ((n.type === "MemberExpression" || n.type === "OptionalMemberExpression") && !n.computed && n.property.type === "Identifier") names.add(n.property.name);
+    if ((n.type === "MemberExpression" || n.type === "OptionalMemberExpression") && n.computed && n.property.type === "StringLiteral") names.add(n.property.value);
+    if (n.type === "ObjectPattern") {
+      for (const p of n.properties) if (p.type === "ObjectProperty" && p.key.type === "Identifier") names.add(p.key.name);
+    }
+    for (const [key, value] of Object.entries(n)) if (key !== "loc" && key !== "leadingComments" && key !== "trailingComments" && typeof value === "object") visit(value);
+  };
+  for (const node of body) {
+    const decl = node.type === "ExportNamedDeclaration" ? node.declaration : node;
+    if (decl?.type === "FunctionDeclaration" && decl.id?.name === "surface") continue;
+    if (decl?.type === "VariableDeclaration" && decl.declarations.some((d) => d.id.type === "Identifier" && d.id.name === "surface")) continue;
+    visit(node);
+  }
+  return names;
 };
 
 const REF_TAG = /@ref\s+(\S+)/;
@@ -196,17 +298,6 @@ const valueNamesOf = (decl: t.Node): ReadonlyArray<readonly [name: string, typeN
     const typeName = ref !== null && ref.typeName.type === "Identifier" ? ref.typeName.name : null;
     return [[d.id.name, typeName] as const];
   });
-};
-
-const fieldsOf = (members: ReadonlyArray<t.TSTypeElement>): Record<string, ReadonlyArray<FieldValue>> => {
-  const fields: Record<string, ReadonlyArray<FieldValue>> = {};
-  for (const m of members) {
-    if (m.type !== "TSPropertySignature" || m.typeAnnotation == null) continue;
-    const key = m.key.type === "Identifier" ? m.key.name : m.key.type === "StringLiteral" ? m.key.value : null;
-    const values = finiteValuesOf(m.typeAnnotation.typeAnnotation);
-    if (key !== null && values !== null) fields[key] = values;
-  }
-  return fields;
 };
 
 const fieldDocsOf = (members: ReadonlyArray<t.TSTypeElement>): Record<string, string> => {

@@ -60,8 +60,12 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   const queue: Array<string> = [];
   const parents = new Map<string, { from: string; action: string; actor: string }>();
   const violations: Array<{ invariant: string; state: string }> = [];
+  // データの項目（題名や手順の並びのように、振る舞いに効かない値）は、状態の見分けに使わない。値の数だけ状態が増えて、
+  // 図が読めなくなるため。実行は、データの項目も含めた値のまま続ける（画面の表示に使うため）。
+  const dataFields = new Set(spec.dataFields);
+  const keyOf = (values: State) => JSON.stringify(Object.fromEntries(Object.entries(values).filter(([k]) => !dataFields.has(k))));
   const register = (values: State, via?: { from: string; action: string; actor: string }): string | undefined => {
-    const key = JSON.stringify(values);
+    const key = keyOf(values);
     const known = ids.get(key);
     if (known !== undefined) return known;
     if (ids.size >= maxStates) return undefined;
@@ -126,7 +130,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
     processed.add(from);
   }
 
-  const labelOf = labeler([...valuesById.values()], Object.keys(spec.initial));
+  const labelOf = labeler([...valuesById.values()], Object.keys(spec.initial), dataFields);
   const states = [...valuesById.entries()].map(([id, values]) => ({
     id,
     label: labelOf(values),
@@ -154,7 +158,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
 
   const surfaces = spec.surface === null ? [] : checkSurfaces(spec.surface, spec, [...processed], valuesById, availability, findings);
 
-  const scenarios = runScenarios(spec, (values) => ids.get(JSON.stringify(values)) ?? null, findings, bypassFor);
+  const scenarios = runScenarios(spec, (values) => ids.get(keyOf(values)) ?? null, findings, bypassFor);
   const questions = spec.questions.map((q) => {
     const about = q.about;
     const action = typeof about === "function" ? about.name : null;
@@ -312,10 +316,10 @@ const checkSurfaces = (
 // 文字列の項目を先に並べるのは、status のような主たる区分を先頭に見せるため。
 // initial に書いた順に並べる理由: 書き手は、読み手に最初に見せたい項目を先に書く。
 // 状態の値そのもの（canonical）はキーを並べ替えて持つので、その順番は使わない。
-const labeler = (all: ReadonlyArray<State>, declared: ReadonlyArray<string>) => {
+const labeler = (all: ReadonlyArray<State>, declared: ReadonlyArray<string>, excluded: ReadonlySet<string> = new Set()) => {
   const position = (k: string) => (declared.includes(k) ? declared.indexOf(k) : declared.length);
   const keys = [...new Set(all.flatMap((v) => Object.keys(v)))]
-    .filter((k) => new Set(all.map((v) => JSON.stringify(v[k]))).size > 1)
+    .filter((k) => !excluded.has(k) && new Set(all.map((v) => JSON.stringify(v[k]))).size > 1)
     .sort((a, b) => position(a) - position(b) || a.localeCompare(b));
   return (values: State): string => {
     const parts = keys.flatMap((k) => {

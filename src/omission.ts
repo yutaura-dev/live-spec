@@ -289,7 +289,7 @@ const unusedFields = (spec: Spec, graph: Graph, options: Pick<ExploreOptions, "b
   };
 
   // 関連の項目（ほかのドメインオブジェクトを指す項目）は、データの構造を表すもので、操作の可否に効かないのが普通なので除く。
-  const refs = new Set(spec.refs.map((r) => r.field));
+  const refs = new Set([...spec.refs.map((r) => r.field), ...spec.dataFields]);
   return fields
     .filter((f) => !used(f) && !refs.has(f))
     .map((field) => ({

@@ -1,4 +1,4 @@
-import { analyze, type EnsureCall, type FieldRef, type FieldValue } from "./static.ts";
+import { analyze, type EnsureCall, type FieldRef, type FieldValue, type Property } from "./static.ts";
 
 export type State = Readonly<Record<string, unknown>>;
 export type ActionFn = (state: never, actor: never) => unknown;
@@ -63,6 +63,12 @@ export interface Spec {
   readonly stateType: string | null;
   /** 状態の型の項目のうち、ほかのドメインオブジェクトを指すかもしれないもの */
   readonly refs: ReadonlyArray<FieldRef>;
+  /** 状態の型のすべての項目（プロパティの表に出す） */
+  readonly properties: ReadonlyArray<Property>;
+  /** 値ごとの説明。項目 → 値 → 説明 */
+  readonly valueDocs: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /** データの項目（状態の見分けと名前に使わない） */
+  readonly dataFields: ReadonlyArray<string>;
 }
 
 const RESERVED = new Set([
@@ -106,6 +112,9 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
       : [],
     stateType: info?.stateType ?? null,
     refs: info?.refs ?? [],
+    properties: info?.properties ?? [],
+    valueDocs: info?.valueDocs ?? {},
+    dataFields: info?.dataFields ?? [],
     groupBy: isRecord(mod.diagram) && typeof mod.diagram.groupBy === "string" ? mod.diagram.groupBy : null,
     goals: isRecord(mod.goals) ? Object.entries(mod.goals).filter((e): e is [string, InvariantFn] => typeof e[1] === "function") : [],
     inputs: inputsOf(mod.inputs),

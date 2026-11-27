@@ -90,8 +90,8 @@ describe("ドメインオブジェクトの関連: 状態の型の項目から�
 
     const ids = objects.flatMap((o) => (o.graph.omissions ?? []).map((h) => h.id));
 
-    // comment の author は @ref none で関連から外した項目なので、ほかの項目と同じく候補に出る。
-    expect(ids.filter((id) => id.startsWith("unused-field:"))).toEqual(["unused-field:author"]);
+    // comment の author は @ref none で関連から外したが、どこからも読まれない string の項目なので、データの項目として候補に出ない。
+    expect(ids.filter((id) => id.startsWith("unused-field:"))).toEqual([]);
   });
 
   it("一覧の Markdown に、mermaid の erDiagram で関連を出す", async () => {

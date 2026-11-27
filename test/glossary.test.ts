@@ -21,11 +21,12 @@ describe("用語: 項目と値の説明", { timeout: 30_000 }, () => {
     expect(spec.actions.map(([n]) => n)).not.toContain("glossary");
   });
 
-  it("Markdown に「用語」の節を作り、項目と値の説明を並べる", () => {
+  it("Markdown に「用語」の節を作り、項目と値の説明はプロパティの表に並べる", () => {
     const md = renderMarkdown(spec, graph);
 
     expect(md).toContain("## 用語");
-    expect(md).toContain("- **status**（項目）: 公開の段階。値: draft / inReview / published");
+    expect(md).toContain("## プロパティ");
+    expect(md).toContain("| status | `\"draft\" \\| \"inReview\" \\| \"published\"` | 公開の段階 | 振る舞いに効く | draft（著者が書いている途中。読者には見えない） / inReview（編集者のレビューを待っている） / published（読者に公開されている） |");
     expect(md).toContain("- **inReview**: 編集者のレビューを待っている");
   });
 

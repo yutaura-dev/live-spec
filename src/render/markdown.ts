@@ -1,6 +1,7 @@
 import type { EnsureCheck } from "../model.ts";
 import { describeEnsure } from "./ensures.ts";
 import { markdownSection } from "./sections.ts";
+import { propertyRows } from "./properties.ts";
 import { projectRelations } from "../relations.ts";
 import { actionTitle, canOnlyWhen } from "../labels.ts";
 import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
@@ -116,6 +117,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...graph.states.filter((s) => s.terminal).map((s) => `  ${s.id} --> [*]`),
     "```",
     "",
+    ...propertiesSection(spec),
     ...markdownSection("操作"),
     ...summarizeActions(spec, graph).flatMap((a) => [
       ...actionSection(a),
@@ -218,12 +220,20 @@ const actionSection = (a: ActionSummary): Array<string> => {
 };
 
 const glossarySection = (spec: Spec): Array<string> => {
-  const fields = Object.entries(spec.fieldDocs).map(([field, doc]) => {
-    const values = spec.fields[field];
-    return `- **${field}**（項目）: ${doc}${values === undefined ? "" : `。値: ${values.map(String).join(" / ")}`}`;
-  });
   const terms = Object.entries(spec.glossary).map(([term, doc]) => `- **${term}**: ${doc}`);
-  return fields.length + terms.length === 0 ? [] : [...markdownSection("用語"), ...fields, ...terms, ""];
+  return terms.length === 0 ? [] : [...markdownSection("用語"), ...terms, ""];
+};
+
+const propertiesSection = (spec: Spec): Array<string> => {
+  const rows = propertyRows(spec);
+  if (rows.length === 0) return [];
+  return [
+    ...markdownSection("プロパティ"),
+    "| 項目 | 型 | 説明 | 扱い | 値 |",
+    "|---|---|---|---|---|",
+    ...rows.map((r) => `| ${r.field} | \`${r.type.replace(/\|/g, "\\|")}\` | ${r.doc} | ${r.kind} | ${r.values.map((v) => (v.doc === null ? v.value : `${v.value}（${v.doc}）`)).join(" / ")} |`),
+    "",
+  ];
 };
 
 const screensSection = (spec: Spec, graph: Graph): Array<string> => {
