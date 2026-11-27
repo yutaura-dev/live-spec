@@ -85,15 +85,15 @@ describe("ドメインオブジェクトのプロパティ", { timeout: 60_000 }
     expect((graph.omissions ?? []).filter((h) => h.kind === "unused-field")).toEqual([]);
   });
 
-  it("Markdown にプロパティの表を出し、値ごとの説明と、振る舞いに効くかデータかを示す", async () => {
+  it("Markdown にプロパティの表を出し、値ごとの説明と、項目の扱い（状態遷移で変わる・作ったときに決まる・データ）を示す", async () => {
     const { spec, graph } = await load();
 
     const md = renderMarkdown(spec, graph);
 
     expect(md).toContain("## プロパティ");
-    expect(md).toContain("| status | `Status` | 列 | 振る舞いに効く | todo（まだ手を付けていない） / 進行中（作業中） / 完了（終わった） |");
+    expect(md).toContain("| status | `Status` | 列 | 状態遷移で変わる | todo（まだ手を付けていない） / 進行中（作業中） / 完了（終わった） |");
     expect(md).toContain("| title | `string` | 題名 | データ |  |");
-    expect(md).toContain("| ownerId | `string` | 担当者 | 振る舞いに効く |  |");
+    expect(md).toContain("| ownerId | `string` | 担当者 | 作ったときに決まる |  |");
   });
 
   it("HTML にもプロパティの表を出す", async () => {
@@ -103,5 +103,71 @@ describe("ドメインオブジェクトのプロパティ", { timeout: 60_000 }
 
     expect(html).toContain("<h2>プロパティ</h2>");
     expect(html).toContain('<span class="value" title="作業中">進行中</span>');
+  });
+});
+
+const ITEM = (extra = "") => `import { ensure } from "${INDEX}";
+/** 次にやること */
+export type Item = {
+  /** 状態 */
+  status: "todo" | "done";
+  /** 種類 */
+  kind: "manual" | "wait" | "merge";
+  /** 担当 */
+  assignee: "human" | "claude";
+  /** 手間 */
+  effort: "easy" | "hard";
+  /** 題名 */
+  title: string;
+};
+type Actor = { kind: "human" | "claude" };
+export const initial: Item = { status: "todo", kind: "manual", assignee: "human", effort: "easy", title: "x" };
+export const actors: Record<string, Actor> = { 人: { kind: "human" }, Claude: { kind: "claude" } };
+/** 終える */
+export function complete(i: Item, a: Actor): Item {
+  ensure(a.kind === i.assignee, "担当だけ");
+  ensure(i.status === "todo", "todo のときだけ");
+  ensure(i.kind !== "wait", "待つものは手で終えられない");
+  return { ...i, status: "done" };
+}
+${extra}
+`;
+
+const loadItem = async (extra = "") => {
+  const dir = mkdtempSync(join(tmpdir(), "live-spec-item-"));
+  writeFileSync(join(dir, "item.spec.ts"), ITEM(extra));
+  return loadObject(join(dir, "item.spec.ts"));
+};
+
+describe("作ったときに決まる値", { timeout: 60_000 }, () => {
+  it("条件で読むが、どの操作も書き換えない項目を「作ったときに決まる値」、読まれない値の一覧の項目もデータとする", () => {
+    const info = analyze(ITEM());
+
+    expect(info.creationFields).toEqual(["kind", "assignee"]);
+    expect(info.dataFields).toEqual(["effort", "title"]);
+  });
+
+  it("作ったときに決まる値は、項目ごとに 1 つずつ値を変えた初期状態から探索し、到達しない値や影響しない項目として出さない", async () => {
+    const { graph } = await loadItem();
+
+    expect(graph.states.filter((s) => s.initial).map((s) => s.label)).toEqual(["todo · manual · human", "todo · wait · human", "todo · merge · human", "todo · manual · claude"]);
+    expect(graph.findings.filter((f) => f.kind === "unreachable-value")).toEqual([]);
+    expect((graph.omissions ?? []).filter((h) => h.kind === "unused-field")).toEqual([]);
+  });
+
+  it("組み合わせで振る舞いが変わる値は、variants に書くと、その組み合わせの初期状態も探索する", async () => {
+    const { graph } = await loadItem('export const variants = [{ kind: "wait", assignee: "claude" }];');
+
+    expect(graph.states.filter((s) => s.initial).map((s) => s.label)).toContain("todo · wait · claude");
+  });
+
+  it("プロパティの表で、状態遷移で変わる・作ったときに決まる・データを分けて示す", async () => {
+    const { spec, graph } = await loadItem();
+
+    const md = renderMarkdown(spec, graph);
+
+    expect(md).toContain("| status | \`\"todo\" \\| \"done\"\` | 状態 | 状態遷移で変わる |");
+    expect(md).toContain("| kind | \`\"manual\" \\| \"wait\" \\| \"merge\"\` | 種類 | 作ったときに決まる |");
+    expect(md).toContain("| effort | \`\"easy\" \\| \"hard\"\` | 手間 | データ |");
   });
 });

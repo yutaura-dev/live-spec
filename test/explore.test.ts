@@ -68,7 +68,11 @@ describe("explore: 検査結果", () => {
   });
 
   it("型に書かれているのに、どの状態でもとらない値を検出する", () => {
-    const source = 'type Doc = { status: "draft" | "published" | "deleted" };\nexport const initial: Doc = { status: "draft" };';
+    const source = [
+      'type Doc = { status: "draft" | "published" | "deleted" };',
+      'export const initial: Doc = { status: "draft" };',
+      'export function publish(d: Doc) { ensure(d.status === "draft", "下書きのときだけ"); return { status: "published" }; }',
+    ].join("\n");
     const g = explore(
       loadSpec(
         "doc",

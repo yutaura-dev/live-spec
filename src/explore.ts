@@ -62,8 +62,11 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   const violations: Array<{ invariant: string; state: string }> = [];
   // データの項目（題名や手順の並びのように、振る舞いに効かない値）は、状態の見分けに使わない。値の数だけ状態が増えて、
   // 図が読めなくなるため。実行は、データの項目も含めた値のまま続ける（画面の表示に使うため）。
+  // 値の一覧を持つデータの項目（手間・並べ方など）は、どの操作も書き換えないので値が変わらず、状態を増やさない。
+  // 見分けに残しておけば、操作の関数を別のファイルに置いて読み書きを見つけられなかったときにも、状態を誤ってまとめない。
   const dataFields = new Set(spec.dataFields);
-  const keyOf = (values: State) => JSON.stringify(Object.fromEntries(Object.entries(values).filter(([k]) => !dataFields.has(k))));
+  const unkeyed = new Set(spec.dataFields.filter((f) => spec.fields[f] === undefined));
+  const keyOf = (values: State) => JSON.stringify(Object.fromEntries(Object.entries(values).filter(([k]) => !unkeyed.has(k))));
   const register = (values: State, via?: { from: string; action: string; actor: string }): string | undefined => {
     const key = keyOf(values);
     const known = ids.get(key);
@@ -98,6 +101,16 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   const NO_INPUT: ReadonlyArray<readonly [string | null, ReadonlyArray<unknown>]> = [[null, []]];
 
   register(canonical(spec.initial) as State);
+  // 作ったときに決まる値（種類・担当など、作ったあと変わらないが振る舞いを変える値）は、initial の 1 つの値だけでは
+  // ほかの値の振る舞いを確かめられない。項目ごとに 1 つずつ値を変えた初期状態も探索する。全部の組み合わせにしないのは、
+  // 項目が増えると掛け算で状態の数の上限を超えるため。組み合わせで振る舞いが変わるものは variants に書いてもらう。
+  for (const field of spec.creationFields) {
+    for (const value of spec.fields[field] ?? []) {
+      if (value !== (spec.initial as State)[field]) register(canonical({ ...spec.initial, [field]: value }) as State);
+    }
+  }
+  for (const variant of spec.variants) register(canonical({ ...spec.initial, ...variant }) as State);
+  const initials = new Set(valuesById.keys());
   // 幅優先探索の理由: 状態 ID と表の行の並びを「初期状態からの近さ」順に固定し、
   // spec の書き換えで出力の順序が揺れないようにするため（差分レビューの前提）。
   explore: for (let i = 0; i < queue.length; i++) {
@@ -135,12 +148,13 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
     id,
     label: labelOf(values),
     values,
-    initial: id === "s0",
+    initial: initials.has(id),
     terminal: processed.has(id) && !availability.some((a) => a.state === id && a.enabled),
   }));
 
   for (const v of violations) findings.push({ kind: "invariant-violation", ...v, path: pathTo(v.state) });
   for (const [field, values] of Object.entries(spec.fields)) {
+    if (dataFields.has(field)) continue;
     for (const value of values) {
       if (!states.some((s) => s.values[field] === value)) findings.push({ kind: "unreachable-value", field, value });
     }

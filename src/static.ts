@@ -20,6 +20,10 @@ export interface StaticInfo {
   readonly valueDocs: Readonly<Record<string, Readonly<Record<string, string>>>>;
   /** データの項目: 値が決まっていない型で、操作・不変条件・目指す状態のどこからも読まれない項目。状態の見分けに使わない */
   readonly dataFields: ReadonlyArray<string>;
+  /** 作ったときに決まる値の項目: 値の一覧を持ち、条件で読むが、どの操作も書き換えない項目。値ごとに初期状態を作って探索する */
+  readonly creationFields: ReadonlyArray<string>;
+  /** どれかの操作が戻り値で書く項目 */
+  readonly writtenFields: ReadonlyArray<string>;
 }
 
 export interface Property {
@@ -131,7 +135,11 @@ export const analyze = (source: string): StaticInfo => {
     }
   }
   const read = readFieldNames(body);
-  const dataFields = properties.map((p) => p.field).filter((f) => fields[f] === undefined && !read.has(f));
+  const written = writtenFieldNames(body);
+  // 値の一覧を持つ項目を操作が書き換えているのに誰も読まないのは、条件の書き忘れのことが多いので、データにせず
+  // 「どの可否にも影響しない項目」の候補に残す。
+  const dataFields = properties.map((p) => p.field).filter((f) => !read.has(f) && (fields[f] === undefined || !written.has(f)));
+  const creationFields = properties.map((p) => p.field).filter((f) => fields[f] !== undefined && read.has(f) && !written.has(f));
   return {
     order,
     docs,
@@ -144,6 +152,8 @@ export const analyze = (source: string): StaticInfo => {
     properties,
     valueDocs,
     dataFields,
+    creationFields,
+    writtenFields: properties.map((p) => p.field).filter((f) => written.has(f)),
   };
 };
 
@@ -177,6 +187,37 @@ const readFieldNames = (body: ReadonlyArray<t.Statement>): Set<string> => {
     if (decl?.type === "FunctionDeclaration" && decl.id?.name === "surface") continue;
     if (decl?.type === "VariableDeclaration" && decl.declarations.some((d) => d.id.type === "Identifier" && d.id.name === "surface")) continue;
     visit(node);
+  }
+  return names;
+};
+
+// 操作が戻り値で書く項目を集める。{ ...t, status: "done" } の status のように、オブジェクトの書き方のキーを数える
+// （...t で写すだけの項目は書き換えではない）。状態の型を返す関数（操作）だけを見るのが正確だが、構文だけでは
+// 見分けられないので、export した関数をすべて見る。画面（surface）は戻り値が画面なので除く。
+const writtenFieldNames = (body: ReadonlyArray<t.Statement>): Set<string> => {
+  const names = new Set<string>();
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (typeof node !== "object" || node === null || typeof (node as { type?: unknown }).type !== "string") return;
+    const n = node as t.Node;
+    if (n.type === "ObjectExpression") {
+      for (const p of n.properties) {
+        if (p.type !== "ObjectProperty" || p.computed) continue;
+        if (p.key.type === "Identifier") names.add(p.key.name);
+        if (p.key.type === "StringLiteral") names.add(p.key.value);
+      }
+    }
+    for (const [key, value] of Object.entries(n)) if (key !== "loc" && key !== "leadingComments" && key !== "trailingComments" && typeof value === "object") visit(value);
+  };
+  for (const node of body) {
+    if (node.type !== "ExportNamedDeclaration" || node.declaration == null) continue;
+    const decl = node.declaration;
+    if (decl.type === "FunctionDeclaration" && decl.id?.name !== "surface") visit(decl.body);
+    if (decl.type === "VariableDeclaration") {
+      for (const d of decl.declarations) {
+        if (d.id.type === "Identifier" && d.id.name !== "surface" && (d.init?.type === "ArrowFunctionExpression" || d.init?.type === "FunctionExpression")) visit(d.init.body);
+      }
+    }
   }
   return names;
 };

@@ -69,6 +69,12 @@ export interface Spec {
   readonly valueDocs: Readonly<Record<string, Readonly<Record<string, string>>>>;
   /** データの項目（状態の見分けと名前に使わない） */
   readonly dataFields: ReadonlyArray<string>;
+  /** 作ったときに決まる値の項目（値ごとに初期状態を作って探索する） */
+  readonly creationFields: ReadonlyArray<string>;
+  /** どれかの操作が書き換える項目 */
+  readonly writtenFields: ReadonlyArray<string>;
+  /** 初期状態に足す組み合わせ（export const variants = [{ kind: "wait", assignee: "claude" }]） */
+  readonly variants: ReadonlyArray<Readonly<Record<string, unknown>>>;
 }
 
 const RESERVED = new Set([
@@ -85,6 +91,7 @@ const RESERVED = new Set([
   "reviewed",
   "goals",
   "diagram",
+  "variants",
 ]);
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
@@ -115,6 +122,9 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
     properties: info?.properties ?? [],
     valueDocs: info?.valueDocs ?? {},
     dataFields: info?.dataFields ?? [],
+    creationFields: info?.creationFields ?? [],
+    writtenFields: info?.writtenFields ?? [],
+    variants: Array.isArray(mod.variants) ? mod.variants.filter(isRecord) : [],
     groupBy: isRecord(mod.diagram) && typeof mod.diagram.groupBy === "string" ? mod.diagram.groupBy : null,
     goals: isRecord(mod.goals) ? Object.entries(mod.goals).filter((e): e is [string, InvariantFn] => typeof e[1] === "function") : [],
     inputs: inputsOf(mod.inputs),

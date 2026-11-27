@@ -26,7 +26,7 @@ describe("用語: 項目と値の説明", { timeout: 30_000 }, () => {
 
     expect(md).toContain("## 用語");
     expect(md).toContain("## プロパティ");
-    expect(md).toContain("| status | `\"draft\" \\| \"inReview\" \\| \"published\"` | 公開の段階 | 振る舞いに効く | draft（著者が書いている途中。読者には見えない） / inReview（編集者のレビューを待っている） / published（読者に公開されている） |");
+    expect(md).toContain("| status | `\"draft\" \\| \"inReview\" \\| \"published\"` | 公開の段階 | 状態遷移で変わる | draft（著者が書いている途中。読者には見えない） / inReview（編集者のレビューを待っている） / published（読者に公開されている） |");
     expect(md).toContain("- **inReview**: 編集者のレビューを待っている");
   });
 
