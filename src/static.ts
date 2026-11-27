@@ -41,6 +41,8 @@ export interface Property {
   readonly children: ReadonlyArray<Property>;
   /** 判別 union の種類の行 */
   readonly variant?: true;
+  /** 値ごとの説明（as const のオブジェクトの各値の JSDoc）。値 → 説明 */
+  readonly valueDocs?: Readonly<Record<string, string>>;
 }
 
 export interface FieldRef {
@@ -132,6 +134,10 @@ export const analyze = (source: string): StaticInfo => {
   // オブジェクトの型の項目を、子の項目として展開する（プロパティの表で、入れ子の行として見せるため）。判別 union は、
   // どの種類にもある文字列リテラルの項目を判別子として、種類ごとの行の下に並べる。同じ型に戻ったら止め、深さも 4 段までにする。
   const MAX_DEPTH = 4;
+  const valueDocsOf = (constObject: string | null): { valueDocs?: Record<string, string> } => {
+    const docs = constObject === null ? {} : Object.fromEntries(constObjects.get(constObject)!.flatMap((v) => (v.doc === null ? [] : [[v.value, v.doc]])));
+    return Object.keys(docs).length === 0 ? {} : { valueDocs: docs };
+  };
   // 判別 union の種類ごとの JSDoc は、Babel では前後の種類や union 全体の注釈として付くので、位置で探す。
   // 種類の直前にあり、1 つ前の種類（最初の種類なら型の名前）より後ろにある JSDoc を、その種類の説明とする。
   const docBetween = (after: number, before: number): string | null =>
@@ -208,6 +214,7 @@ export const analyze = (source: string): StaticInfo => {
           doc: summaryOf(m.leadingComments),
           optional: m.optional === true,
           values: resolve(annotation).values,
+          ...valueDocsOf(resolve(annotation).constObject),
           children: expand(annotation, seen, depth + 1, m.key.end!),
         },
       ];
@@ -474,18 +481,22 @@ const finiteValuesOf = (type: t.TSType): ReadonlyArray<FieldValue> | null => {
 
 // 最初の段落（空行まで）を説明文にする理由: 1 行目だけを取ると、複数行にわたる文が途中で切れてしまうため。
 const summaryOf = (comments: ReadonlyArray<t.Comment> | null | undefined): string | null => {
-  const jsdoc = comments?.findLast((c) => c.type === "CommentBlock" && c.value.startsWith("*"));
-  if (jsdoc === undefined) return null;
-  const lines = jsdoc.value
-    .slice(1)
-    .split("\n")
-    .map((line) => line.replace(/^\s*\*?\s?/, "").trim());
-  const start = lines.findIndex((line) => line !== "");
-  if (start === -1) return null;
-  const end = lines.indexOf("", start);
-  return (end === -1 ? lines.slice(start) : lines.slice(start, end)).reduce((text, line) =>
-    isCjk(text.at(-1)) || isCjk(line[0]) ? text + line : `${text} ${line}`,
-  );
+  // 説明に使うのは、タグ（@ref など）を除いて文が残る最後の JSDoc。説明とタグを 2 つの JSDoc に分けて書いても、
+  // タグだけの JSDoc を説明にしないため。
+  const jsdocs = (comments ?? []).filter((c) => c.type === "CommentBlock" && c.value.startsWith("*"));
+  for (const jsdoc of [...jsdocs].reverse()) {
+    const lines = jsdoc.value
+      .slice(1)
+      .split("\n")
+      .map((line) => line.replace(/^\s*\*?\s?/, "").replace(/\s*@[A-Za-z]+\b.*$/, "").trim());
+    const start = lines.findIndex((line) => line !== "");
+    if (start === -1) continue;
+    const end = lines.indexOf("", start);
+    return (end === -1 ? lines.slice(start) : lines.slice(start, end)).reduce((text, line) =>
+      isCjk(text.at(-1)) || isCjk(line[0]) ? text + line : `${text} ${line}`,
+    );
+  }
+  return null;
 };
 
 // 日本語の行のあいだに空白を入れない理由: JSDoc の折り返しは表示上の都合なので、日本語では空白が入ると文が不自然に途切れる。

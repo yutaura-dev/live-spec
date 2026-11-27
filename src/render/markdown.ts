@@ -118,7 +118,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...graph.states.filter((s) => s.terminal).map((s) => `  ${s.id} --> [*]`),
     "```",
     "",
-    ...propertiesSection(spec),
+    ...propertiesSection(spec, (name) => objects.find((o) => o.spec.name === name || o.spec.stateType === name)?.spec.name ?? null),
     ...markdownSection("操作"),
     ...creationSection(summarizeCreation(spec, graph)),
     ...summarizeActions(spec, graph).flatMap((a) => [
@@ -254,8 +254,8 @@ const glossarySection = (spec: Spec): Array<string> => {
   return terms.length === 0 ? [] : [...markdownSection("用語"), ...terms, ""];
 };
 
-const propertiesSection = (spec: Spec): Array<string> => {
-  const rows = propertyRows(spec);
+const propertiesSection = (spec: Spec, targetOf: (name: string) => string | null): Array<string> => {
+  const rows = propertyRows(spec, targetOf);
   if (rows.length === 0) return [];
   const code = (text: string) => `\`${text.replace(/\|/g, "\\|")}\``;
   return [

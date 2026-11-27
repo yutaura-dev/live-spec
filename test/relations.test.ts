@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { loadObject, resolveLinks } from "../src/generate.ts";
 import { projectRelations } from "../src/relations.ts";
 import { renderProjectHtml } from "../src/render/html.ts";
-import { renderIndexMarkdown } from "../src/render/markdown.ts";
+import { renderIndexMarkdown, renderMarkdown } from "../src/render/markdown.ts";
 import { analyze } from "../src/static.ts";
 
 const INDEX = new URL("../src/index.ts", import.meta.url).pathname;
@@ -109,5 +109,16 @@ describe("ドメインオブジェクトの関連: 状態の型の項目から�
 
     expect(html).toContain("<h2>関連</h2>");
     expect(html).toContain("author, editor（1）／ posts（多）");
+  });
+
+  it("プロパティの表で、型がほかの spec の状態の型になっている項目と @ref の項目を「参照（相手）」と出す", async () => {
+    const objects = await project();
+    const md = (name: string) => {
+      const o = objects.find((x) => x.spec.name === name)!;
+      return renderMarkdown(o.spec, o.graph, objects);
+    };
+
+    expect(md("post")).toContain("| author | `User` |  | 参照（user） |");
+    expect(md("comment")).toContain("| postId | `string` | 書いた記事 | 参照（post） |");
   });
 });
