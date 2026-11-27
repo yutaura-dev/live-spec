@@ -26,6 +26,8 @@ export interface StaticInfo {
   readonly writtenFields: ReadonlyArray<string>;
   /** 操作・不変条件・目指す状態の関数で読まれる名前（値オブジェクトの中の項目も含む） */
   readonly readFields: ReadonlyArray<string>;
+  /** export した型と、その項目（値オブジェクトのファイルで、値オブジェクトの型を読むのに使う） */
+  readonly exportedTypes: ReadonlyArray<{ readonly name: string; readonly doc: string | null; readonly properties: ReadonlyArray<Property> }>;
 }
 
 export interface Property {
@@ -77,6 +79,7 @@ export const analyze = (source: string): StaticInfo => {
   const aliasStarts = new Map<string, number>();
   const constObjects = new Map<string, Array<{ readonly value: string; readonly doc: string | null }>>();
   let initialType: string | null = null;
+  const exportedTypeDecls: Array<{ readonly name: string; readonly doc: string | null; readonly decl: t.TSTypeAliasDeclaration | t.TSInterfaceDeclaration }> = [];
 
   for (const node of body) {
     const decl = node.type === "ExportNamedDeclaration" ? node.declaration : node;
@@ -87,6 +90,9 @@ export const analyze = (source: string): StaticInfo => {
       types.set(decl.id.name, { members: decl.typeAnnotation.members, doc });
     }
     if (decl.type === "TSInterfaceDeclaration") types.set(decl.id.name, { members: decl.body.body, doc });
+    if (node.type === "ExportNamedDeclaration" && (decl.type === "TSTypeAliasDeclaration" || decl.type === "TSInterfaceDeclaration")) {
+      exportedTypeDecls.push({ name: decl.id.name, doc, decl });
+    }
     if (decl.type === "TSTypeAliasDeclaration" && decl.typeAnnotation.type !== "TSTypeLiteral") {
       aliases.set(decl.id.name, decl.typeAnnotation);
       aliasStarts.set(decl.id.name, decl.id.end!);
@@ -267,6 +273,16 @@ export const analyze = (source: string): StaticInfo => {
     creationFields,
     writtenFields: properties.map((p) => p.field).filter((f) => written.has(f)),
     readFields: [...read].sort(),
+    exportedTypes: exportedTypeDecls.map(({ name, doc, decl }) => ({
+      name,
+      doc,
+      properties:
+        decl.type === "TSInterfaceDeclaration"
+          ? propertiesOf(decl.body.body, new Set([name]), 1)
+          : decl.typeAnnotation.type === "TSTypeLiteral"
+            ? propertiesOf(decl.typeAnnotation.members, new Set([name]), 1)
+            : expand(decl.typeAnnotation, new Set([name]), 1, decl.id.end!),
+    })),
   };
 };
 

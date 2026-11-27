@@ -201,6 +201,33 @@ spec ファイルは素の TypeScript です。export の名前で役割が決�
 
 - 状態の型には、そのオブジェクトが持つ項目を全部書いてよい。仕様書の「プロパティ」の表に型と説明が出る。`string` や配列のように値が決まっていない型で、操作などの関数から読まれない項目は「データ」として扱われ、状態の数を増やさない
 - 振る舞い（できる・できない）を変える値は、文字列の union か `as const` のオブジェクトで有限にする。`as const` のオブジェクトの各値に付けた JSDoc は、値ごとの説明として表に出る
+
+### 値オブジェクト
+
+作業する場所・金額のように、識別子もライフサイクルも持たず、値そのものに意味があるものは、spec と同じディレクトリの `<名前>.value.ts` に書きます。専用のページは作らず、一覧ページの「値オブジェクト」の節に、項目の表・正しい値の決まり・例の結果が出ます。
+
+```ts
+// specs/place.value.ts
+/** 作業する場所 */
+export type Place = {
+  /** 開く URL */
+  url: string;
+  /** 確かめたか */
+  certainty: "confirmed" | "guessed";
+};
+
+export const invariants = {
+  "URL は http か https で始まる": (p: Place) => /^https?:\/\//.test(p.url),
+};
+
+export const examples = {
+  valid: { "社内の Wiki": { url: "https://wiki.example.com", certainty: "confirmed" } },
+  invalid: { "URL が空": { url: "", certainty: "guessed" } },
+};
+```
+
+- 正しい例がすべての決まりを満たし、正しくない例がどれかの決まりを破ることを確かめます。そうでなければ `live-spec check` が失敗します
+- spec からは `import type { Place } from "./place.value.ts"` で型を使います
 - `ensure` の理由は、そのまま「できない理由」として表示される。読み手に伝わる文にする
 - 「できない」は `ensure` で表す。普通の `throw` は仕様のバグとして検出される
 

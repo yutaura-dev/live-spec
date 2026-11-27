@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { loadValueObject } from "./value-object.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -23,20 +24,26 @@ export const specNameOf = (path: string): string => basename(path).replace(/(\.s
 
 // ディレクトリを渡せるようにする理由: 1 つの spec ファイルを 1 つのドメインオブジェクトとして扱うので、
 // プロジェクトの仕様は複数のファイルになる。specs/ のようなディレクトリをまとめて渡せる方が自然。
-export const expandSpecPaths = (paths: ReadonlyArray<string>): Array<string> =>
+const expandPaths = (paths: ReadonlyArray<string>, suffix: string, keepFiles: boolean): Array<string> =>
   paths.flatMap((p) => {
     let isDir = false;
     try {
       isDir = statSync(p).isDirectory();
     } catch {
-      return [p];
+      return keepFiles ? [p] : [];
     }
-    if (!isDir) return [p];
+    if (!isDir) return keepFiles || p.endsWith(suffix) ? [p] : [];
     return (readdirSync(p, { recursive: true }) as Array<string>)
-      .filter((f) => f.endsWith(".spec.ts") && !basename(f).startsWith("."))
+      .filter((f) => f.endsWith(suffix) && !basename(f).startsWith("."))
       .sort()
       .map((f) => join(p, f));
   });
+
+export const expandSpecPaths = (paths: ReadonlyArray<string>): Array<string> =>
+  expandPaths(paths.filter((p) => !p.endsWith(".value.ts")), ".spec.ts", true);
+
+/** 値オブジェクトのファイル（*.value.ts）を集める。ファイルを直接指定したときは、*.value.ts だけを拾う */
+export const expandValuePaths = (paths: ReadonlyArray<string>): Array<string> => expandPaths(paths, ".value.ts", false);
 
 // import のたびにクエリを変える理由: ESM は同じ URL のモジュールをキャッシュするので、
 // --watch で spec を読み直しても古い内容のまま生成されてしまう。クエリが違えば別モジュールとして読み込まれる。
@@ -71,7 +78,9 @@ export const generateProject = async (
   format: OutputFormat,
   title?: string,
   tests: ReadonlyArray<string> = [],
+  valuePaths: ReadonlyArray<string> = [],
 ): Promise<Output> => {
+  const values = await Promise.all(valuePaths.map((p) => loadValueObject(p)));
   const resolved = resolveLinks(await Promise.all(paths.map((p) => loadObject(p))));
   const objects = tests.length === 0 ? resolved : linkTests(resolved, tests);
   const names = objects.map((o) => o.spec.name);
@@ -79,17 +88,17 @@ export const generateProject = async (
   if (duplicated !== undefined) throw new Error(`ドメインオブジェクトの名前が重複しています: ${duplicated}（spec のファイル名を変えてください）`);
   const projectTitle = title ?? (objects.length === 1 ? objects[0]!.spec.name : projectNameOf(paths[0]!));
 
-  if (format === "html") return { kind: "text", content: await renderProjectHtml(objects, { title: projectTitle }) };
+  if (format === "html") return { kind: "text", content: await renderProjectHtml(objects, { title: projectTitle, values }) };
   if (format === "json") {
     const models = objects.map((o) => normalize(o.spec, o.graph));
     return { kind: "text", content: JSON.stringify(models.length === 1 ? models[0] : { objects: models }, null, 2) };
   }
-  if (objects.length === 1) return { kind: "text", content: renderMarkdown(objects[0]!.spec, objects[0]!.graph) };
+  if (objects.length === 1 && values.length === 0) return { kind: "text", content: renderMarkdown(objects[0]!.spec, objects[0]!.graph) };
   return {
     kind: "files",
     files: {
-      "README.md": renderIndexMarkdown(objects, projectTitle),
-      ...Object.fromEntries(objects.map((o) => [`${o.spec.name}.md`, renderMarkdown(o.spec, o.graph, objects)])),
+      "README.md": renderIndexMarkdown(objects, projectTitle, values),
+      ...Object.fromEntries(objects.map((o) => [`${o.spec.name}.md`, renderMarkdown(o.spec, o.graph, objects, values)])),
     },
   };
 };

@@ -5,7 +5,8 @@ import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { findTsc, typecheck } from "./check.ts";
 import { linkTests } from "./test-links.ts";
-import { expandSpecPaths, generateProject, loadObject, resolveLinks, specNameOf, writeOutput, writeProjectOutput, type OutputFormat } from "./generate.ts";
+import { loadValueObject, valueNameOf } from "./value-object.ts";
+import { expandSpecPaths, expandValuePaths, generateProject, loadObject, resolveLinks, specNameOf, writeOutput, writeProjectOutput, type OutputFormat } from "./generate.ts";
 import { describeFinding } from "./render/markdown.ts";
 import { reviewItems } from "./render/review.ts";
 import { diffProject } from "./project-diff.ts";
@@ -157,6 +158,7 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
     return 2;
   }
   const paths = expandSpecPaths(parsed.positionals);
+  const valuePaths = expandValuePaths(parsed.positionals);
   if (paths.length === 0) {
     io.stderr(`spec ファイル（*.spec.ts）を指定してください\n${CHECK_USAGE}\n`);
     return 2;
@@ -166,7 +168,7 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
   if (tsc === null) {
     io.stderr("typescript が見つからないので、型チェックを飛ばしました（--cwd で typescript を入れたディレクトリを指定できます）\n");
   } else {
-    const result = typecheck(tsc, paths.map((p) => resolve(p)));
+    const result = typecheck(tsc, [...paths, ...valuePaths].map((p) => resolve(p)));
     failed ||= !result.ok;
     io.stdout(result.ok ? "✓ 型チェック\n" : `✗ 型チェック\n${indent(result.output)}\n`);
   }
@@ -196,6 +198,20 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
         ...pending.map((i) => `  - ${i.message}（${i.id}）`),
       ].join("\n") + "\n",
     );
+  }
+  for (const path of valuePaths) {
+    try {
+      const vo = await loadValueObject(path);
+      if (vo.findings.length === 0) {
+        io.stdout(`✓ ${vo.displayName}（値オブジェクト）\n`);
+        continue;
+      }
+      failed = true;
+      io.stdout([`✗ ${vo.displayName}（値オブジェクト）: 検査結果 ${vo.findings.length} 件`, ...vo.findings.map((f) => `  - ${f}`)].join("\n") + "\n");
+    } catch (e) {
+      failed = true;
+      io.stdout(`✗ ${valueNameOf(path)}（値オブジェクト）: 読み込めない: ${messageOf(e)}\n`);
+    }
   }
   return failed ? 1 : 0;
 };
@@ -275,7 +291,7 @@ export const runCli = async (argv: ReadonlyArray<string>, io: CliIo): Promise<nu
   }
   let output;
   try {
-    output = await generateProject(paths, options.format, options.title ?? undefined, options.tests);
+    output = await generateProject(paths, options.format, options.title ?? undefined, options.tests, expandValuePaths(options.paths));
   } catch (e) {
     io.stderr(`生成に失敗しました: ${messageOf(e)}\n`);
     return 1;

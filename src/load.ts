@@ -118,7 +118,7 @@ export interface LoadOptions {
 
 // ファイル名（action-item）から読みやすい名前（Action Item）を作る。仕様書の見出しやタブにファイル名がそのまま出ると、
 // 読み手にはコードの識別子に見えるため。略語や日本語の名前は displayName で上書きしてもらう。
-const titleCase = (name: string) =>
+export const titleCase = (name: string): string =>
   name
     .split(/[-_\s]+/)
     .filter((w) => w !== "")

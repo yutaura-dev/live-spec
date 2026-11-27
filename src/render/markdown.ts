@@ -2,7 +2,8 @@ import type { EnsureCheck } from "../model.ts";
 import { describeEnsure } from "./ensures.ts";
 import { markdownSection } from "./sections.ts";
 import { formatValue } from "../format-value.ts";
-import { propertyRows } from "./properties.ts";
+import { propertyRows, valueObjectRows } from "./properties.ts";
+import type { ValueObject } from "../value-object.ts";
 import { projectRelations } from "../relations.ts";
 import { actionTitle, canOnlyWhen } from "../labels.ts";
 import { REVIEW_LEAD, REVIEW_TITLE, reviewItems, unguardedId } from "./review.ts";
@@ -26,6 +27,36 @@ const endpoint = (objects: Objects, object: string, action: string | null) =>
 
 const allLinks = (objects: Objects) =>
   objects.flatMap(({ spec, graph }) => graph.links.map((l) => ({ ...l, source: spec.name })));
+
+const markdownCell = (text: string) => text.replace(/\|/g, "\\|");
+
+// 値オブジェクトは状態遷移を持たないので、ページを分けずに一覧の節にまとめる。項目・正しい値の決まり・例の結果を並べる。
+const valueObjectsSection = (values: ReadonlyArray<ValueObject>): Array<string> =>
+  values.length === 0
+    ? []
+    : [
+        ...markdownSection("値オブジェクト"),
+        ...values.flatMap((vo) => [
+          `### ${vo.displayName}`,
+          "",
+          ...(vo.doc === null ? [] : [vo.doc, ""]),
+          "| 項目 | 型 | 説明 |",
+          "|---|---|---|",
+          ...valueObjectRows(vo.properties).map(
+            (r) => `| ${"　".repeat(r.depth)}${r.row === "value" ? `\`${markdownCell(r.field)}\`` : markdownCell(r.field)} | ${r.type === "" ? "" : `\`${markdownCell(r.type)}\``} | ${markdownCell(r.doc)} |`,
+          ),
+          "",
+          ...(vo.invariants.length === 0 ? [] : ["正しい値の決まり:", "", ...vo.invariants.map((i) => `- ${i}`), ""]),
+          ...(vo.examples.length === 0
+            ? []
+            : [
+                "| 例 | 種類 | 結果 | 破った決まり |",
+                "|---|---|---|---|",
+                ...vo.examples.map((e) => `| ${markdownCell(e.name)} | ${e.valid ? "正しい" : "正しくない"} | ${e.ok ? "✅" : "❌"} | ${markdownCell(e.broken.join("、"))} |`),
+                "",
+              ]),
+        ]),
+      ];
 
 const LEFT = { many: "}o", one: "||" } as const;
 const RIGHT = { many: "o{", one: "||" } as const;
@@ -57,7 +88,7 @@ const relationsSection = (objects: Objects): Array<string> => {
   ];
 };
 
-export const renderIndexMarkdown = (objects: Objects, title: string): string =>
+export const renderIndexMarkdown = (objects: Objects, title: string, values: ReadonlyArray<ValueObject> = []): string =>
   [
     `# ${title}`,
     "",
@@ -70,6 +101,7 @@ export const renderIndexMarkdown = (objects: Objects, title: string): string =>
         `| [${spec.displayName}](${spec.name}.md) | ${spec.stateDoc ?? ""} | ${graph.states.length} | ${spec.actions.length} | ${graph.questions.length} | ${graph.findings.length === 0 ? "OK" : `⚠ ${graph.findings.length}`} |`,
     ),
     "",
+    ...valueObjectsSection(values),
     ...relationsSection(objects),
     ...(allLinks(objects).length === 0
       ? []
@@ -82,7 +114,7 @@ export const renderIndexMarkdown = (objects: Objects, title: string): string =>
         ]),
   ].join("\n");
 
-export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ spec, graph }]): string => {
+export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ spec, graph }], values: ReadonlyArray<ValueObject> = []): string => {
   const incoming = allLinks(objects).filter((l) => l.to === spec.name && l.source !== spec.name);
   const ownAction = (action: string | null) => (action === null ? "" : actionName(objects, spec.name, action));
   const labelOf = (id: string) => graph.states.find((s) => s.id === id)?.label ?? id;
@@ -118,7 +150,7 @@ export const renderMarkdown = (spec: Spec, graph: Graph, objects: Objects = [{ s
     ...graph.states.filter((s) => s.terminal).map((s) => `  ${s.id} --> [*]`),
     "```",
     "",
-    ...propertiesSection(spec, (name) => objects.find((o) => o.spec.name === name || o.spec.stateType === name)?.spec.name ?? null),
+    ...propertiesSection(spec, (name) => objects.find((o) => o.spec.name === name || o.spec.stateType === name)?.spec.name ?? null, values),
     ...markdownSection("操作"),
     ...creationSection(summarizeCreation(spec, graph)),
     ...summarizeActions(spec, graph).flatMap((a) => [
@@ -254,8 +286,8 @@ const glossarySection = (spec: Spec): Array<string> => {
   return terms.length === 0 ? [] : [...markdownSection("用語"), ...terms, ""];
 };
 
-const propertiesSection = (spec: Spec, targetOf: (name: string) => string | null): Array<string> => {
-  const rows = propertyRows(spec, targetOf);
+const propertiesSection = (spec: Spec, targetOf: (name: string) => string | null, values: ReadonlyArray<ValueObject>): Array<string> => {
+  const rows = propertyRows(spec, targetOf, values);
   if (rows.length === 0) return [];
   const code = (text: string) => `\`${text.replace(/\|/g, "\\|")}\``;
   return [
@@ -263,7 +295,7 @@ const propertiesSection = (spec: Spec, targetOf: (name: string) => string | null
     "| 項目 | 型 | 説明 | 扱い |",
     "|---|---|---|---|",
     ...rows.map(
-      (r) => `| ${"　".repeat(r.depth)}${r.row === "value" ? code(r.field) : r.field} | ${r.type === "" ? "" : code(r.type)} | ${r.doc.replace(/\|/g, "\\|")} | ${r.kind.replace(/\|/g, "\\|")} |`,
+      (r) => `| ${"　".repeat(r.depth)}${r.row === "value" ? code(r.field) : r.field} | ${r.type === "" ? "" : code(r.type)} | ${r.doc.replace(/\|/g, "\\|")} | ${r.valueObject === undefined ? r.kind.replace(/\|/g, "\\|") : `[${r.kind}](README.md#${r.kind.slice(r.kind.indexOf("（") + 1, -1).toLowerCase().replace(/\s+/g, "-")})`} |`,
     ),
     "",
   ];

@@ -9,7 +9,8 @@ import type { SurfaceNode } from "../surface.ts";
 import { isCollapsed } from "./collapse.ts";
 import { detailGroups, summaryGraph } from "./group.ts";
 import { projectRelations } from "../relations.ts";
-import { propertyRows } from "./properties.ts";
+import { propertyRows, valueObjectRows } from "./properties.ts";
+import type { ValueObject } from "../value-object.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
 import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle, testsOf } from "./markdown.ts";
@@ -26,6 +27,8 @@ export interface DomainObject {
 
 export interface ProjectOptions {
   readonly title: string;
+  /** 値オブジェクト（*.value.ts）。一覧ページの節に出す */
+  readonly values?: ReadonlyArray<ValueObject>;
 }
 
 export const renderHtml = (spec: Spec, graph: Graph): Promise<string> => renderProjectHtml([{ spec, graph }], { title: spec.displayName });
@@ -43,8 +46,9 @@ interface ProjectLink {
 
 export const renderProjectHtml = async (objects: ReadonlyArray<DomainObject>, options: ProjectOptions): Promise<string> => {
   const links: ReadonlyArray<ProjectLink> = objects.flatMap(({ spec, graph }) => graph.links.map((l) => ({ ...l, source: spec.name })));
-  const pages = await Promise.all(objects.map((o, i) => renderPage(o, i, objects, links)));
-  const multiple = objects.length > 1;
+  const pages = await Promise.all(objects.map((o, i) => renderPage(o, i, objects, links, options.values ?? [])));
+  // 値オブジェクトがあれば、spec が 1 つでも一覧ページを出す。値オブジェクトは一覧ページにしか出さないため。
+  const multiple = objects.length > 1 || (options.values ?? []).length > 0;
   const data = {
     single: multiple ? null : objects[0]!.spec.name,
     pages: Object.fromEntries(pages.map((p) => [p.name, p.data])),
@@ -117,6 +121,29 @@ const relationsSvg = async (objects: ReadonlyArray<DomainObject>, links: Readonl
   </svg></div>`;
 };
 
+const valueObjectsHtml = (values: ReadonlyArray<ValueObject>) =>
+  values.length === 0
+    ? ""
+    : `<section class="value-objects"><h2>値オブジェクト</h2>${sectionLead("値オブジェクト")}${values
+        .map(
+          (vo) => `<h3 id="value-${esc(vo.name)}">${esc(vo.displayName)}</h3>${vo.doc === null ? "" : `<p class="object-doc">${esc(vo.doc)}</p>`}
+<table class="decision props"><thead><tr><th>項目</th><th>型</th><th>説明</th></tr></thead><tbody>${valueObjectRows(vo.properties)
+            .map((r) => {
+              const name = r.row === "value" ? `<span class="value">${esc(r.field)}</span>` : r.row === "variant" ? esc(r.field) : `<code>${esc(r.field)}</code>`;
+              return `<tr class="depth-${r.depth}${r.row === "field" ? "" : ` ${r.row === "variant" ? "case" : "value-row"}`}"><td style="padding-left:${14 + r.depth * 18}px">${name}</td><td>${r.type === "" ? "" : `<code>${esc(r.type)}</code>`}</td><td>${esc(r.doc)}</td></tr>`;
+            })
+            .join("")}</tbody></table>
+${vo.invariants.length === 0 ? "" : `<p class="sub">正しい値の決まり</p><ul class="rules">${vo.invariants.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`}
+${
+  vo.examples.length === 0
+    ? ""
+    : `<table class="decision"><thead><tr><th>例</th><th>種類</th><th>結果</th><th>破った決まり</th></tr></thead><tbody>${vo.examples
+        .map((e) => `<tr class="${e.ok ? "" : "ng"}"><td>${esc(e.name)}</td><td>${e.valid ? "正しい" : "正しくない"}</td><td class="result">${e.ok ? "✅" : "❌"}</td><td>${esc(e.broken.join("、"))}</td></tr>`)
+        .join("")}</tbody></table>`
+}`,
+        )
+        .join("")}</section>`;
+
 const multiplicity = (many: boolean) => (many ? "多" : "1");
 
 const entityRelationsHtml = async (objects: ReadonlyArray<DomainObject>) => {
@@ -169,6 +196,7 @@ const overviewPage = async (objects: ReadonlyArray<DomainObject>, options: Proje
       )
       .join("\n    ")}
   </div>
+  ${valueObjectsHtml(options.values ?? [])}
   ${await entityRelationsHtml(objects)}
   ${
     links.length === 0
@@ -192,6 +220,7 @@ const renderPage = async (
   index: number,
   objects: ReadonlyArray<DomainObject>,
   links: ReadonlyArray<ProjectLink>,
+  values: ReadonlyArray<ValueObject>,
 ) => {
   const outgoing = links.filter((l) => l.source === spec.name);
   const incoming = links.filter((l) => l.to === spec.name && l.source !== spec.name);
@@ -351,7 +380,7 @@ const renderPage = async (
     </div>`
     }
   </section>
-  ${propertiesHtml(spec, (name) => objects.find((o) => o.spec.name === name || o.spec.stateType === name)?.spec.name ?? null)}
+  ${propertiesHtml(spec, (name) => objects.find((o) => o.spec.name === name || o.spec.stateType === name)?.spec.name ?? null, values)}
   <section class="actions">
     <h2>操作</h2>${sectionLead("操作")}
     <div class="cards">
@@ -439,13 +468,13 @@ const diagramSvg = (name: string, l: Layout, markerId: string, node: (n: LaidOut
         </g>
       </svg>`;
 
-const propertiesHtml = (spec: Spec, targetOf: (name: string) => string | null) => {
-  const rows = propertyRows(spec, targetOf);
+const propertiesHtml = (spec: Spec, targetOf: (name: string) => string | null, values: ReadonlyArray<ValueObject>) => {
+  const rows = propertyRows(spec, targetOf, values);
   if (rows.length === 0) return "";
   return `<section class="properties"><h2>プロパティ</h2>${sectionLead("プロパティ")}<table class="decision props"><thead><tr><th>項目</th><th>型</th><th>説明</th><th>扱い</th></tr></thead><tbody>${rows
     .map((r) => {
       const name = r.row === "value" ? `<span class="value">${esc(r.field)}</span>` : r.row === "variant" ? esc(r.field) : `<code>${esc(r.field)}</code>`;
-      return `<tr class="depth-${r.depth}${r.row === "field" ? "" : ` ${r.row === "variant" ? "case" : "value-row"}`}${r.kind === "データ" ? " data" : ""}"><td style="padding-left:${14 + r.depth * 18}px">${name}</td><td>${r.type === "" ? "" : `<code>${esc(r.type)}</code>`}</td><td>${esc(r.doc)}</td><td>${esc(r.kind)}</td></tr>`;
+      return `<tr class="depth-${r.depth}${r.row === "field" ? "" : ` ${r.row === "variant" ? "case" : "value-row"}`}${r.kind === "データ" ? " data" : ""}"><td style="padding-left:${14 + r.depth * 18}px">${name}</td><td>${r.type === "" ? "" : `<code>${esc(r.type)}</code>`}</td><td>${esc(r.doc)}</td><td>${r.valueObject === undefined ? esc(r.kind) : `<a href="#/:value/${esc(encodeURIComponent(r.valueObject))}">${esc(r.kind)}</a>`}</td></tr>`;
     })
     .join("")}</tbody></table></section>`;
 };
@@ -974,6 +1003,13 @@ const CLIENT = `
     var parts = location.hash.replace(/^#\\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
     var name = parts[0] || data.single || "";
     closePanel();
+    // 値オブジェクトは一覧ページの節なので、#/:value/<名前> は一覧ページを開いてその節へ移る。
+    if (name === ":value") {
+      show("");
+      var target = document.getElementById("value-" + (parts[1] || ""));
+      if (target) target.scrollIntoView();
+      return;
+    }
     if (!show(name)) show(data.single || "");
     if (parts[1] && current && current.name) selectState(parts[1]);
   }
