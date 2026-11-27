@@ -148,6 +148,7 @@ export const findOmissionHints = (spec: Spec, graph: Graph, options: Pick<Explor
 
   hints.push(...unusedFields(spec, graph, options));
   hints.push(...deadEnds(spec, graph));
+  hints.push(...equivalentStates(graph));
   return hints;
 };
 
@@ -161,6 +162,46 @@ const holds = (fn: Spec["goals"][number][1], values: State) => {
 
 // 袋小路の中の状態をすべて出さずに入口だけを出す理由: 1 つの原因で入った袋小路の中には状態がいくつもあり、
 // 全部を並べると同じ指摘が何件も出る。入口（たどり着ける状態から 1 手で入る状態）を直せば中も解消する。
+// 振る舞いが同じ状態は、状態機械の最小化（分割の細分化）で求める。各状態を「操作・登場人物・入力ごとの可否と理由、
+// 行き先が属する組、見える画面」で比べ、組が分かれなくなるまで繰り返す。行き先をそのまま比べないのは、todo から
+// 「進行中へ移す」と進行中から同じ操作をしたときのように、互いの状態へ移る線だけが違って見えてしまうため。
+// 終端の状態は、意味（成功と失敗など）で分けていることが多いので候補にしない。
+const equivalentStates = (graph: Graph): Array<OmissionHint> => {
+  const active = graph.states.filter((s) => !s.terminal);
+  if (active.length < 2) return [];
+  const screens = new Map(
+    graph.states.map((s) => [s.id, JSON.stringify(graph.surfaces.filter((x) => x.state === s.id).map((x) => JSON.stringify([x.actor, x.surface])).sort())]),
+  );
+  let block = new Map(graph.states.map((s) => [s.id, s.terminal ? `end:${s.id}` : "active"]));
+  for (;;) {
+    const signature = (id: string) =>
+      JSON.stringify([
+        block.get(id),
+        screens.get(id),
+        graph.availability
+          .filter((r) => r.state === id)
+          .map((r) => JSON.stringify([r.action, r.actor, r.input, r.enabled, r.reason, r.to === null ? null : block.get(r.to)]))
+          .sort(),
+      ]);
+    const next = new Map(graph.states.map((s) => [s.id, signature(s.id)]));
+    const stable = new Set(next.values()).size === new Set(block.values()).size;
+    block = next;
+    if (stable) break;
+  }
+  const groups = new Map<string, Array<Graph["states"][number]>>();
+  for (const s of active) groups.set(block.get(s.id)!, [...(groups.get(block.get(s.id)!) ?? []), s]);
+  return [...groups.values()]
+    .filter((g) => g.length > 1)
+    .map((g) => ({
+      id: `equivalent-states:${g.map((s) => s.label).join("/")}`,
+      kind: "equivalent-states" as const,
+      action: null,
+      field: null,
+      state: g[0]!.id,
+      message: `状態「${g.map((s) => s.label).join("」「")}」は、どの操作・登場人物・入力でも、できる／できないと行き先が同じ。1 つの状態にまとめるか、違いを生む条件を書き忘れていないか`,
+    }));
+};
+
 const deadEnds = (spec: Spec, graph: Graph): Array<OmissionHint> => {
   if (spec.goals.length === 0) return [];
   const goals = new Set(graph.states.filter((s) => spec.goals.some(([, fn]) => holds(fn, s.values))).map((s) => s.id));

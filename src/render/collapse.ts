@@ -32,14 +32,20 @@ export const collapseTransitions = (graph: Graph): Graph["transitions"] => {
     const key = JSON.stringify([t.action, t.to]);
     groups.set(key, [...(groups.get(key) ?? []), t]);
   }
-  return [...groups.values()].flatMap((ts, i) => {
+  // 出どころの組み合わせが同じなら、行き先が違っても同じ「N つの状態から」の箱にする。列をどこへでも移せる操作で、
+  // 行き先の数だけ箱が並ぶのを防ぐため。行き先そのものも組み合わせに含めて比べる（自分の列へ移すのは自分に戻る線で、
+  // 図には描かないので、それを除くと行き先ごとに組み合わせが変わってしまう）。
+  const sourceIds = new Map<string, string>();
+  return [...groups.values()].flatMap((ts) => {
     const to = ts[0]!.to;
     const froms = new Set(ts.filter((t) => t.from !== t.to).map((t) => t.from));
+    const key = JSON.stringify([...new Set([...froms, to])].sort());
     const actors = [...new Set(ts.flatMap((t) => t.actors))];
     const merged = (from: string) => [{ from, to, action: ts[0]!.action, actors }];
     if (all.every((id) => id === to || froms.has(id))) return merged(ANY);
     if (froms.size < MIN_SOURCES) return ts;
     if (active.every((id) => id === to || froms.has(id))) return merged(ACTIVE);
-    return merged(`${ANY}:${froms.size}:${i}`);
+    if (!sourceIds.has(key)) sourceIds.set(key, `${ANY}:${JSON.parse(key).length}:${sourceIds.size}`);
+    return merged(sourceIds.get(key)!);
   });
 };

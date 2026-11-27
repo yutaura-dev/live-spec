@@ -108,6 +108,7 @@ export const OmissionHint = Schema.Struct({
     "unused-field",
     "cannot-reach-goal",
     "untested",
+    "equivalent-states",
   ]),
   action: Schema.NullOr(Schema.String),
   field: Schema.NullOr(Schema.String),
