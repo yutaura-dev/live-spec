@@ -172,19 +172,24 @@ const equivalentStates = (graph: Graph): Array<OmissionHint> => {
   const screens = new Map(
     graph.states.map((s) => [s.id, JSON.stringify(graph.surfaces.filter((x) => x.state === s.id).map((x) => JSON.stringify([x.actor, x.surface])).sort())]),
   );
+  const rowsOf = new Map<string, Array<Graph["availability"][number]>>();
+  for (const r of graph.availability) rowsOf.set(r.state, [...(rowsOf.get(r.state) ?? []), r]);
   let block = new Map(graph.states.map((s) => [s.id, s.terminal ? `end:${s.id}` : "active"]));
   for (;;) {
     const signature = (id: string) =>
       JSON.stringify([
         block.get(id),
         screens.get(id),
-        graph.availability
-          .filter((r) => r.state === id)
+        (rowsOf.get(id) ?? [])
           .map((r) => JSON.stringify([r.action, r.actor, r.input, r.enabled, r.reason, r.to === null ? null : block.get(r.to)]))
           .sort(),
       ]);
-    const next = new Map(graph.states.map((s) => [s.id, signature(s.id)]));
-    const stable = new Set(next.values()).size === new Set(block.values()).size;
+    // 組の名前は、署名そのものではなく短い番号に置き換える。署名には行き先の組の名前が入るので、そのまま次の回に
+    // 持ち越すと、回を重ねるごとに文字列が倍々に膨らみ、状態が数十でもメモリを使い切るため。
+    const signatures = new Map(graph.states.map((s) => [s.id, signature(s.id)]));
+    const numbers = new Map([...new Set(signatures.values())].map((sig, i) => [sig, `b${i}`]));
+    const next = new Map([...signatures].map(([id, sig]) => [id, numbers.get(sig)!]));
+    const stable = numbers.size === new Set(block.values()).size;
     block = next;
     if (stable) break;
   }
