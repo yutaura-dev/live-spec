@@ -19,7 +19,8 @@ spec の概念は DDD の語彙に対応づけている（[ADR-0006](docs/decisi
 |------|------|
 | 生きた仕様書 (living spec) | 実行でき、状態遷移を図で見られ、ワイヤーフレームがある仕様書 |
 | 正本 (source of truth) | AI が書く TypeScript DSL（`*.spec.ts`）。評価して得られる正規化モデルから、図・ワイヤーフレーム・テスト・Markdown をすべて生成する |
-| spec ファイル | `*.spec.ts`。1 ファイルが 1 つのドメインオブジェクト（DDD の集約に当たる。一緒に守る必要がある不変条件の範囲を 1 つにする）。素の TS で、`initial`（初期状態か作る操作）、`actors`（登場人物）、操作の関数を export する。`invariants`（不変条件）は任意 |
+| spec ファイル | `*.spec.ts`。1 ファイルが 1 つの Entity（ADR-0008。集約のファイルに入っていなければ、Entity 1 つの集約として 1 つのドメインオブジェクトのページになる）。素の TS で、`initial`（初期状態か作る操作）、`actors`（登場人物）、操作の関数を export する。`invariants`（不変条件）は任意 |
+| 集約 (aggregate) | `<名前>.aggregate.ts`。一緒に守る決まりの境界。`root`（ルートの Entity の spec。省くとファイル名と同じ）と `entities`（中の Entity の spec の名前）を書く。集約ごとに 1 ページで、Entity ごとに状態遷移図の節を持つ（状態は掛け合わせない）。集約をまたぐ `invariants` は、今は「まだ確かめていない決まり」として出す。集約の外からはルートだけを指す |
 | 値オブジェクト (value object) | `<名前>.value.ts`。識別子もライフサイクルも持たず、値そのものに意味があるもの（作業する場所、金額など）。型・正しい値の決まり（`invariants`）・正しい例と正しくない例（`examples`）を書く。専用のページは作らず、一覧ページの「値オブジェクト」の節に出る。spec の状態の型から import して使う |
 | 操作 (action) | `(状態, 登場人物, ...入力) => 次の状態` の関数。DDD の集約へのコマンドに当たり、業務の動詞で名付ける。できないときは `ensure(条件, "理由")` で止める（事前条件） |
 | 作る操作 (factory) | `export function initial(登場人物, ...入力): 状態`。`initial` を関数で書くと、誰が・どんな入力で作れるかを探索する。入力の例は `inputs.initial`。作れた結果がそれぞれ初期状態になる |
@@ -90,3 +91,4 @@ spec の概念は DDD の語彙に対応づけている（[ADR-0006](docs/decisi
 - 仕様は素の TS の型と関数で書き、状態遷移は実行して計算する（[ADR-0005](docs/decisions/0005-domain-object-centric-model.md)）
 - spec の概念を DDD の語彙で定義し、作る操作と遷移の不変条件で集約のライフサイクルを書けるようにする（[ADR-0006](docs/decisions/0006-ddd-vocabulary.md)）
 - 値オブジェクトは別のファイル（`*.value.ts`）で定義し、一覧ページの節に出す。画面の呼び名は「ドメインオブジェクト」のまま（[ADR-0007](docs/decisions/0007-value-object-files.md)）
+- spec ファイル 1 つは Entity 1 つ。集約は `*.aggregate.ts` で定義し、ページは集約、状態の探索は Entity の単位にする（[ADR-0008](docs/decisions/0008-aggregate-files.md)）

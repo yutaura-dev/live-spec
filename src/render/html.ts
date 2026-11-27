@@ -11,6 +11,7 @@ import { detailGroups, summaryGraph } from "./group.ts";
 import { projectRelations } from "../relations.ts";
 import { propertyRows, valueObjectRows } from "./properties.ts";
 import type { ValueObject } from "../value-object.ts";
+import { aggregateOfEntity, aggregateOfRoot, type Aggregate } from "../aggregate.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
 import { describeFinding, describeStep, formatEffect, inputCell, noFindingsLine, questionTarget, resultCell, scenarioTitle, testsOf } from "./markdown.ts";
@@ -29,6 +30,8 @@ export interface ProjectOptions {
   readonly title: string;
   /** 値オブジェクト（*.value.ts）。一覧ページの節に出す */
   readonly values?: ReadonlyArray<ValueObject>;
+  /** 集約（*.aggregate.ts）。中の Entity は、ルートのページの節として出す */
+  readonly aggregates?: ReadonlyArray<Aggregate>;
 }
 
 export const renderHtml = (spec: Spec, graph: Graph): Promise<string> => renderProjectHtml([{ spec, graph }], { title: spec.displayName });
@@ -46,7 +49,19 @@ interface ProjectLink {
 
 export const renderProjectHtml = async (objects: ReadonlyArray<DomainObject>, options: ProjectOptions): Promise<string> => {
   const links: ReadonlyArray<ProjectLink> = objects.flatMap(({ spec, graph }) => graph.links.map((l) => ({ ...l, source: spec.name })));
-  const pages = await Promise.all(objects.map((o, i) => renderPage(o, i, objects, links, options.values ?? [])));
+  const aggregates = options.aggregates ?? [];
+  // 中の Entity のページは、ルートのページのすぐ後ろに置く。ルートのページを開くと、続けて節として見えるようにするため。
+  const tops = objects.filter((o) => aggregateOfEntity(aggregates, o.spec.name) === null);
+  const ordered = tops.flatMap((o) => [
+    o,
+    ...(aggregateOfRoot(aggregates, o.spec.name)?.entities ?? []).flatMap((e) =>
+      objects.filter((x) => x.spec.name === e && aggregateOfEntity(aggregates, e)?.root === o.spec.name),
+    ),
+  ]);
+  const rest = objects.filter((o) => !ordered.includes(o));
+  const pages = await Promise.all(
+    [...ordered, ...rest].map((o) => renderPage(o, objects.indexOf(o), objects, links, options.values ?? [], aggregates)),
+  );
   // 値オブジェクトがあれば、spec が 1 つでも一覧ページを出す。値オブジェクトは一覧ページにしか出さないため。
   const multiple = objects.length > 1 || (options.values ?? []).length > 0;
   const data = {
@@ -66,8 +81,8 @@ ${
   multiple
     ? `<header class="site">
   <a class="site-title" href="#/">${esc(options.title)}</a>
-  <nav class="tabs" aria-label="ドメインオブジェクト">${objects
-    .map((o) => `<a href="#/${encodeURIComponent(o.spec.name)}" data-tab="${esc(o.spec.name)}">${esc(o.spec.displayName)}</a>`)
+  <nav class="tabs" aria-label="ドメインオブジェクト">${tops
+    .map((o) => `<a href="#/${encodeURIComponent(o.spec.name)}" data-tab="${esc(o.spec.name)}">${esc(aggregateOfRoot(aggregates, o.spec.name)?.displayName ?? o.spec.displayName)}</a>`)
     .join("")}</nav>
 </header>
 ${await overviewPage(objects, options, links)}`
@@ -119,6 +134,37 @@ const relationsSvg = async (objects: ReadonlyArray<DomainObject>, links: Readonl
     <defs><marker id="arrow-rel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
     ${l.edges.map((e) => edgeSvg(e, "arrow-rel")).join("")}${nodes}
   </svg></div>`;
+};
+
+// 集約の見出し。集約の説明・中の Entity・集約の中のつながり・まだ確かめていない決まり・集約の検査結果を、
+// ルートの節より前に出す。ルートと中の Entity のどちらにも属さない、集約そのものの情報のため。
+const aggregateHeadHtml = (aggregate: Aggregate, objects: ReadonlyArray<DomainObject>) => {
+  const members = [aggregate.root, ...aggregate.entities];
+  const nameOf = (n: string) => objects.find((o) => o.spec.name === n)?.spec.displayName ?? n;
+  const inner = objects
+    .filter((o) => members.includes(o.spec.name))
+    .flatMap((o) => o.graph.links.filter((l) => members.includes(l.to)).map((l) => ({ ...l, source: o.spec.name })));
+  return `<header class="top aggregate-head">
+  <div>
+    <p class="eyebrow">集約</p>
+    <h1>${esc(aggregate.displayName)}</h1>
+    ${aggregate.doc === null ? "" : `<p class="lead">${esc(aggregate.doc)}</p>`}
+    <p class="sub">ルートは ${esc(nameOf(aggregate.root))}、中の Entity は ${aggregate.entities.map((e) => `<a href="#/${encodeURIComponent(e)}">${esc(nameOf(e))}</a>`).join("、")}。Entity ごとに状態遷移図を分けている（状態は掛け合わせない）</p>
+  </div>
+</header>
+${aggregate.findings.length === 0 ? "" : `<section class="findings"><h2>集約の検査結果</h2><ul>${aggregate.findings.map((f) => `<li>${esc(f)}</li>`).join("")}</ul></section>`}
+${
+  inner.length === 0
+    ? ""
+    : `<section class="links-section"><h2>集約の中のつながり</h2><p class="sub">同じ処理の中で起きる反応</p><ul class="link-list">${inner
+        .map((l) => `<li>${esc(nameOf(l.source))}${l.from === null ? "" : ` の ${esc(actionLabel(objects, l.source, l.from))}`} → ${esc(nameOf(l.to))}${l.action === null ? "" : ` の ${esc(actionLabel(objects, l.to, l.action))}`}<span class="sub">${esc(l.label)}</span></li>`)
+        .join("")}</ul></section>`
+}
+${
+  aggregate.invariants.length === 0
+    ? ""
+    : `<section class="invariants"><h2>集約をまたぐ決まり</h2><p class="sub">まだ確かめていない決まり（Entity ごとに探索しているので、Entity をまたぐ決まりはまだ実行していない）</p><ul>${aggregate.invariants.map((i) => `<li>${esc(i)}</li>`).join("")}</ul></section>`
+}`;
 };
 
 const valueObjectsHtml = (values: ReadonlyArray<ValueObject>) =>
@@ -221,7 +267,10 @@ const renderPage = async (
   objects: ReadonlyArray<DomainObject>,
   links: ReadonlyArray<ProjectLink>,
   values: ReadonlyArray<ValueObject>,
+  aggregates: ReadonlyArray<Aggregate>,
 ) => {
+  const asRoot = aggregateOfRoot(aggregates, spec.name);
+  const asEntity = aggregateOfEntity(aggregates, spec.name);
   const outgoing = links.filter((l) => l.source === spec.name);
   const incoming = links.filter((l) => l.to === spec.name && l.source !== spec.name);
   const connections =
@@ -321,10 +370,11 @@ const renderPage = async (
   const arrow = `arrow-${index}`;
   const arrowWf = `arrow-wf-${index}`;
 
-  const html = `<section class="page" data-page="${esc(spec.name)}" hidden>
+  const html = `<section class="page${asEntity === null ? "" : " entity-page"}" data-page="${esc(spec.name)}"${asEntity === null ? "" : ` data-aggregate="${esc(asEntity.root)}"`} hidden>
+${asRoot === null || asRoot.entities.length === 0 ? "" : aggregateHeadHtml(asRoot, objects)}
 <header class="top">
   <div>
-    <p class="eyebrow">ドメインオブジェクト</p>
+    <p class="eyebrow">${asEntity !== null ? `${esc(asEntity.displayName)} の中の Entity` : asRoot !== null && asRoot.entities.length > 0 ? "ルートの Entity" : "ドメインオブジェクト"}</p>
     <h1>${esc(spec.displayName)}</h1>
     ${spec.stateDoc === null ? "" : `<p class="lead">${esc(spec.stateDoc)}</p>`}
   </div>
@@ -987,7 +1037,13 @@ const CLIENT = `
   function show(name) {
     var page = document.querySelector(".page" + attr("data-page", name));
     if (!page) return false;
-    all(".page").forEach(function (p) { p.hidden = p !== page; });
+    if (page.dataset.aggregate) {
+      show(page.dataset.aggregate);
+      current = { name: name, el: page };
+      page.scrollIntoView();
+      return true;
+    }
+    all(".page").forEach(function (p) { p.hidden = p !== page && p.dataset.aggregate !== name; });
     all(".tabs a").forEach(function (a) {
       if (a.dataset.tab === name) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
@@ -1063,6 +1119,9 @@ const CLIENT = `
   }
 
   function activate(target) {
+    // 1 ページに Entity の節が複数あるので、操作したところの節を、表示中のページとして扱う。
+    var section = target.closest && target.closest(".page[data-page]");
+    if (section && section.dataset.page) current = { name: section.dataset.page, el: section };
     var scenario = target.closest(".scenario-card");
     if (scenario) return selectScenario(scenario.dataset.scenario);
     // 図は実寸で出し、はみ出す分は横にスクロールさせる。画面の幅に縮めると、状態の多い図は文字が読めない大きさになるため。

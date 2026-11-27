@@ -1,6 +1,6 @@
 import { watch, type FSWatcher } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import { expandSpecPaths, expandValuePaths, failureOutput, generateProject, writeProjectOutput, type OutputFormat } from "./generate.ts";
+import { expandAggregatePaths, expandSpecPaths, expandValuePaths, failureOutput, generateProject, writeProjectOutput, type OutputFormat } from "./generate.ts";
 
 export interface WatchOptions {
   readonly paths: ReadonlyArray<string>;
@@ -25,7 +25,7 @@ export const watchSpec = (options: WatchOptions, log: (message: string) => void 
       // 生成のたびにディレクトリを展開し直す理由: 監視中に spec ファイルが増えても、次の保存で拾えるようにするため。
       const paths = expandSpecPaths(options.paths);
       try {
-        const output = await generateProject(paths, options.format, options.title ?? undefined, options.tests, expandValuePaths(options.paths));
+        const output = await generateProject(paths, options.format, options.title ?? undefined, options.tests, expandValuePaths(options.paths), expandAggregatePaths(options.paths));
         if (options.out !== null) await writeProjectOutput(options.out, output);
         if (output.kind === "text") options.onBuilt?.(output.content);
         const ms = Math.round(performance.now() - started);
@@ -47,7 +47,7 @@ export const watchSpec = (options: WatchOptions, log: (message: string) => void 
   ))];
   const watchers = dirs.map((dir) =>
     watch(dir, { recursive: true }, (_event, filename) => {
-      if (filename === null || !(basename(filename).endsWith(".spec.ts") || basename(filename).endsWith(".value.ts"))) return;
+      if (filename === null || ![".spec.ts", ".value.ts", ".aggregate.ts"].some((suffix) => basename(filename).endsWith(suffix))) return;
       clearTimeout(timer);
       timer = setTimeout(rebuild, DEBOUNCE_MS);
     }),

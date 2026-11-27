@@ -208,6 +208,10 @@ export function reserve(run: Run, worker: Worker, nextIsLast: boolean): Run {
 
 作業する場所・金額・期間のように、識別子もライフサイクルも持たない値（DDD の値オブジェクト）で、複数の spec が使うものや、値そのものに決まり（「URL は http か https で始まる」）があるものは、`<名前>.value.ts` に書く。型・`invariants`（`{ 説明: (値) => boolean }`）・`examples`（`{ valid: { 名前: 値 }, invalid: { 名前: 値 } }`）を export する。正しい例が決まりを満たし、正しくない例が決まりを破ることを `live-spec check` が確かめる。spec からは `import type` で型を使う。値オブジェクトは状態遷移を持たないので、操作や `initial` は書かない。
 
+### 8.6 集約の中に Entity が複数あるときは、集約のファイルでまとめる
+
+Task とその中の Action Item のように、ルートを通してしか操作されないが自分のライフサイクルを持つ Entity があるなら、1 つの spec に詰め込まない（状態が掛け合わさって図が読めなくなる）。Entity ごとに spec を書き、`<名前>.aggregate.ts` に `root`・`entities`（spec の名前の文字列）・集約の JSDoc・`displayName` を書く。集約をまたぐ決まりは `invariants` に `(ルートの状態, 中の Entity の状態の配列) => boolean` で書く（今は表示だけで、まだ確かめない）。中の Entity の `links` は、ルートの操作へ向けて書く。集約の外の spec からは、中の Entity ではなくルートを指す。
+
 ### 9. ほかのドメインオブジェクトとのつながりを書く
 
 データとして相手を持つ関係（記事の著者、利用者の記事一覧）は、状態の型の項目の型で書く（`author: User`、`posts: Post[]`。`User` は相手の spec の状態の型）。一覧ページに「関連」の図が出る。ID だけを持つ項目は `/** @ref user */ authorId: string` と相手の spec の名前を書く。関連の項目は「どの可否にも影響しない項目」の候補に出ない。

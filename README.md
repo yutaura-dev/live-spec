@@ -202,6 +202,30 @@ spec ファイルは素の TypeScript です。export の名前で役割が決�
 - 状態の型には、そのオブジェクトが持つ項目を全部書いてよい。仕様書の「プロパティ」の表に型と説明が出る。`string` や配列のように値が決まっていない型で、操作などの関数から読まれない項目は「データ」として扱われ、状態の数を増やさない
 - 振る舞い（できる・できない）を変える値は、文字列の union か `as const` のオブジェクトで有限にする。`as const` のオブジェクトの各値に付けた JSDoc は、値ごとの説明として表に出る
 
+### 集約（複数の Entity を 1 ページで読む）
+
+Task とその中の Action Item のように、1 つの集約に自分のライフサイクルを持つ Entity が複数あるときは、Entity ごとに spec を書き、`<名前>.aggregate.ts` で 1 つの集約にまとめます。集約ごとに 1 ページになり、Entity ごとに状態遷移図・プロパティ・操作・シナリオ・検査結果の節が並びます（状態は掛け合わせません）。
+
+```ts
+// specs/task.aggregate.ts
+import type { Task } from "./task.spec.ts";
+import type { ActionItem } from "./action-item.spec.ts";
+
+/** タスクと、その計画の作業 */
+export const displayName = "タスク";
+export const root = "task";              // ルートの Entity（省くとファイル名と同じ名前の spec）
+export const entities = ["action-item"]; // 中の Entity
+export const invariants = {
+  "終わったタスクには、まだの作業がない": (task: Task, items: ReadonlyArray<ActionItem>) =>
+    task.status !== "closed" || items.every((i) => i.status === "done"),
+};
+```
+
+- 集約をまたぐ `invariants` は、今は実行せず「まだ確かめていない決まり」として出ます
+- 集約の中の `links`（Action Item の操作 → Task の操作）は、「集約の中のつながり」として集約の見出しに出ます
+- 集約の外の spec が中の Entity を `links` や `@ref` で指すと、検査結果に出ます（外からはルートを指す）
+- `live-spec check` の結果も集約ごとにまとめて出ます
+
 ### 値オブジェクト
 
 作業する場所・金額のように、識別子もライフサイクルも持たず、値そのものに意味があるものは、spec と同じディレクトリの `<名前>.value.ts` に書きます。専用のページは作らず、一覧ページの「値オブジェクト」の節に、項目の表・正しい値の決まり・例の結果が出ます。

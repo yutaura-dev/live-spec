@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { loadValueObject } from "./value-object.ts";
+import { aggregateOfEntity, aggregateOfRoot, loadAggregate, resolveAggregates, type Aggregate } from "./aggregate.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -40,10 +41,13 @@ const expandPaths = (paths: ReadonlyArray<string>, suffix: string, keepFiles: bo
   });
 
 export const expandSpecPaths = (paths: ReadonlyArray<string>): Array<string> =>
-  expandPaths(paths.filter((p) => !p.endsWith(".value.ts")), ".spec.ts", true);
+  expandPaths(paths.filter((p) => !p.endsWith(".value.ts") && !p.endsWith(".aggregate.ts")), ".spec.ts", true);
 
 /** 値オブジェクトのファイル（*.value.ts）を集める。ファイルを直接指定したときは、*.value.ts だけを拾う */
 export const expandValuePaths = (paths: ReadonlyArray<string>): Array<string> => expandPaths(paths, ".value.ts", false);
+
+/** 集約のファイル（*.aggregate.ts）を集める。ファイルを直接指定したときは、*.aggregate.ts だけを拾う */
+export const expandAggregatePaths = (paths: ReadonlyArray<string>): Array<string> => expandPaths(paths, ".aggregate.ts", false);
 
 // import のたびにクエリを変える理由: ESM は同じ URL のモジュールをキャッシュするので、
 // --watch で spec を読み直しても古い内容のまま生成されてしまう。クエリが違えば別モジュールとして読み込まれる。
@@ -79,28 +83,84 @@ export const generateProject = async (
   title?: string,
   tests: ReadonlyArray<string> = [],
   valuePaths: ReadonlyArray<string> = [],
+  aggregatePaths: ReadonlyArray<string> = [],
 ): Promise<Output> => {
   const values = await Promise.all(valuePaths.map((p) => loadValueObject(p)));
+  const loadedAggregates = await Promise.all(aggregatePaths.map((p) => loadAggregate(p)));
   const resolved = resolveLinks(await Promise.all(paths.map((p) => loadObject(p))));
   const objects = tests.length === 0 ? resolved : linkTests(resolved, tests);
   const names = objects.map((o) => o.spec.name);
   const duplicated = names.find((n, i) => names.indexOf(n) !== i);
   if (duplicated !== undefined) throw new Error(`ドメインオブジェクトの名前が重複しています: ${duplicated}（spec のファイル名を変えてください）`);
+  const aggregates = resolveAggregates(objects, loadedAggregates);
   const projectTitle = title ?? (objects.length === 1 ? objects[0]!.spec.name : projectNameOf(paths[0]!));
 
-  if (format === "html") return { kind: "text", content: await renderProjectHtml(objects, { title: projectTitle, values }) };
+  if (format === "html") return { kind: "text", content: await renderProjectHtml(objects, { title: projectTitle, values, aggregates }) };
   if (format === "json") {
     const models = objects.map((o) => normalize(o.spec, o.graph));
-    return { kind: "text", content: JSON.stringify(models.length === 1 ? models[0] : { objects: models }, null, 2) };
+    const json = models.length === 1 && aggregates.length === 0 ? models[0] : { objects: models, ...(aggregates.length === 0 ? {} : { aggregates }) };
+    return { kind: "text", content: JSON.stringify(json, null, 2) };
   }
-  if (objects.length === 1 && values.length === 0) return { kind: "text", content: renderMarkdown(objects[0]!.spec, objects[0]!.graph) };
+  if (objects.length === 1 && values.length === 0 && aggregates.length === 0) return { kind: "text", content: renderMarkdown(objects[0]!.spec, objects[0]!.graph) };
   return {
     kind: "files",
     files: {
-      "README.md": renderIndexMarkdown(objects, projectTitle, values),
-      ...Object.fromEntries(objects.map((o) => [`${o.spec.name}.md`, renderMarkdown(o.spec, o.graph, objects, values)])),
+      "README.md": renderIndexMarkdown(
+        objects.filter((o) => aggregateOfEntity(aggregates, o.spec.name) === null),
+        projectTitle,
+        values,
+      ),
+      ...Object.fromEntries(
+        objects
+          .filter((o) => aggregateOfEntity(aggregates, o.spec.name) === null)
+          .map((o) => [`${o.spec.name}.md`, aggregateMarkdown(o, objects, values, aggregateOfRoot(aggregates, o.spec.name))]),
+      ),
     },
   };
+};
+
+// 見出しを 1 段下げる。集約の 1 ファイルに、ルートと中の Entity の仕様書を節として入れるため。
+const demote = (markdown: string): string => {
+  let fenced = false;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      if (line.startsWith("```")) fenced = !fenced;
+      return !fenced && line.startsWith("#") ? `#${line}` : line;
+    })
+    .join("\n");
+};
+
+const withoutTitle = (markdown: string): string => markdown.replace(/^# .*\n+/, "");
+
+const aggregateMarkdown = (
+  root: DomainObject,
+  objects: ReadonlyArray<DomainObject>,
+  values: Parameters<typeof renderMarkdown>[3],
+  aggregate: Aggregate | null,
+): string => {
+  const body = renderMarkdown(root.spec, root.graph, objects, values);
+  if (aggregate === null || aggregate.entities.length === 0) return body;
+  const members = aggregate.entities.flatMap((e) => objects.filter((o) => o.spec.name === e));
+  const inner = objects
+    .filter((o) => o.spec.name === aggregate.root || aggregate.entities.includes(o.spec.name))
+    .flatMap((o) => o.graph.links.filter((l) => l.to === aggregate.root || aggregate.entities.includes(l.to)).map((l) => ({ ...l, source: o.spec.name })));
+  return [
+    `# ${aggregate.displayName}`,
+    "",
+    ...(aggregate.doc === null ? [] : [aggregate.doc, ""]),
+    `集約。ルートは ${root.spec.displayName}、中の Entity は ${members.map((m) => m.spec.displayName).join("、")}。`,
+    "",
+    ...(aggregate.findings.length === 0 ? [] : ["## 集約の検査結果", "", ...aggregate.findings.map((f) => `- ${f}`), ""]),
+    ...(aggregate.invariants.length === 0 ? [] : ["## 集約をまたぐ決まり", "", ...aggregate.invariants.map((i) => `- ${i}（まだ確かめていない）`), ""]),
+    ...(inner.length === 0
+      ? []
+      : ["## 集約の中のつながり", "", ...inner.map((l) => `- ${l.source}${l.from === null ? "" : ` の ${l.from}`} → ${l.to}${l.action === null ? "" : ` の ${l.action}`}: ${l.label}`), ""]),
+    `## ルートの Entity: ${root.spec.displayName}`,
+    "",
+    demote(withoutTitle(body)),
+    ...members.flatMap((m) => [`## 集約の中の Entity: ${m.spec.displayName}`, "", demote(withoutTitle(renderMarkdown(m.spec, m.graph, objects, values)))]),
+  ].join("\n");
 };
 
 // つながりの名前の誤りをプロジェクトを読み込んだ時点で調べる理由: 相手のドメインオブジェクトは別の spec にあり、

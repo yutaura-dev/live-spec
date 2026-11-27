@@ -6,7 +6,8 @@ import { resolve } from "node:path";
 import { findTsc, typecheck } from "./check.ts";
 import { linkTests } from "./test-links.ts";
 import { loadValueObject, valueNameOf } from "./value-object.ts";
-import { expandSpecPaths, expandValuePaths, generateProject, loadObject, resolveLinks, specNameOf, writeOutput, writeProjectOutput, type OutputFormat } from "./generate.ts";
+import { aggregateNameOf, aggregateOfEntity, aggregateOfRoot, loadAggregate, resolveAggregates, type Aggregate } from "./aggregate.ts";
+import { expandAggregatePaths, expandSpecPaths, expandValuePaths, generateProject, loadObject, resolveLinks, specNameOf, writeOutput, writeProjectOutput, type OutputFormat } from "./generate.ts";
 import { describeFinding } from "./render/markdown.ts";
 import { reviewItems } from "./render/review.ts";
 import { diffProject } from "./project-diff.ts";
@@ -159,6 +160,7 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
   }
   const paths = expandSpecPaths(parsed.positionals);
   const valuePaths = expandValuePaths(parsed.positionals);
+  const aggregatePaths = expandAggregatePaths(parsed.positionals);
   if (paths.length === 0) {
     io.stderr(`spec ファイル（*.spec.ts）を指定してください\n${CHECK_USAGE}\n`);
     return 2;
@@ -168,7 +170,7 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
   if (tsc === null) {
     io.stderr("typescript が見つからないので、型チェックを飛ばしました（--cwd で typescript を入れたディレクトリを指定できます）\n");
   } else {
-    const result = typecheck(tsc, [...paths, ...valuePaths].map((p) => resolve(p)));
+    const result = typecheck(tsc, [...paths, ...valuePaths, ...aggregatePaths].map((p) => resolve(p)));
     failed ||= !result.ok;
     io.stdout(result.ok ? "✓ 型チェック\n" : `✗ 型チェック\n${indent(result.output)}\n`);
   }
@@ -182,13 +184,24 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
     }
   }
   const tests = parsed.values.tests ?? [];
-  for (const { spec, graph } of tests.length === 0 ? resolveLinks(loaded) : linkTests(resolveLinks(loaded), tests)) {
+  const objects = tests.length === 0 ? resolveLinks(loaded) : linkTests(resolveLinks(loaded), tests);
+  const aggregates: Array<Aggregate> = [];
+  for (const path of aggregatePaths) {
+    try {
+      aggregates.push(await loadAggregate(path));
+    } catch (e) {
+      failed = true;
+      io.stdout(`✗ 集約 ${aggregateNameOf(path)}: 読み込めない: ${messageOf(e)}\n`);
+    }
+  }
+  const resolved = resolveAggregates(objects, aggregates);
+  const report = ({ spec, graph }: (typeof objects)[number], indent: string) => {
     const labels = new Map(graph.states.map((s) => [s.id, s.label]));
     const labelOf = (id: string) => labels.get(id) ?? id;
     const { pending, onHold } = reviewItems(spec, graph);
     if (graph.findings.length + pending.length === 0) {
-      io.stdout(`✓ ${spec.name}${onHold.length === 0 ? "" : `（判断待ち ${onHold.length} 件）`}\n`);
-      continue;
+      io.stdout(`${indent}✓ ${spec.name}${onHold.length === 0 ? "" : `（判断待ち ${onHold.length} 件）`}\n`);
+      return;
     }
     failed = true;
     io.stdout(
@@ -196,8 +209,31 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
         `✗ ${spec.name}: 検査結果 ${graph.findings.length} 件、確かめてほしい点 ${pending.length} 件`,
         ...graph.findings.map((f) => `  - ${describeFinding(f, labelOf)}`),
         ...pending.map((i) => `  - ${i.message}（${i.id}）`),
-      ].join("\n") + "\n",
+      ]
+        .map((line) => indent + line)
+        .join("\n") + "\n",
     );
+  };
+  for (const o of objects) {
+    if (aggregateOfEntity(resolved, o.spec.name) !== null) continue;
+    const aggregate = aggregateOfRoot(resolved, o.spec.name);
+    if (aggregate === null || aggregate.entities.length === 0) {
+      report(o, "");
+      continue;
+    }
+    if (aggregate.findings.length === 0) io.stdout(`集約 ${aggregate.displayName}\n`);
+    else {
+      failed = true;
+      io.stdout(aggregate.findings.map((f) => `✗ 集約 ${aggregate.displayName}: ${f}\n`).join(""));
+    }
+    report(o, "  ");
+    for (const e of aggregate.entities) for (const m of objects.filter((x) => x.spec.name === e)) report(m, "  ");
+  }
+  // ルートが見つからない集約は、上の繰り返しで出ないので、ここで出す。
+  for (const a of resolved.filter((a) => !objects.some((o) => o.spec.name === a.root))) {
+    failed = true;
+    io.stdout(a.findings.map((f) => `✗ 集約 ${a.displayName}: ${f}\n`).join(""));
+    for (const e of a.entities) for (const m of objects.filter((x) => x.spec.name === e)) report(m, "  ");
   }
   for (const path of valuePaths) {
     try {
@@ -291,7 +327,7 @@ export const runCli = async (argv: ReadonlyArray<string>, io: CliIo): Promise<nu
   }
   let output;
   try {
-    output = await generateProject(paths, options.format, options.title ?? undefined, options.tests, expandValuePaths(options.paths));
+    output = await generateProject(paths, options.format, options.title ?? undefined, options.tests, expandValuePaths(options.paths), expandAggregatePaths(options.paths));
   } catch (e) {
     io.stderr(`生成に失敗しました: ${messageOf(e)}\n`);
     return 1;

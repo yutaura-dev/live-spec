@@ -1,11 +1,11 @@
 import { registerHooks } from "node:module";
 
-// ファイル名に .spec. か .value. を含む .ts。差分やミューテーションで書き出す一時ファイル（.order.spec.live-spec-base.ts など）も含む。
+// ファイル名に .spec. か .value. か .aggregate. を含む .ts。差分やミューテーションで書き出す一時ファイル（.order.spec.live-spec-base.ts など）も含む。
 export const isSpecModuleUrl = (url: string): boolean => {
   if (!url.startsWith("file:")) return false;
   const path = new URL(url).pathname;
   const base = path.slice(path.lastIndexOf("/") + 1);
-  return base.endsWith(".ts") && (base.includes(".spec.") || base.includes(".value."));
+  return base.endsWith(".ts") && (base.includes(".spec.") || base.includes(".value.") || base.includes(".aggregate."));
 };
 
 let registered = false;
