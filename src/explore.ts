@@ -409,7 +409,7 @@ const runScenarios = (
         fail(outcome.kind === "not-allowed" ? outcome.reason : outcome.kind === "error" ? `例外: ${outcome.message}` : "オブジェクトを返さなかった");
         break;
       }
-      const mismatch = Object.entries(step.expect ?? {}).find(([k, v]) => JSON.stringify(canonical(v)) !== JSON.stringify(outcome.next[k]));
+      const mismatch = Object.entries(step.expect ?? {}).find(([k, v]) => !matchesExpected(v, outcome.next[k]));
       if (mismatch !== undefined) {
         const [k, v] = mismatch;
         fail(`期待: ${k} = ${formatValue(v)}、実際: ${k} = ${formatValue(outcome.next[k])}`);
@@ -486,3 +486,11 @@ const labeler = (all: ReadonlyArray<State>, declared: ReadonlyArray<string>, exc
   };
 };
 
+
+// シナリオの expect は、入れ子のオブジェクトでも書いた項目だけを比べる（トップレベルと同じ）。読まない項目まで
+// 書かせると、題名や日時のような振る舞いに関係ない値のために、期待を書き写すことになるため。配列と値はそのまま比べる。
+const matchesExpected = (expected: unknown, actual: unknown): boolean => {
+  const isPlain = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+  if (isPlain(expected)) return isPlain(actual) && Object.entries(expected).every(([k, v]) => matchesExpected(v, actual[k]));
+  return JSON.stringify(canonical(expected)) === JSON.stringify(canonical(actual));
+};
