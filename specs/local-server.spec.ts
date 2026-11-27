@@ -3,7 +3,7 @@ import { api, ensure } from "../src/index.ts";
 /**
  * --serve で起動するローカルの HTTP サーバ。
  *
- * 生成した仕様書のページと、再読み込みの通知（SSE）だけを返す。ファイルは配信しない。
+ * 生成した仕様書のページと、再読み込みの通知（SSE）だけを返す。それ以外のファイルは配信しない。
  */
 export type Server = { status: "起動中" | "待ち受け中" | "起動に失敗" };
 
@@ -78,7 +78,7 @@ export const reviewed = {
   "unguarded:listen:起動中のときだけ": "1 回の起動で待ち受けを始めるのは 1 回だけ（モデルの前提）",
   "unguarded:request:ブラウザだけ": "リクエストを送るのはブラウザ。live-spec のコマンドは自分のサーバにリクエストを送らない",
   "indistinguishable-example:request:GET /,GET /__live-spec/events": "どちらにも応える。違いは中身（仕様書の HTML か、通知のストリームか）で、状態として表す必要はない",
-  "indistinguishable-actor:127.0.0.1 で開いたブラウザ,localhost で開いたブラウザ": "Host が 127.0.0.1 でも localhost でも同じように受け付けることを示すための 2 人",
+  "indistinguishable-actor:127.0.0.1 で開いたブラウザ,localhost で開いたブラウザ": "Host が 127.0.0.1 でも localhost でも同じように受け付けることを示すための 2 つの登場人物",
 };
 
 /** ブラウザが GET / を送ったときの応答 */

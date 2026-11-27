@@ -3,7 +3,7 @@ import { cli, ensure } from "../src/index.ts";
 /**
  * live-spec のコマンド（live-spec / live-spec diff / live-spec check / live-spec skills install）を 1 回起動したときの流れ。
  *
- * どの引数の組み合わせが通り、どの状態で動き続けるか（監視・配信）または終わるかを表す。
+ * どの引数の組み合わせが通り、どの状態で動き続け（監視・配信）、どの状態で終わるかを表す。
  */
 export type Invocation = {
   status:
@@ -37,7 +37,7 @@ type Args = {
   portInUse?: boolean;
 };
 
-/** live-spec diff の引数。環境（リビジョンがない）も入力として表す。 */
+/** live-spec diff の引数。環境（指定したリビジョンが存在しない）も入力として表す。 */
 type DiffArgs = { paths: number; html?: boolean; json?: boolean; unknownRevision?: boolean };
 
 type SkillsArgs = { sub: "install" | "other" };
@@ -88,7 +88,7 @@ export const inputs = {
 /**
  * 引数を渡して起動する
  *
- * 引数の誤りは終了コード 2 で、理由と usage を出して終わる（ここでは「できない入力」として表れる）。
+ * 引数に誤りがあるときは、終了コード 2 で理由と使い方（usage）を出して終わる（ここでは「できない入力」として表れる）。
  */
 export function start(inv: Invocation, _user: User, args: Args): Invocation {
   ensure(inv.status === "起動前", "起動前のときだけ");
@@ -100,7 +100,7 @@ export function start(inv: Invocation, _user: User, args: Args): Invocation {
   ensure(args.port !== "empty" && args.port !== "invalid", "--port は 0〜65535 の整数");
   ensure(!(args.watch && !args.serve && !args.out), "--watch には --out が必要");
   // 標準出力に連結して出す選択肢は設けない（決定済み。ほかのツールにつなぐ必要が出てから考える）。
-  ensure(!(args.paths > 1 && !args.html && !args.json && !args.out && !args.watch && !args.serve), "spec が複数の Markdown には --out <ディレクトリ> が必要");
+  ensure(!(args.paths > 1 && !args.html && !args.json && !args.out && !args.watch && !args.serve), "複数の spec を Markdown で出すには --out <ディレクトリ> が必要");
   if (args.serve) return { status: args.portInUse ? "ポートが使えず終了" : "配信中" };
   if (args.watch) return { status: "監視中" };
   return { status: args.brokenSpec ? "生成に失敗して終了" : "書き出して終了" };
@@ -137,7 +137,7 @@ export function installSkills(inv: Invocation, _user: User, args: SkillsArgs): I
 
 export const links = [
   { from: start, to: "local-server", action: "listen", label: "--serve のときはローカルサーバを起動する" },
-  { from: start, to: "watch-session", action: "save", label: "--watch / --serve のときは監視を始め、最初の生成をする" },
+  { from: start, to: "watch-session", action: "save", label: "--watch / --serve のときは監視を始め、最初の仕様書を生成する" },
 ];
 
 export const scenarios = {
@@ -153,7 +153,7 @@ export const scenarios = {
     { do: start, by: "利用者", input: "--port 5000（--serve なし）", denied: "--port は --serve と一緒に指定する" },
     { do: start, by: "利用者", input: '--serve --port ""', denied: "--port は 0〜65535 の整数" },
     { do: start, by: "利用者", input: "--watch（--out なし）", denied: "--watch には --out が必要" },
-    { do: start, by: "利用者", input: "ディレクトリ（spec が複数）", denied: "spec が複数の Markdown には --out <ディレクトリ> が必要" },
+    { do: start, by: "利用者", input: "ディレクトリ（spec が複数）", denied: "複数の spec を Markdown で出すには --out <ディレクトリ> が必要" },
     { do: diff, by: "利用者", input: "パスなし", denied: "比べる spec ファイルかディレクトリが必要" },
     { do: diff, by: "利用者", input: "--html --json", denied: "--html と --json は同時に指定できない" },
     { do: installSkills, by: "利用者", input: "install 以外", denied: "サブコマンドは install だけ" },
@@ -196,7 +196,7 @@ export function surface(inv: Invocation) {
         "$ live-spec <file.spec.ts | dir>... [--html | --json] [--out <file | dir>] [--watch] [--serve [--port <n>]]\n$ live-spec diff <file.spec.ts | dir>... [--base <rev>] [--head <rev>] [--html | --json] [--out <file>]\n$ live-spec skills install [--dir <path>] [--force]",
       );
     case "書き出して終了":
-      return cli.output("（標準出力か --out に仕様書を書いて、終了コード 0）");
+      return cli.output("（標準出力か --out に仕様書を書き出して、終了コード 0）");
     case "監視中":
       return cli.output("specs/ を監視しています（Ctrl+C で終了）\n✓ out/spec.html を生成しました（268ms）");
     case "配信中":

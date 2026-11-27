@@ -11,7 +11,7 @@ type Watcher = { format: "html" | "markdown" };
 
 export const initial: Session = { output: "未生成" };
 
-// 形式で失敗時の振る舞いが変わるので、形式ごとに監視している人を分ける。
+// 出力の形式によって失敗時の振る舞いが変わるので、形式ごとに監視している人を分ける。
 export const actors: Record<string, Watcher> = {
   "HTML で監視": { format: "html" },
   "Markdown で監視": { format: "markdown" },
@@ -38,7 +38,7 @@ export function save(_s: Session, watcher: Watcher, valid: boolean): Session {
 
 export const reviewed = {
   "anytime:save": "監視中は、spec をいつ保存しても生成し直す。保存を断る状態はない",
-  "unused-field:output": "output は書き出した仕様書の中身を表す。保存はどの中身のときでもできるので、可否には使わない",
+  "unused-field:output": "output は書き出した仕様書の中身を表す。中身がどうであっても保存できるので、可否には使わない",
 };
 
 export function surface(s: Session, watcher: Watcher) {
