@@ -46,4 +46,13 @@ describe("ドメインオブジェクトの表示名", { timeout: 60_000 }, () =
     expect(html).toContain("<h1>Action Item</h1>");
     expect(html).toContain('<a href="#/pull-request">PR</a>');
   });
+
+  it("線と状態のパネルの見出しにも、ファイル名ではなく表示名を出す", async () => {
+    const html = await renderProjectHtml(await project(), { title: "仕様" });
+
+    expect(html).toContain('"displayName":"PR"');
+    expect(html).toContain('pageTitle() + " の線"');
+    expect(html).toContain('pageTitle() + " の状態"');
+    expect(html).not.toContain('current.name + " の線"');
+  });
 });

@@ -236,6 +236,7 @@ const renderPage = async (
     ),
   );
   const data = {
+    displayName: spec.displayName,
     states: states.map((s) => ({ ...s, surfaces: s.surfaces.map((g, i) => ({ actors: g.actors, template: templateId(s.id, i) })) })),
     questions: Object.fromEntries(
       graph.states.map((s) => [s.id, graph.questions.filter((q) => q.states.includes(s.id)).map((q) => q.ask)]),
@@ -843,6 +844,11 @@ const CLIENT = `
     panel.style.top = top + "px";
     panel.style.maxHeight = "calc(100vh - " + (top + 16) + "px)";
   }
+  // パネルの見出しには、ページの識別に使うファイル名ではなく、表示名（displayName）を出す。
+  function pageTitle() {
+    var page = current && data.pages[current.name];
+    return (page && page.displayName) || (current ? current.name : "");
+  }
   function reset() {
     closePanel();
     if (current && current.name) history.replaceState(null, "", hashOf(current.name));
@@ -875,7 +881,7 @@ const CLIENT = `
     panel.replaceChildren();
     panel.hidden = false;
     placePanel();
-    panel.append(el("p", "eyebrow", current.name + " の状態"), el("h2", null, s.label));
+    panel.append(el("p", "eyebrow", pageTitle() + " の状態"), el("h2", null, s.label));
     if (s.initial) panel.append(el("span", "tag", "初期状態"));
     if (s.terminal) panel.append(el("span", "tag", "終端"));
     s.violations.forEach(function (v) { panel.append(el("p", "violation", "⚠ 不変条件「" + v + "」を破っています")); });
@@ -960,7 +966,7 @@ const CLIENT = `
     panel.replaceChildren();
     panel.hidden = false;
     placePanel();
-    panel.append(el("p", "eyebrow", current.name + " の線"));
+    panel.append(el("p", "eyebrow", pageTitle() + " の線"));
     if (groups.length > 0) panel.append(el("h2", null, groups[0].dir.split(" → ").join(edge.dataset.bidir ? " ↔ " : " → ")));
     groups.forEach(function (g) {
       if (groups.length > 1) panel.append(el("h3", null, g.dir));
