@@ -822,6 +822,14 @@ const CLIENT = `
   function undim(n) { if (n) n.classList.remove("is-dim"); }
   function nodes(id) { return within(".node" + attr("data-state", id)); }
   function closePanel() { clear(); panel.replaceChildren(); panel.hidden = true; }
+  // パネルは図の上端にそろえて出す。画面の右上に固定すると、図を下にスクロールしたとき、図から離れた文章の上に重なるため。
+  function placePanel() {
+    var board = current && current.el.querySelector(".board");
+    if (!board || window.innerWidth <= 960) return;
+    var top = Math.max(16, board.getBoundingClientRect().top);
+    panel.style.top = top + "px";
+    panel.style.maxHeight = "calc(100vh - " + (top + 16) + "px)";
+  }
   function reset() {
     closePanel();
     if (current && current.name) history.replaceState(null, "", hashOf(current.name));
@@ -853,6 +861,7 @@ const CLIENT = `
 
     panel.replaceChildren();
     panel.hidden = false;
+    placePanel();
     panel.append(el("p", "eyebrow", current.name + " の状態"), el("h2", null, s.label));
     if (s.initial) panel.append(el("span", "tag", "初期状態"));
     if (s.terminal) panel.append(el("span", "tag", "終端"));
@@ -899,6 +908,8 @@ const CLIENT = `
   function setMode(mode) {
     var board = current && current.el.querySelector(".board");
     if (!board) return;
+    // 図を切り替えたら強調とパネルを外す。要約の図の線は詳細の図には無いので、残すとすべてが薄く描かれるため。
+    reset();
     board.dataset.mode = mode;
     within(".modes button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.mode === mode)); });
   }
@@ -935,10 +946,11 @@ const CLIENT = `
     var groups = JSON.parse(edge.dataset.ops || "[]");
     panel.replaceChildren();
     panel.hidden = false;
+    placePanel();
     panel.append(el("p", "eyebrow", current.name + " の線"));
     if (groups.length > 0) panel.append(el("h2", null, groups[0].dir.split(" → ").join(edge.dataset.bidir ? " ↔ " : " → ")));
     groups.forEach(function (g) {
-      panel.append(el("h3", null, g.dir));
+      if (groups.length > 1) panel.append(el("h3", null, g.dir));
       panel.append(list(g.items, function (o) {
         var li = el("li");
         var link = el("button", "goto", o.title);
