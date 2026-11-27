@@ -1,6 +1,6 @@
 {
   "name": "@yutaura/live-spec",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "license": "MIT",
   "type": "module",
   "description": "AI が書き、人が見て理解できる「生きた仕様書」を作るツール。素の TypeScript で書いた仕様を実行し、状態遷移図・画面・できる／できない理由・検査結果をまとめた仕様書を生成する",
