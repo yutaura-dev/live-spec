@@ -47,7 +47,8 @@ export interface Spec {
   readonly goals: ReadonlyArray<readonly [name: string, fn: InvariantFn]>;
   readonly inputs: Readonly<Record<string, ReadonlyArray<readonly [label: string, args: ReadonlyArray<unknown>]>>>;
   readonly surface: SurfaceFn | null;
-  readonly scenarios: ReadonlyArray<readonly [name: string, steps: ReadonlyArray<ScenarioStep>]>;
+  /** given: シナリオを始める、作ったときに決まる値（{ given: { kind: "wait" }, steps: [...] } と書いたとき） */
+  readonly scenarios: ReadonlyArray<readonly [name: string, steps: ReadonlyArray<ScenarioStep>, given?: Readonly<Record<string, unknown>>]>;
   readonly questions: ReadonlyArray<Question>;
   readonly links: ReadonlyArray<Link>;
   readonly decisions: ReadonlyArray<readonly [name: string, decision: Decision]>;
@@ -155,7 +156,11 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
       ? mod.links.filter((l): l is Link => isRecord(l) && typeof l.to === "string" && typeof l.label === "string")
       : [],
     scenarios: isRecord(mod.scenarios)
-      ? Object.entries(mod.scenarios).filter((e): e is [string, Array<ScenarioStep>] => Array.isArray(e[1]))
+      ? Object.entries(mod.scenarios).flatMap(([name, value]): Array<readonly [string, ReadonlyArray<ScenarioStep>, Readonly<Record<string, unknown>>?]> => {
+          if (Array.isArray(value)) return [[name, value as Array<ScenarioStep>]];
+          if (isRecord(value) && Array.isArray(value.steps)) return [[name, value.steps as Array<ScenarioStep>, isRecord(value.given) ? value.given : {}]];
+          return [];
+        })
       : [],
     docs: info?.docs ?? {},
     fieldDocs: info?.fieldDocs ?? {},

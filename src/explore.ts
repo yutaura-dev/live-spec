@@ -220,9 +220,24 @@ const runScenarios = (
   findings: Array<Finding>,
   bypassFor: BypassFor,
 ): Graph["scenarios"] =>
-  spec.scenarios.map(([name, steps]) => {
-    let values = canonical(spec.initial) as State;
+  spec.scenarios.map(([name, steps, given]) => {
+    let values = canonical({ ...spec.initial, ...given }) as State;
     const records: Array<Graph["scenarios"][number]["steps"][number]> = [];
+    const head = given === undefined ? {} : { given };
+    // given で始められるのは、作ったときに決まる値だけ。状態遷移で変わる値から始めると、そこへ至る手順を飛ばした
+    // シナリオになり、業務の流れとして読めなくなるため。探索していない始め方は、検査の結果と食い違うので断る。
+    const invalid = Object.keys(given ?? {}).filter((k) => !spec.creationFields.includes(k));
+    const describeGiven = (g: Readonly<Record<string, unknown>>) => Object.entries(g).map(([k, v]) => `${k}: ${String(v)}`).join("、");
+    const startError =
+      invalid.length > 0
+        ? `given に書けるのは、作ったときに決まる値（${spec.creationFields.join("・") || "なし"}）だけ。${invalid.join("・")} は書けない`
+        : given !== undefined && idOf(values) === null
+          ? `given の組み合わせ（${describeGiven(given)}）は探索していない。export const variants に足す`
+          : null;
+    if (startError !== null) {
+      findings.push({ kind: "scenario-failed", scenario: name, step: 0, reason: startError });
+      return { name, passed: false, ...head, steps: [] };
+    }
     for (const [i, step] of steps.entries()) {
       const action = step.do.name;
       const fail = (reason: string) => {
@@ -279,7 +294,7 @@ const runScenarios = (
       records.push({ action, actor: step.by, input: step.input ?? null, from: idOf(values), to: idOf(outcome.next), ok: true, reason: null, denied: false });
       values = outcome.next;
     }
-    return { name, passed: records.length === steps.length && records.every((r) => r.ok), steps: records };
+    return { name, passed: records.length === steps.length && records.every((r) => r.ok), ...head, steps: records };
   });
 
 // 画面のボタンと探索の結果を突き合わせる。画面と状態遷移が同じ spec から作られているので、

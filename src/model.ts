@@ -153,6 +153,8 @@ export const Graph = Schema.Struct({
     Schema.Struct({
       name: Schema.String,
       passed: Schema.Boolean,
+      /** シナリオを始めた、作ったときに決まる値 */
+      given: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
       steps: Schema.Array(
         Schema.Struct({
           action: Schema.String,

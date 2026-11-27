@@ -278,8 +278,9 @@ const decisionTable = (d: Graph["decisions"][number]): Array<string> => [
 // ✅ だと「合意済みの仕様」に見えるため。
 export const scenarioTitle = (s: Graph["scenarios"][number], questions: Graph["questions"]): string => {
   const q = questions.findIndex((x) => x.scenario === s.name);
-  if (!s.passed) return `❌ ${s.name}`;
-  return q === -1 ? `✅ ${s.name}` : `⚠ ${s.name}（未決事項 ${q + 1} を判断中）`;
+  const from = s.given === undefined ? "" : `（${Object.entries(s.given).map(([k, v]) => `${k}: ${String(v)}`).join("、")} から）`;
+  if (!s.passed) return `❌ ${s.name}${from}`;
+  return q === -1 ? `✅ ${s.name}${from}` : `⚠ ${s.name}${from}（未決事項 ${q + 1} を判断中）`;
 };
 
 export const questionTarget = (spec: Spec, q: Graph["questions"][number], labelOf: (id: string) => string) =>

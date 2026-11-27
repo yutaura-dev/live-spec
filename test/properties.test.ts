@@ -170,4 +170,25 @@ describe("作ったときに決まる値", { timeout: 60_000 }, () => {
     expect(md).toContain("| kind | \`\"manual\" \\| \"wait\" \\| \"merge\"\` | 種類 | 作ったときに決まる |");
     expect(md).toContain("| effort | \`\"easy\" \\| \"hard\"\` | 手間 | データ |");
   });
+
+  it("シナリオを、作ったときに決まる値を変えた初期状態から始められ、仕様書にどこから始めたかを出す", async () => {
+    const { spec, graph } = await loadItem(`export const scenarios = {
+  待つものは手で終えられない: { given: { kind: "wait" }, steps: [{ do: complete, by: "人", denied: "待つものは手で終えられない" }] },
+};`);
+
+    expect(graph.scenarios[0]).toMatchObject({ name: "待つものは手で終えられない", passed: true, given: { kind: "wait" } });
+    expect(graph.ensures!.find((e) => e.reason === "待つものは手で終えられない")!.verdict).toBe("caught");
+    expect(renderMarkdown(spec, graph)).toContain("### ✅ 待つものは手で終えられない（kind: wait から）");
+  });
+
+  it("given に書けるのは作ったときに決まる値だけで、探索していない組み合わせなら variants に足すよう案内する", async () => {
+    const { graph } = await loadItem(`export const scenarios = {
+  状態から始める: { given: { status: "done" }, steps: [{ do: complete, by: "人" }] },
+  組み合わせ: { given: { kind: "wait", assignee: "claude" }, steps: [{ do: complete, by: "Claude" }] },
+};`);
+
+    const reasons = graph.findings.flatMap((f) => (f.kind === "scenario-failed" ? [[f.scenario, f.reason]] : []));
+    expect(reasons).toContainEqual(["状態から始める", "given に書けるのは、作ったときに決まる値（kind・assignee）だけ。status は書けない"]);
+    expect(reasons).toContainEqual(["組み合わせ", "given の組み合わせ（kind: wait、assignee: claude）は探索していない。export const variants に足す"]);
+  });
 });
