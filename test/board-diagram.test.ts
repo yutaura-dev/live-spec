@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadObject } from "../src/generate.ts";
-import { collapseTransitions, isCollapsed } from "../src/render/collapse.ts";
+import { collapseTransitions, isCollapsed, sourceLabel, sourceTitle } from "../src/render/collapse.ts";
+import { renderHtml } from "../src/render/html.ts";
 
 const INDEX = new URL("../src/index.ts", import.meta.url).pathname;
 
@@ -50,6 +51,23 @@ describe("列をどこへでも移せる操作の図と、振る舞いの同じ�
     expect(moves.length).toBe(4);
     expect(new Set(moves.map((t) => t.from)).size).toBe(1);
     expect(isCollapsed(moves[0]!.from)).toBe(true);
+  });
+
+  it("まとめた線の出どころの箱には、状態の名前を書き、除いた状態のほうが少なければ「〜以外から」と書く", async () => {
+    const { graph } = await load();
+
+    const from = collapseTransitions(graph).find((t) => t.action === "move")!.from;
+
+    expect(sourceLabel(graph, from)).toBe("処理中・アーカイブ 以外から");
+    expect(sourceTitle(graph, from)).toBe("要確認・todo・進行中・完了 から");
+  });
+
+  it("まとめた線の出どころの箱にカーソルを合わせると、出どころの状態の一覧が出る", async () => {
+    const { spec, graph } = await load();
+
+    const html = await renderHtml(spec, graph);
+
+    expect(html).toMatch(/<g class="any-node"><title>要確認・todo・進行中・完了 から<\/title>/);
   });
 
   it("どの操作・登場人物・入力でも、できる／できないと行き先が同じ状態を「確かめてほしい点」に出す", async () => {

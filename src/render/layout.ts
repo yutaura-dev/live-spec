@@ -1,7 +1,7 @@
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import ElkModule from "elkjs/lib/elk.bundled.js";
 import type { Graph } from "../model.ts";
-import { collapseTransitions, isCollapsed, sourceLabel } from "./collapse.ts";
+import { collapseTransitions, isCollapsed, sourceLabel, sourceTitle } from "./collapse.ts";
 
 export interface Point {
   readonly x: number;
@@ -111,7 +111,7 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
   };
   // 名前から値を省くのは、枠に入る状態だけ。枠に入らない状態で省くと、値の違う状態が同じ名前になって見分けられないため。
   const nodeList = [
-    ...sources.map((id) => ({ id, label: sourceLabel(graph, id), title: sourceLabel(graph, id), initial: false })),
+    ...sources.map((id) => ({ id, label: sourceLabel(graph, id), title: sourceTitle(graph, id), initial: false })),
     ...graph.states.map((s) => ({ id: s.id, label: boxOf(s.id) === undefined ? s.label : group(s.id)!.short, title: s.label, initial: s.initial })),
   ];
   const elkNode = (s: (typeof nodeList)[number]): ElkNode => ({

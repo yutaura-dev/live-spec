@@ -494,7 +494,7 @@ const groupNodeSvg = (n: LaidOutNode) =>
     : `<g class="node group-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="10"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></g>`;
 
 const anyNodeSvg = (n: LaidOutNode) =>
-  `<g class="any-node"><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="${n.height / 2}"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></g>`;
+  `<g class="any-node"><title>${esc(n.title)}</title><rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" rx="${n.height / 2}"/><text x="${n.x + n.width / 2}" y="${n.y + n.height / 2}">${esc(n.label)}</text></g>`;
 
 const nodeSvg = (n: LaidOutNode, f: NodeFlags, markerId: string) => {
   if (isCollapsed(n.id)) return anyNodeSvg(n);
