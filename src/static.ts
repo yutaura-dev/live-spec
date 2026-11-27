@@ -24,14 +24,23 @@ export interface StaticInfo {
   readonly creationFields: ReadonlyArray<string>;
   /** どれかの操作が戻り値で書く項目 */
   readonly writtenFields: ReadonlyArray<string>;
+  /** 操作・不変条件・目指す状態の関数で読まれる名前（値オブジェクトの中の項目も含む） */
+  readonly readFields: ReadonlyArray<string>;
 }
 
 export interface Property {
+  /** 項目の名前。判別 union の種類の行では「type = human」 */
   readonly field: string;
-  /** 型を書いたとおりの文字 */
+  /** 型を書いたとおりの文字（種類の行では空） */
   readonly type: string;
   readonly doc: string | null;
   readonly optional: boolean;
+  /** 値の一覧（文字列の union など、値が決まっている型のとき） */
+  readonly values: ReadonlyArray<FieldValue> | null;
+  /** オブジェクトの型の項目を展開した子の項目（判別 union なら種類ごとの行） */
+  readonly children: ReadonlyArray<Property>;
+  /** 判別 union の種類の行 */
+  readonly variant?: true;
 }
 
 export interface FieldRef {
@@ -63,6 +72,7 @@ export const analyze = (source: string): StaticInfo => {
   const docs: Record<string, string> = {};
   const types = new Map<string, { members: ReadonlyArray<t.TSTypeElement>; doc: string | null }>();
   const aliases = new Map<string, t.TSType>();
+  const aliasStarts = new Map<string, number>();
   const constObjects = new Map<string, Array<{ readonly value: string; readonly doc: string | null }>>();
   let initialType: string | null = null;
 
@@ -75,7 +85,10 @@ export const analyze = (source: string): StaticInfo => {
       types.set(decl.id.name, { members: decl.typeAnnotation.members, doc });
     }
     if (decl.type === "TSInterfaceDeclaration") types.set(decl.id.name, { members: decl.body.body, doc });
-    if (decl.type === "TSTypeAliasDeclaration" && decl.typeAnnotation.type !== "TSTypeLiteral") aliases.set(decl.id.name, decl.typeAnnotation);
+    if (decl.type === "TSTypeAliasDeclaration" && decl.typeAnnotation.type !== "TSTypeLiteral") {
+      aliases.set(decl.id.name, decl.typeAnnotation);
+      aliasStarts.set(decl.id.name, decl.id.end!);
+    }
     if (decl.type === "VariableDeclaration") {
       for (const d of decl.declarations) {
         const values = d.id.type === "Identifier" && d.init != null ? constObjectOf(d.init) : null;
@@ -116,6 +129,91 @@ export const analyze = (source: string): StaticInfo => {
     return { values: finiteValuesOf(u), constObject: null };
   };
 
+  // オブジェクトの型の項目を、子の項目として展開する（プロパティの表で、入れ子の行として見せるため）。判別 union は、
+  // どの種類にもある文字列リテラルの項目を判別子として、種類ごとの行の下に並べる。同じ型に戻ったら止め、深さも 4 段までにする。
+  const MAX_DEPTH = 4;
+  // 判別 union の種類ごとの JSDoc は、Babel では前後の種類や union 全体の注釈として付くので、位置で探す。
+  // 種類の直前にあり、1 つ前の種類（最初の種類なら型の名前）より後ろにある JSDoc を、その種類の説明とする。
+  const docBetween = (after: number, before: number): string | null =>
+    summaryOf((file.comments ?? []).filter((c) => c.start! >= after && c.end! <= before));
+  const nonNull = (type: t.TSType): ReadonlyArray<t.TSType> => {
+    const u = unwrap(type);
+    return (u.type === "TSUnionType" ? u.types : [u]).map(unwrap).filter((m) => m.type !== "TSNullKeyword" && m.type !== "TSUndefinedKeyword");
+  };
+  const membersOfType = (type: t.TSType, seen: ReadonlySet<string>): { readonly members: ReadonlyArray<t.TSTypeElement>; readonly seen: ReadonlySet<string> } | null => {
+    if (type.type === "TSTypeLiteral") return { members: type.members, seen };
+    if (type.type === "TSTypeReference" && type.typeName.type === "Identifier" && !seen.has(type.typeName.name)) {
+      const name = type.typeName.name;
+      const literal = types.get(name);
+      if (literal !== undefined) return { members: literal.members, seen: new Set([...seen, name]) };
+      const alias = aliases.get(name);
+      if (alias !== undefined) {
+        const only = nonNull(alias);
+        return only.length === 1 ? membersOfType(only[0]!, new Set([...seen, name])) : null;
+      }
+    }
+    return null;
+  };
+  const expand = (type: t.TSType, seen: ReadonlySet<string>, depth: number, after: number): Array<Property> => {
+    if (depth > MAX_DEPTH) return [];
+    let options = nonNull(type);
+    if (options.length === 1) {
+      const only = options[0]!;
+      const element = only.type === "TSArrayType" ? only.elementType : only.type === "TSTypeReference" && only.typeName.type === "Identifier" && ["Array", "ReadonlyArray"].includes(only.typeName.name) ? only.typeArguments?.params[0] : undefined;
+      if (element !== undefined) return expand(element, seen, depth, after);
+      if (only.type === "TSTypeReference" && only.typeName.type === "Identifier" && aliases.has(only.typeName.name) && !seen.has(only.typeName.name)) {
+        const name = only.typeName.name;
+        const inner = nonNull(aliases.get(name)!);
+        if (inner.length > 1) {
+          options = inner;
+          seen = new Set([...seen, name]);
+          after = aliasStarts.get(name)!;
+        }
+      }
+    }
+    if (options.length > 1) {
+      const cases = options.map((o) => ({ node: o, found: membersOfType(o, seen) }));
+      if (cases.some((c) => c.found === null)) return [];
+      const literalOf = (members: ReadonlyArray<t.TSTypeElement>, key: string) => {
+        const m = members.find((x) => x.type === "TSPropertySignature" && x.key.type === "Identifier" && x.key.name === key);
+        const a = m?.type === "TSPropertySignature" ? m.typeAnnotation?.typeAnnotation : undefined;
+        return a?.type === "TSLiteralType" && a.literal.type === "StringLiteral" ? a.literal.value : null;
+      };
+      const keys = cases[0]!.found!.members.flatMap((m) => (m.type === "TSPropertySignature" && m.key.type === "Identifier" ? [m.key.name] : []));
+      const discriminant = keys.find((k) => cases.every((c) => literalOf(c.found!.members, k) !== null));
+      if (discriminant === undefined) return [];
+      return cases.map((c, i) => ({
+        field: `${discriminant} = ${literalOf(c.found!.members, discriminant)}`,
+        type: "",
+        doc: docBetween(i === 0 ? after : cases[i - 1]!.node.end!, c.node.start!),
+        optional: false,
+        values: null,
+        variant: true as const,
+        children: propertiesOf(c.found!.members.filter((m) => !(m.type === "TSPropertySignature" && m.key.type === "Identifier" && m.key.name === discriminant)), c.found!.seen, depth + 1),
+      }));
+    }
+    const found = options.length === 1 ? membersOfType(options[0]!, seen) : null;
+    return found === null ? [] : propertiesOf(found.members, found.seen, depth);
+  };
+  function propertiesOf(members: ReadonlyArray<t.TSTypeElement>, seen: ReadonlySet<string>, depth: number): Array<Property> {
+    return members.flatMap((m): Array<Property> => {
+      if (m.type !== "TSPropertySignature" || m.typeAnnotation == null) return [];
+      const key = m.key.type === "Identifier" ? m.key.name : m.key.type === "StringLiteral" ? m.key.value : null;
+      if (key === null) return [];
+      const annotation = m.typeAnnotation.typeAnnotation;
+      return [
+        {
+          field: key,
+          type: source.slice(annotation.start!, annotation.end!),
+          doc: summaryOf(m.leadingComments),
+          optional: m.optional === true,
+          values: resolve(annotation).values,
+          children: expand(annotation, seen, depth + 1, m.key.end!),
+        },
+      ];
+    });
+  }
+
   const stateType = initialType === null ? undefined : types.get(initialType);
   const members = stateType?.members ?? [];
   const fields: Record<string, ReadonlyArray<FieldValue>> = {};
@@ -126,8 +224,15 @@ export const analyze = (source: string): StaticInfo => {
     const key = m.key.type === "Identifier" ? m.key.name : m.key.type === "StringLiteral" ? m.key.value : null;
     if (key === null) continue;
     const annotation = m.typeAnnotation.typeAnnotation;
-    properties.push({ field: key, type: source.slice(annotation.start!, annotation.end!), doc: summaryOf(m.leadingComments), optional: m.optional === true });
     const { values, constObject } = resolve(annotation);
+    properties.push({
+      field: key,
+      type: source.slice(annotation.start!, annotation.end!),
+      doc: summaryOf(m.leadingComments),
+      optional: m.optional === true,
+      values,
+      children: expand(annotation, new Set(initialType === null ? [] : [initialType]), 1, m.key.end!),
+    });
     if (values !== null) fields[key] = values;
     if (constObject !== null) {
       const docsOfValues = Object.fromEntries(constObjects.get(constObject)!.flatMap((v) => (v.doc === null ? [] : [[v.value, v.doc]])));
@@ -154,6 +259,7 @@ export const analyze = (source: string): StaticInfo => {
     dataFields,
     creationFields,
     writtenFields: properties.map((p) => p.field).filter((f) => written.has(f)),
+    readFields: [...read].sort(),
   };
 };
 

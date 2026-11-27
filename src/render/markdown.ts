@@ -1,6 +1,7 @@
 import type { EnsureCheck } from "../model.ts";
 import { describeEnsure } from "./ensures.ts";
 import { markdownSection } from "./sections.ts";
+import { formatValue } from "../format-value.ts";
 import { propertyRows } from "./properties.ts";
 import { projectRelations } from "../relations.ts";
 import { actionTitle, canOnlyWhen } from "../labels.ts";
@@ -227,11 +228,14 @@ const glossarySection = (spec: Spec): Array<string> => {
 const propertiesSection = (spec: Spec): Array<string> => {
   const rows = propertyRows(spec);
   if (rows.length === 0) return [];
+  const code = (text: string) => `\`${text.replace(/\|/g, "\\|")}\``;
   return [
     ...markdownSection("プロパティ"),
-    "| 項目 | 型 | 説明 | 扱い | 値 |",
-    "|---|---|---|---|---|",
-    ...rows.map((r) => `| ${r.field} | \`${r.type.replace(/\|/g, "\\|")}\` | ${r.doc} | ${r.kind} | ${r.values.map((v) => (v.doc === null ? v.value : `${v.value}（${v.doc}）`)).join(" / ")} |`),
+    "| 項目 | 型 | 説明 | 扱い |",
+    "|---|---|---|---|",
+    ...rows.map(
+      (r) => `| ${"　".repeat(r.depth)}${r.row === "value" ? code(r.field) : r.field} | ${r.type === "" ? "" : code(r.type)} | ${r.doc} | ${r.kind} |`,
+    ),
     "",
   ];
 };
@@ -258,7 +262,7 @@ const screensSection = (spec: Spec, graph: Graph): Array<string> => {
   ];
 };
 
-const cell = (v: unknown) => (v === undefined || v === null ? "" : typeof v === "string" ? v : JSON.stringify(v));
+const cell = (v: unknown) => (v === undefined || v === null ? "" : formatValue(v));
 
 export const inputCell = (input: unknown, column: string) =>
   typeof input === "object" && input !== null ? cell((input as Record<string, unknown>)[column]) : cell(input);
@@ -278,7 +282,7 @@ const decisionTable = (d: Graph["decisions"][number]): Array<string> => [
 // ✅ だと「合意済みの仕様」に見えるため。
 export const scenarioTitle = (s: Graph["scenarios"][number], questions: Graph["questions"]): string => {
   const q = questions.findIndex((x) => x.scenario === s.name);
-  const from = s.given === undefined ? "" : `（${Object.entries(s.given).map(([k, v]) => `${k}: ${String(v)}`).join("、")} から）`;
+  const from = s.given === undefined ? "" : `（${Object.entries(s.given).map(([k, v]) => `${k}: ${formatValue(v)}`).join("、")} から）`;
   if (!s.passed) return `❌ ${s.name}${from}`;
   return q === -1 ? `✅ ${s.name}${from}` : `⚠ ${s.name}${from}（未決事項 ${q + 1} を判断中）`;
 };

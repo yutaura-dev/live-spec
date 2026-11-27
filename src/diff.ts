@@ -1,3 +1,5 @@
+import { formatValue } from "./format-value.ts";
+
 // 正規化モデル（--json の出力）のうち、差分に使う部分だけの型。古い形式（availability を 1 件ずつ並べたもの）も受け付ける。
 interface Model {
   readonly actors?: ReadonlyArray<{ readonly name: string }>;
@@ -188,7 +190,7 @@ export const describeFinding = (f: unknown): string => {
     .map(([k, v]) =>
       Array.isArray(v) && v.every(isStep)
         ? `${k}=${v.map((s) => `${s.action}（${s.actor}）`).join(" → ")}`
-        : `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`,
+        : `${k}=${formatValue(v)}`,
     )
     .join(", ")}`;
 };

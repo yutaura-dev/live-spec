@@ -91,9 +91,9 @@ describe("ドメインオブジェクトのプロパティ", { timeout: 60_000 }
     const md = renderMarkdown(spec, graph);
 
     expect(md).toContain("## プロパティ");
-    expect(md).toContain("| status | `Status` | 列 | 状態遷移で変わる | todo（まだ手を付けていない） / 進行中（作業中） / 完了（終わった） |");
-    expect(md).toContain("| title | `string` | 題名 | データ |  |");
-    expect(md).toContain("| ownerId | `string` | 担当者 | 作ったときに決まる |  |");
+    expect(md).toContain("| status | `Status` | 列 | 状態遷移で変わる |\n| 　`todo` |  | まだ手を付けていない |  |\n| 　`進行中` |  | 作業中 |  |\n| 　`完了` |  | 終わった |  |");
+    expect(md).toContain("| title | `string` | 題名 | データ |");
+    expect(md).toContain("| ownerId | `string` | 担当者 | 作ったときに決まる |");
   });
 
   it("HTML にもプロパティの表を出す", async () => {
@@ -102,7 +102,7 @@ describe("ドメインオブジェクトのプロパティ", { timeout: 60_000 }
     const html = await renderHtml(spec, graph);
 
     expect(html).toContain("<h2>プロパティ</h2>");
-    expect(html).toContain('<span class="value" title="作業中">進行中</span>');
+    expect(html).toContain('<span class="value">進行中</span></td><td></td><td>作業中</td>');
   });
 });
 

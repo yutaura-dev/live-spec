@@ -441,13 +441,11 @@ const diagramSvg = (name: string, l: Layout, markerId: string, node: (n: LaidOut
 const propertiesHtml = (spec: Spec) => {
   const rows = propertyRows(spec);
   if (rows.length === 0) return "";
-  return `<section class="properties"><h2>プロパティ</h2>${sectionLead("プロパティ")}<table class="decision props"><thead><tr><th>項目</th><th>型</th><th>説明</th><th>扱い</th><th>値</th></tr></thead><tbody>${rows
-    .map(
-      (r) =>
-        `<tr class="${r.kind === "データ" ? "data" : "behavior"}"><td><code>${esc(r.field)}</code></td><td><code>${esc(r.type)}</code></td><td>${esc(r.doc)}</td><td>${r.kind}</td><td>${r.values
-          .map((v) => `<span class="value"${v.doc === null ? "" : ` title="${esc(v.doc)}"`}>${esc(v.value)}</span>${v.doc === null ? "" : `<span class="value-doc">${esc(v.doc)}</span>`}`)
-          .join("")}</td></tr>`,
-    )
+  return `<section class="properties"><h2>プロパティ</h2>${sectionLead("プロパティ")}<table class="decision props"><thead><tr><th>項目</th><th>型</th><th>説明</th><th>扱い</th></tr></thead><tbody>${rows
+    .map((r) => {
+      const name = r.row === "value" ? `<span class="value">${esc(r.field)}</span>` : r.row === "variant" ? esc(r.field) : `<code>${esc(r.field)}</code>`;
+      return `<tr class="depth-${r.depth}${r.row === "field" ? "" : ` ${r.row === "variant" ? "case" : "value"}`}${r.kind === "データ" ? " data" : ""}"><td style="padding-left:${14 + r.depth * 18}px">${name}</td><td>${r.type === "" ? "" : `<code>${esc(r.type)}</code>`}</td><td>${esc(r.doc)}</td><td>${r.kind}</td></tr>`;
+    })
     .join("")}</tbody></table></section>`;
 };
 
@@ -758,7 +756,7 @@ marker path{fill:var(--muted)}
 .questions .ask{font-weight:600}
 .questions .target{color:var(--muted);font-size:13px;margin-left:4px}
 .questions .note{display:block;color:var(--muted);font-size:13px}
-.questions.review.done{border-color:var(--line)}.questions.review.done h2{color:var(--muted)}.ensure-tests{display:block;color:var(--muted);font-size:12px}table.props td{vertical-align:top}table.props tr.data td{color:var(--muted)}.value{display:inline-block;font-size:12.5px;padding:1px 8px;border-radius:999px;background:var(--chip);margin:2px 4px 2px 0}.value-doc{font-size:12px;color:var(--muted);margin-right:10px}.section-lead{margin:-4px 0 12px;color:var(--muted);font-size:13px}.ensure-effect{display:inline}.ensure-effect summary{display:inline;cursor:pointer;color:var(--muted);font-size:12.5px}.ensure-effect[open]{display:block}.ensure.unguarded.acknowledged{color:var(--muted);font-weight:400;font-size:12.5px}
+.questions.review.done{border-color:var(--line)}.questions.review.done h2{color:var(--muted)}.ensure-tests{display:block;color:var(--muted);font-size:12px}table.props td{vertical-align:top}table.props tr.data td{color:var(--muted)}table.props tr.case td{font-weight:600;background:var(--chip)}.value{display:inline-block;font-size:12.5px;padding:1px 8px;border-radius:999px;background:var(--chip);margin:2px 4px 2px 0}.value-doc{font-size:12px;color:var(--muted);margin-right:10px}.section-lead{margin:-4px 0 12px;color:var(--muted);font-size:13px}.ensure-effect{display:inline}.ensure-effect summary{display:inline;cursor:pointer;color:var(--muted);font-size:12.5px}.ensure-effect[open]{display:block}.ensure.unguarded.acknowledged{color:var(--muted);font-weight:400;font-size:12.5px}
 .review-id{font-size:11.5px;color:var(--muted);margin-left:4px}.acknowledged{margin:8px 0 4px;font-size:13px}.acknowledged summary{cursor:pointer;color:var(--muted)}
 .ensure{font-size:12.5px;margin:2px 0;color:var(--muted)}.ensure.unguarded{color:var(--warn);font-weight:600;font-size:13px}
 .q-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--warn);color:var(--bg);vertical-align:middle}

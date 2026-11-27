@@ -1,4 +1,5 @@
 import { isNotAllowed, withEnsureBypassed } from "./ensure.ts";
+import { formatValue } from "./format-value.ts";
 import type { Spec, State } from "./load.ts";
 import { canonical, type Finding, type Graph } from "./model.ts";
 import { buttonsOf, type SurfaceNode } from "./surface.ts";
@@ -143,7 +144,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
     processed.add(from);
   }
 
-  const labelOf = labeler([...valuesById.values()], Object.keys(spec.initial), dataFields);
+  const labelOf = labeler([...valuesById.values()], Object.keys(spec.initial), dataFields, new Set(spec.readFields));
   const states = [...valuesById.entries()].map(([id, values]) => ({
     id,
     label: labelOf(values),
@@ -200,7 +201,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
         return { input: c.input, result: null, expect: c.expect ?? null, ok: false };
       }
       const ok = !("expect" in c) || JSON.stringify(canonical(c.expect)) === JSON.stringify(canonical(result));
-      if (!ok) findings.push({ kind: "decision-mismatch", decision: name, row: i + 1, expected: show(c.expect), actual: show(result) });
+      if (!ok) findings.push({ kind: "decision-mismatch", decision: name, row: i + 1, expected: formatValue(c.expect), actual: formatValue(result) });
       return { input: c.input, result, expect: "expect" in c ? c.expect : null, ok };
     });
     return { name, columns, rows };
@@ -210,7 +211,7 @@ export const explore = (spec: Spec, options: ExploreOptions = {}): Graph => {
   return { states, transitions: [...transitions.values()], availability, findings, surfaces, decisions, links, questions, scenarios };
 };
 
-const show = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
+
 
 // シナリオは探索とは別に、初期状態から手順どおりに実行する。探索は「到達できるか」を確かめるが、
 // シナリオは「この業務の流れが、この順番で通るか」を名指しで確かめる（受け入れテストの役割）。
@@ -227,7 +228,7 @@ const runScenarios = (
     // given で始められるのは、作ったときに決まる値だけ。状態遷移で変わる値から始めると、そこへ至る手順を飛ばした
     // シナリオになり、業務の流れとして読めなくなるため。探索していない始め方は、検査の結果と食い違うので断る。
     const invalid = Object.keys(given ?? {}).filter((k) => !spec.creationFields.includes(k));
-    const describeGiven = (g: Readonly<Record<string, unknown>>) => Object.entries(g).map(([k, v]) => `${k}: ${String(v)}`).join("、");
+    const describeGiven = (g: Readonly<Record<string, unknown>>) => Object.entries(g).map(([k, v]) => `${k}: ${formatValue(v)}`).join("、");
     const startError =
       invalid.length > 0
         ? `given に書けるのは、作ったときに決まる値（${spec.creationFields.join("・") || "なし"}）だけ。${invalid.join("・")} は書けない`
@@ -288,7 +289,7 @@ const runScenarios = (
       const mismatch = Object.entries(step.expect ?? {}).find(([k, v]) => JSON.stringify(canonical(v)) !== JSON.stringify(outcome.next[k]));
       if (mismatch !== undefined) {
         const [k, v] = mismatch;
-        fail(`期待: ${k} = ${show(v)}、実際: ${k} = ${show(outcome.next[k])}`);
+        fail(`期待: ${k} = ${formatValue(v)}、実際: ${k} = ${formatValue(outcome.next[k])}`);
         break;
       }
       records.push({ action, actor: step.by, input: step.input ?? null, from: idOf(values), to: idOf(outcome.next), ok: true, reason: null, denied: false });
@@ -345,7 +346,7 @@ const checkSurfaces = (
 // 文字列の項目を先に並べるのは、status のような主たる区分を先頭に見せるため。
 // initial に書いた順に並べる理由: 書き手は、読み手に最初に見せたい項目を先に書く。
 // 状態の値そのもの（canonical）はキーを並べ替えて持つので、その順番は使わない。
-const labeler = (all: ReadonlyArray<State>, declared: ReadonlyArray<string>, excluded: ReadonlySet<string> = new Set()) => {
+const labeler = (all: ReadonlyArray<State>, declared: ReadonlyArray<string>, excluded: ReadonlySet<string> = new Set(), read: ReadonlySet<string> = new Set()) => {
   const position = (k: string) => (declared.includes(k) ? declared.indexOf(k) : declared.length);
   const keys = [...new Set(all.flatMap((v) => Object.keys(v)))]
     .filter((k) => !excluded.has(k) && new Set(all.map((v) => JSON.stringify(v[k]))).size > 1)
@@ -355,7 +356,8 @@ const labeler = (all: ReadonlyArray<State>, declared: ReadonlyArray<string>, exc
       const v = values[k];
       if (typeof v === "string") return [v];
       if (typeof v === "boolean") return v ? [k] : [];
-      return [`${k}=${JSON.stringify(v)}`];
+      if (typeof v === "object" && v !== null && !Array.isArray(v)) return [formatValue(v, read)];
+      return [`${k}=${formatValue(v, read)}`];
     });
     return parts.length > 0 ? parts.join(" · ") : "初期状態";
   };

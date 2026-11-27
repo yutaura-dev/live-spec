@@ -77,6 +77,8 @@ export interface Spec {
   readonly creationFields: ReadonlyArray<string>;
   /** どれかの操作が書き換える項目 */
   readonly writtenFields: ReadonlyArray<string>;
+  /** 条件で読まれる名前。値オブジェクトを文字にするとき、読まれる項目だけを出すのに使う */
+  readonly readFields: ReadonlyArray<string>;
   /** 初期状態に足す組み合わせ（export const variants = [{ kind: "wait", assignee: "claude" }]） */
   readonly variants: ReadonlyArray<Readonly<Record<string, unknown>>>;
 }
@@ -138,6 +140,7 @@ export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, o
     dataFields: info?.dataFields ?? [],
     creationFields: info?.creationFields ?? [],
     writtenFields: info?.writtenFields ?? [],
+    readFields: info?.readFields ?? [],
     displayName: typeof mod.displayName === "string" && mod.displayName !== "" ? mod.displayName : titleCase(name),
     variants: Array.isArray(mod.variants) ? mod.variants.filter(isRecord) : [],
     groupBy: isRecord(mod.diagram) && typeof mod.diagram.groupBy === "string" ? mod.diagram.groupBy : null,

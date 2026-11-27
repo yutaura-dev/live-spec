@@ -1,5 +1,6 @@
 import type { Spec } from "../load.ts";
 import { fieldLabel } from "../labels.ts";
+import { formatValue } from "../format-value.ts";
 import type { Graph } from "../model.ts";
 import { ANY, ANY_LABEL, collapseTransitions, isCollapsed, sourceLabel } from "./collapse.ts";
 
@@ -71,7 +72,7 @@ export const summarizeActions = (spec: Spec, graph: Graph): ReadonlyArray<Action
         (w) => `${w.from}→${w.to}`,
       ),
       blocked: [...blocked.entries()].map(([reason, states]) => ({ reason, states })),
-      effect: effectOf(graph, name).map((e) => ({ ...e, field: fieldLabel(spec, e.field) })),
+      effect: effectOf(graph, name, new Set(spec.readFields)).map((e) => ({ ...e, field: fieldLabel(spec, e.field) })),
       inputReasons: inputReasonsOf(entries),
       inputOutcomes: inputOutcomesOf(spec, name, entries, labelOf),
     };
@@ -157,7 +158,7 @@ export const presentBlocked = (
 export const formatTransition = (t: { readonly from: string; readonly to: string }) =>
   t.from === ANY ? `${ANY_LABEL} → ${t.to}` : t.from === t.to ? `${t.from}（変わらない）` : `${t.from} → ${t.to}`;
 
-const effectOf = (graph: Graph, action: string): ActionSummary["effect"] => {
+const effectOf = (graph: Graph, action: string, read: ReadonlySet<string>): ActionSummary["effect"] => {
   const changed = new Map<string, Set<string>>();
   const mine = graph.transitions.filter((t) => t.action === action);
   const changes = new Map<string, number>();
@@ -168,7 +169,7 @@ const effectOf = (graph: Graph, action: string): ActionSummary["effect"] => {
       if (JSON.stringify(from[k]) === JSON.stringify(to[k])) continue;
       if (!changed.has(k)) changed.set(k, new Set());
       changes.set(k, (changes.get(k) ?? 0) + 1);
-      changed.get(k)!.add(typeof to[k] === "string" ? (to[k] as string) : JSON.stringify(to[k]));
+      changed.get(k)!.add(formatValue(to[k], read));
     }
   }
   return [...changed.entries()].map(([field, values]) => ({ field, values: [...values], partial: changes.get(field)! < mine.length }));
