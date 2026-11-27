@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { findTsc, typecheck } from "./check.ts";
 import { linkTests } from "./test-links.ts";
+import { describeError } from "./errors.ts";
 import { loadValueObject, valueNameOf } from "./value-object.ts";
 import { aggregateNameOf, aggregateOfEntity, aggregateOfRoot, loadAggregate, resolveAggregates, type Aggregate } from "./aggregate.ts";
 import { expandAggregatePaths, expandSpecPaths, expandValuePaths, generateProject, loadObject, resolveLinks, specNameOf, writeOutput, writeProjectOutput, type OutputFormat } from "./generate.ts";
@@ -119,7 +120,7 @@ const runDiff = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number> 
       ...(parsed.values.head === undefined ? {} : { head: parsed.values.head }),
     });
   } catch (e) {
-    io.stderr(`差分を取れませんでした: ${messageOf(e)}\n`);
+    io.stderr(`差分を取れませんでした: ${describeError(e)}\n`);
     return 1;
   }
   const output = parsed.values.html
@@ -180,7 +181,7 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
       loaded.push(await loadObject(path));
     } catch (e) {
       failed = true;
-      io.stdout(`✗ ${specNameOf(path)}: 読み込めない: ${messageOf(e)}\n`);
+      io.stdout(`✗ ${specNameOf(path)}: 読み込めない: ${describeError(e)}\n`);
     }
   }
   const tests = parsed.values.tests ?? [];
@@ -191,7 +192,7 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
       aggregates.push(await loadAggregate(path));
     } catch (e) {
       failed = true;
-      io.stdout(`✗ 集約 ${aggregateNameOf(path)}: 読み込めない: ${messageOf(e)}\n`);
+      io.stdout(`✗ 集約 ${aggregateNameOf(path)}: 読み込めない: ${describeError(e)}\n`);
     }
   }
   const resolved = resolveAggregates(objects, aggregates);
@@ -246,7 +247,7 @@ const runCheck = async (argv: ReadonlyArray<string>, io: CliIo): Promise<number>
       io.stdout([`✗ ${vo.displayName}（値オブジェクト）: 検査結果 ${vo.findings.length} 件`, ...vo.findings.map((f) => `  - ${f}`)].join("\n") + "\n");
     } catch (e) {
       failed = true;
-      io.stdout(`✗ ${valueNameOf(path)}（値オブジェクト）: 読み込めない: ${messageOf(e)}\n`);
+      io.stdout(`✗ ${valueNameOf(path)}（値オブジェクト）: 読み込めない: ${describeError(e)}\n`);
     }
   }
   return failed ? 1 : 0;
@@ -329,7 +330,7 @@ export const runCli = async (argv: ReadonlyArray<string>, io: CliIo): Promise<nu
   try {
     output = await generateProject(paths, options.format, options.title ?? undefined, options.tests, expandValuePaths(options.paths), expandAggregatePaths(options.paths));
   } catch (e) {
-    io.stderr(`生成に失敗しました: ${messageOf(e)}\n`);
+    io.stderr(`生成に失敗しました: ${describeError(e)}\n`);
     return 1;
   }
   if (options.out !== null) {

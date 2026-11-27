@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { explore } from "./explore.ts";
+import { importSource, SpecError } from "./errors.ts";
 import { checkEnsures } from "./mutation.ts";
 import { findOmissionHints } from "./omission.ts";
 import { UNTESTED, unguardedId } from "./render/review.ts";
@@ -64,7 +65,7 @@ export interface LoadObjectOptions {
 export const loadObject = async (path: string, options: LoadObjectOptions = {}): Promise<DomainObject> => {
   const url = pathToFileURL(resolve(path));
   url.search = `?v=${++importVersion}`;
-  const mod = (await import(url.href)) as Record<string, unknown>;
+  const mod = await importSource(url.href);
   const spec = loadSpec(options.name ?? specNameOf(path), mod, { source: options.source ?? (await readFile(path, "utf8")) });
   const graph = explore(spec);
   const ensures = checkEnsures(spec, graph);
@@ -91,7 +92,7 @@ export const generateProject = async (
   const objects = tests.length === 0 ? resolved : linkTests(resolved, tests);
   const names = objects.map((o) => o.spec.name);
   const duplicated = names.find((n, i) => names.indexOf(n) !== i);
-  if (duplicated !== undefined) throw new Error(`ドメインオブジェクトの名前が重複しています: ${duplicated}（spec のファイル名を変えてください）`);
+  if (duplicated !== undefined) throw new SpecError(`ドメインオブジェクトの名前が重複しています: ${duplicated}（spec のファイル名を変えてください）`);
   const aggregates = resolveAggregates(objects, loadedAggregates);
   const projectTitle = title ?? (objects.length === 1 ? objects[0]!.spec.name : projectNameOf(paths[0]!));
 

@@ -1,3 +1,4 @@
+import { describeError } from "./errors.ts";
 import { watch, type FSWatcher } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { expandAggregatePaths, expandSpecPaths, expandValuePaths, failureOutput, generateProject, writeProjectOutput, type OutputFormat } from "./generate.ts";
@@ -31,7 +32,7 @@ export const watchSpec = (options: WatchOptions, log: (message: string) => void 
         const ms = Math.round(performance.now() - started);
         log(options.out === null ? `✓ 生成しました（${ms}ms）` : `✓ ${options.out} を生成しました（${ms}ms）`);
       } catch (e) {
-        log(`✗ 生成に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
+        log(`✗ 生成に失敗しました: ${describeError(e)}`);
         // 失敗しても監視は続ける。書きかけの spec が一時的に壊れているのはよくあることなので。
         const failure = failureOutput(options.format, paths, e);
         if (options.out !== null) await writeProjectOutput(options.out, failure);

@@ -1,3 +1,4 @@
+import { SpecError } from "./errors.ts";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -64,7 +65,7 @@ export const diffProject = async (options: ProjectDiffOptions): Promise<ProjectD
     try {
       git(cwd, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
     } catch {
-      throw new Error(`リビジョン ${ref} が見つかりません`);
+      throw new SpecError(`リビジョン ${ref} が見つかりません`);
     }
   }
   // パスを git に cwd から相対で解釈させ、--full-name でリポジトリのルートからのパスを受け取る理由:

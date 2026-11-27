@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { titleCase } from "./load.ts";
+import { importSource, SpecError } from "./errors.ts";
 import { analyze, type Property } from "./static.ts";
 
 export interface ValueObject {
@@ -41,12 +42,12 @@ let importVersion = 0;
 export const loadValueObject = async (path: string): Promise<ValueObject> => {
   const url = pathToFileURL(resolve(path));
   url.search = `?v=${++importVersion}`;
-  const mod = (await import(url.href)) as Record<string, unknown>;
+  const mod = await importSource(url.href);
   const info = analyze(await readFile(path, "utf8"));
   const name = valueNameOf(path);
   const wanted = titleCase(name).replace(/\s+/g, "");
   const type = info.exportedTypes.find((t) => t.name === wanted) ?? info.exportedTypes[0];
-  if (type === undefined) throw new Error(`${name}: 値オブジェクトの型（export type ${wanted}）が必要です`);
+  if (type === undefined) throw new SpecError(`${name}: 値オブジェクトの型（export type ${wanted}）が必要です`);
   const rules = isRecord(mod.invariants) ? Object.entries(mod.invariants).filter((e): e is [string, Rule] => typeof e[1] === "function") : [];
   const groups = isRecord(mod.examples) ? mod.examples : {};
   const examples = (["valid", "invalid"] as const).flatMap((kind) =>

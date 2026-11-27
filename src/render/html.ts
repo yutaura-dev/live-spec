@@ -11,6 +11,7 @@ import { detailGroups, summaryGraph } from "./group.ts";
 import { projectRelations } from "../relations.ts";
 import { propertyRows, valueObjectRows } from "./properties.ts";
 import type { ValueObject } from "../value-object.ts";
+import { SpecError, stackOf } from "../errors.ts";
 import { aggregateOfEntity, aggregateOfRoot, type Aggregate } from "../aggregate.ts";
 import { esc } from "./escape.ts";
 import { layout, type LaidOutEdge, type LaidOutNode, type Layout } from "./layout.ts";
@@ -478,7 +479,8 @@ ${asRoot === null || asRoot.entities.length === 0 ? "" : aggregateHeadHtml(asRoo
 };
 
 export const renderErrorHtml = (name: string, error: unknown): string => {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error && !(error instanceof SpecError) ? `${error.name}: ${error.message}` : error instanceof Error ? error.message : String(error);
+  const stack = stackOf(error);
   return `<!doctype html>
 <html lang="ja">
 <head>
@@ -493,6 +495,7 @@ export const renderErrorHtml = (name: string, error: unknown): string => {
   <p class="eyebrow">仕様書を生成できませんでした</p>
   <h1>${esc(name)}</h1>
   <pre>${esc(message)}</pre>
+  ${stack === null ? "" : `<details class="stack"><summary>スタックトレース</summary><pre>${esc(stack)}</pre></details>`}
   <p class="hint">spec ファイルを直して保存すると、自動で生成し直します。生成し直したら、このページを再読み込みしてください。</p>
 </main>
 </body>
@@ -509,7 +512,7 @@ interface NodeFlags {
 }
 
 const diagramSvg = (name: string, l: Layout, markerId: string, node: (n: LaidOutNode) => string) =>
-  `<svg viewBox="0 0 ${l.width + 24} ${l.height}" width="${l.width + 24}" height="${l.height}" role="img" aria-label="${esc(name)} の状態遷移図">
+  `${l.notice === undefined ? "" : `<p class="layout-notice">⚠ ${esc(l.notice)}</p>`}<svg viewBox="0 0 ${l.width + 24} ${l.height}" width="${l.width + 24}" height="${l.height}" role="img" aria-label="${esc(name)} の状態遷移図">
         <defs><marker id="${markerId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
         <g transform="translate(24 0)">
         ${l.groups.map((g) => `<g class="group-box"><rect x="${g.x}" y="${g.y}" width="${g.width}" height="${g.height}" rx="12"/><text x="${g.x + 12}" y="${g.y + 18}">${esc(g.label)}</text></g>`).join("\n        ")}
@@ -750,6 +753,7 @@ const jsonForScript = (data: unknown) =>
     .replace(/\u{2029}/gu, "\\u2029");
 
 export const CSS = `
+.layout-notice{color:var(--warn);font-size:13px;margin:0 0 8px}
 :root{--bg:#f6f5f1;--fg:#1c1c1e;--muted:#6e6d72;--line:#d9d6cd;--card:#fff;--node:#fff;--accent:#2b59e0;--accent-weak:#e5ebfc;--ok:#1d7f48;--warn:#b3501a;--chip:#efeee9}
 @media (prefers-color-scheme:dark){:root{--bg:#141416;--fg:#ececee;--muted:#9a99a0;--line:#34343a;--card:#1c1c20;--node:#1f1f24;--accent:#7f9dff;--accent-weak:#232b45;--ok:#5cc98b;--warn:#f0a46b;--chip:#2a2a30}}
 *{box-sizing:border-box}

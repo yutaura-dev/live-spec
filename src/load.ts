@@ -1,3 +1,4 @@
+import { SpecError } from "./errors.ts";
 import { isNotAllowed } from "./ensure.ts";
 import { analyze, type EnsureCall, type FieldRef, type FieldValue, type Property } from "./static.ts";
 
@@ -127,11 +128,11 @@ export const titleCase = (name: string): string =>
 
 export const loadSpec = (name: string, mod: Readonly<Record<string, unknown>>, options: LoadOptions = {}): Spec => {
   const { actors } = mod;
-  if (!isRecord(actors)) throw new Error(`${name}: 登場人物を表す \`export const actors\` が必要です`);
+  if (!isRecord(actors)) throw new SpecError(`${name}: 登場人物を表す \`export const actors\` が必要です`);
   const factory = typeof mod.initial === "function" ? (mod.initial as FactoryFn) : null;
   const inputs = inputsOf(mod.inputs);
   const initial = factory === null ? mod.initial : firstCreated(name, factory, Object.entries(actors), inputs.initial);
-  if (!isRecord(initial)) throw new Error(`${name}: 初期状態を表す \`export const initial\`（オブジェクトか、作る操作の関数）が必要です`);
+  if (!isRecord(initial)) throw new SpecError(`${name}: 初期状態を表す \`export const initial\`（オブジェクトか、作る操作の関数）が必要です`);
   const info = options.source === undefined ? undefined : analyze(options.source);
   return {
     name,
@@ -205,7 +206,7 @@ const firstCreated = (
   examples: ReadonlyArray<readonly [string, ReadonlyArray<unknown>]> | undefined,
 ): unknown => {
   if (factory.length > 1 && examples === undefined) {
-    throw new Error(`${name}: initial は登場人物のあとに入力をとるので、inputs.initial に入力の例を書く`);
+    throw new SpecError(`${name}: initial は登場人物のあとに入力をとるので、inputs.initial に入力の例を書く`);
   }
   const reasons: Array<string> = [];
   for (const [, actor] of actors) {
@@ -218,7 +219,7 @@ const firstCreated = (
       }
     }
   }
-  throw new Error(`${name}: どの登場人物・入力の例でも作れない（initial が「${reasons.join("」「")}」で止まる）`);
+  throw new SpecError(`${name}: どの登場人物・入力の例でも作れない（initial が「${reasons.join("」「")}」で止まる）`);
 };
 
 // ソースの順で並べる理由: ES のモジュール名前空間オブジェクトはキーを名前順に並べるので、

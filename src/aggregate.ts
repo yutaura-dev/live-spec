@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { titleCase } from "./load.ts";
+import { importSource } from "./errors.ts";
 import type { DomainObject } from "./render/html.ts";
 
 export interface Aggregate {
@@ -39,7 +40,7 @@ let importVersion = 0;
 export const loadAggregate = async (path: string): Promise<Aggregate> => {
   const url = pathToFileURL(resolve(path));
   url.search = `?v=${++importVersion}`;
-  const mod = (await import(url.href)) as Record<string, unknown>;
+  const mod = await importSource(url.href);
   const name = aggregateNameOf(path);
   const entities = Array.isArray(mod.entities) ? mod.entities.filter((e): e is string => typeof e === "string") : [];
   return {
