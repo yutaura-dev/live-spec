@@ -1,3 +1,7 @@
+/** live-spec 自身の不具合で落ちたときに、メッセージに添える文 */
+export const BUG_REPORT =
+  "live-spec の不具合です。spec ファイルと、このメッセージ（スタックトレースを含む）を添えて、https://github.com/yutaura-dev/live-spec/issues に報告してください";
+
 /** live-spec が利用者に向けて出す、予期した失敗（spec の書き方の誤りなど）。スタックトレースを出さない */
 export class SpecError extends Error {
   override name = "SpecError";

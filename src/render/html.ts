@@ -61,7 +61,11 @@ export const renderProjectHtml = async (objects: ReadonlyArray<DomainObject>, op
   ]);
   const rest = objects.filter((o) => !ordered.includes(o));
   const pages = await Promise.all(
-    [...ordered, ...rest].map((o) => renderPage(o, objects.indexOf(o), objects, links, options.values ?? [], aggregates)),
+    [...ordered, ...rest].map((o) =>
+      renderPage(o, objects.indexOf(o), objects, links, options.values ?? [], aggregates).catch((e: unknown) => {
+        throw new Error(`${o.spec.name} の仕様書を作れなかった: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
+      }),
+    ),
   );
   // 値オブジェクトがあれば、spec が 1 つでも一覧ページを出す。値オブジェクトは一覧ページにしか出さないため。
   const multiple = objects.length > 1 || (options.values ?? []).length > 0;
@@ -512,7 +516,7 @@ interface NodeFlags {
 }
 
 const diagramSvg = (name: string, l: Layout, markerId: string, node: (n: LaidOutNode) => string) =>
-  `${l.notice === undefined ? "" : `<p class="layout-notice">⚠ ${esc(l.notice)}</p>`}<svg viewBox="0 0 ${l.width + 24} ${l.height}" width="${l.width + 24}" height="${l.height}" role="img" aria-label="${esc(name)} の状態遷移図">
+  `<svg viewBox="0 0 ${l.width + 24} ${l.height}" width="${l.width + 24}" height="${l.height}" role="img" aria-label="${esc(name)} の状態遷移図">
         <defs><marker id="${markerId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
         <g transform="translate(24 0)">
         ${l.groups.map((g) => `<g class="group-box"><rect x="${g.x}" y="${g.y}" width="${g.width}" height="${g.height}" rx="12"/><text x="${g.x + 12}" y="${g.y + 18}">${esc(g.label)}</text></g>`).join("\n        ")}
@@ -753,7 +757,6 @@ const jsonForScript = (data: unknown) =>
     .replace(/\u{2029}/gu, "\\u2029");
 
 export const CSS = `
-.layout-notice{color:var(--warn);font-size:13px;margin:0 0 8px}
 :root{--bg:#f6f5f1;--fg:#1c1c1e;--muted:#6e6d72;--line:#d9d6cd;--card:#fff;--node:#fff;--accent:#2b59e0;--accent-weak:#e5ebfc;--ok:#1d7f48;--warn:#b3501a;--chip:#efeee9}
 @media (prefers-color-scheme:dark){:root{--bg:#141416;--fg:#ececee;--muted:#9a99a0;--line:#34343a;--card:#1c1c20;--node:#1f1f24;--accent:#7f9dff;--accent-weak:#232b45;--ok:#5cc98b;--warn:#f0a46b;--chip:#2a2a30}}
 *{box-sizing:border-box}

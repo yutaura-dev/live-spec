@@ -1,6 +1,7 @@
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import ElkModule from "elkjs/lib/elk.bundled.js";
 import type { Graph } from "../model.ts";
+import { BUG_REPORT } from "../errors.ts";
 import { collapseTransitions, isCollapsed, sourceLabel, sourceTitle } from "./collapse.ts";
 
 export interface Point {
@@ -52,8 +53,6 @@ export interface Layout {
   readonly groups: ReadonlyArray<LaidOutGroup>;
   readonly nodes: ReadonlyArray<LaidOutNode>;
   readonly edges: ReadonlyArray<LaidOutEdge>;
-  /** ELK で配置できず、状態を格子に並べただけの図にしたときの理由 */
-  readonly notice?: string;
 }
 
 const NODE_HEIGHT = 40;
@@ -176,13 +175,11 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
     })),
   };
   let result: ElkNode;
-  let notice: string | undefined;
   try {
     result = await elk.layout(input);
   } catch (e) {
-    // 配置に失敗しても、仕様書全体の生成は止めない。図 1 つのために、ほかのページや節まで見られなくなるのを避けるため。
-    notice = `図を自動で配置できなかったので、状態を並べただけの図にしている（${e instanceof Error ? e.message : String(e)}）`;
-    result = gridResult(input, [...boxed.values()]);
+    // 代わりの配置でごまかさずにエラーにする。spec の誤りではなく live-spec の不具合なので、気づいて報告してもらうため。
+    throw new Error(`状態遷移図を配置できなかった。${BUG_REPORT}`, { cause: e });
   }
 
   const flat = (result.children ?? []).flatMap((c) => [c, ...(c.children ?? [])]);
@@ -211,42 +208,6 @@ export const layout = async (graph: Graph, options: LayoutOptions = {}): Promise
       label: { x: label.x!, y: label.y!, width: label.width!, height: label.height! },
     };
   });
-  return { width: result.width!, height: result.height!, groups, nodes, edges, ...(notice === undefined ? {} : { notice }) };
+  return { width: result.width!, height: result.height!, groups, nodes, edges };
 };
 
-const GRID_COLUMNS = 4;
-const GRID_GAP_X = 72;
-const GRID_GAP_Y = 56;
-
-// ELK が落ちたときの代わりの配置。状態を格子に並べ、線は中心どうしを直線で結ぶ。
-const gridResult = (input: ElkNode, boxes: ReadonlyArray<{ readonly id: string; readonly ids: ReadonlyArray<string> }>): ElkNode => {
-  const leaves = (input.children ?? []).flatMap((c) => (c.children === undefined ? [c] : c.children));
-  const cellWidth = Math.max(...leaves.map((n) => n.width ?? 0)) + GRID_GAP_X;
-  const cellHeight = NODE_HEIGHT + GRID_GAP_Y;
-  const placed = leaves.map((n, i) => ({ ...n, x: 24 + (i % GRID_COLUMNS) * cellWidth, y: 24 + Math.floor(i / GRID_COLUMNS) * cellHeight }));
-  const at = (id: string) => placed.find((n) => n.id === id)!;
-  const center = (id: string) => ({ x: at(id).x + (at(id).width ?? 0) / 2, y: at(id).y + (at(id).height ?? 0) / 2 });
-  const boxNodes = boxes.map((b) => {
-    const ms = placed.filter((n) => b.ids.includes(n.id));
-    const x = Math.min(...ms.map((n) => n.x)) - 8;
-    const y = Math.min(...ms.map((n) => n.y)) - 24;
-    return { id: b.id, x, y, width: Math.max(...ms.map((n) => n.x + (n.width ?? 0))) + 8 - x, height: Math.max(...ms.map((n) => n.y + (n.height ?? 0))) + 8 - y };
-  });
-  const rows = Math.ceil(placed.length / GRID_COLUMNS);
-  return {
-    id: input.id,
-    width: 48 + Math.min(placed.length, GRID_COLUMNS) * cellWidth,
-    height: 48 + rows * cellHeight,
-    children: [...placed, ...boxNodes],
-    edges: (input.edges ?? []).map((e) => {
-      const from = center((e as { sources: Array<string> }).sources[0]!);
-      const to = center((e as { targets: Array<string> }).targets[0]!);
-      const label = e.labels![0]!;
-      return {
-        ...e,
-        sections: [{ id: `${e.id}s`, startPoint: from, endPoint: to }],
-        labels: [{ ...label, x: (from.x + to.x) / 2 - (label.width ?? 0) / 2, y: (from.y + to.y) / 2 - LABEL_HEIGHT }],
-      };
-    }),
-  } as ElkNode;
-};
